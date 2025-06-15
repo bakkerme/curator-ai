@@ -92,7 +92,7 @@ Curator is a **personal intelligence platform** that:
 
 ### Self-Hosted Infrastructure & Future Deployment Options
 - **Docker Deployment:** Single-command setup on personal servers or cloud VPS
-- **Local LLM Integration:** Ollama, LocalAI support for privacy-first processing
+- **Local LLM Integration:** OpenAI-compatible LLM runner (llama.cpp, LM-Studio, Ollama), LocalAI support for privacy-first processing
 - **Data Control:** All content and metadata stored locally, configurable retention policies
 - **Future Hosting Models:** On-premises enterprise deployment and privacy-first SaaS options based on user demand
 
@@ -126,7 +126,7 @@ Curator is a **personal intelligence platform** that:
 ### Must-Have Features
 - CLI-based pipeline configuration (YAML)
 - Reddit and RSS source connectors
-- Basic LLM quality scoring (via Ollama/local models)
+- Basic LLM quality scoring (via local models)
 - Email digest output (Markdown → HTML)
 - Docker deployment package
 - Simple web dashboard for monitoring
@@ -134,7 +134,7 @@ Curator is a **personal intelligence platform** that:
 ### Success Criteria
 - Successfully filter 80%+ of low-quality content from test subreddits
 - Generate coherent weekly digests for 3+ topic areas
-- Deploy and run on $20/month VPS with local 7B model
+- Able to be deployed and run on $20/month VPS with local 7B model
 
 ### Go-to-Market Strategy
 
