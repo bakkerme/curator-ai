@@ -63,3 +63,12 @@ yarn-error.log*
 
 # MCP
 .claude/.mcp.json
+
+# Added by Task Master AI
+# Logs
+logs
+# Editor directories and files
+.idea
+.vscode
+
+backend/data/
