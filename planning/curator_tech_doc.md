@@ -10,17 +10,23 @@
 - **Adaptability**: Pipeline configurations can be iteratively improved based on feedback
 - **Transparency**: Users understand exactly why content was filtered or promoted
 
-## 2. Pipeline Architecture Overview
+## 2. Workflow System Architecture Overview
 
-```
-Content Sources → Data Processing Pipeline → Quality Assessment → Output Generation
-       ↓                    ↓                      ↓               ↓
-   [Adapters]          [Processors]           [Evaluators]    [Formatters]
-       ↓                    ↓                      ↓               ↓
-                    Feedback & Benchmarking System
-                           ↓
-                    Pipeline Optimization
-```
+**Terminology Clarification:**
+- **Workflow**: The complete end-to-end process from content discovery to delivery (user-facing concept)
+- **Pipeline**: The technical execution engine that processes content through stages (system concept)  
+- **Component**: The element that produces or acts upon data, making up the pipeline
+- A single workflow may contain multiple pipelines or processing paths
+
+**Component Hierarchy:**
+1. **Sources**: Complete interfaces to external content systems with schema discovery
+2. **Processors**: Discrete transformation, analysis, or enrichment units
+3. **Evaluators**: Specialized processors for quality assessment and scoring
+4. **Routers**: Flow control components that direct content through different paths
+5. **Aggregators**: Collection and grouping components for processed content
+6. **Formatters**: Output generation components for deliverable formats
+
+See planning/curator_workflow_framework.md for complete conceptual framework.
 
 ## 3. Core Pipeline Components
 
@@ -69,31 +75,53 @@ Content Sources → Data Processing Pipeline → Quality Assessment → Output G
 - **Pipeline Configuration**: UI can show available fields for filtering/processing
 - **Custom Processing**: Users can reference specific fields in pipeline rules
 
-### Data Processing Pipeline
-**Question: What are the various data processing steps?**
+### Workflow Component Architecture
+**Question: What are the various workflow components and processing steps?**
 
-**Flexible Processor Chain**: Configurable sequence with dependency management
-1. **Content Extraction**: Clean text, extract entities, parse structure
-2. **Algorithmic Filtering**: Rule-based quality checks (length, spam patterns, etc.)
-3. **Enrichment**: Add context, resolve links, fetch additional metadata  
-4. **Image Recognition**: LLM-powered analysis of visual content
-5. **Quality Assessment**: Multi-dimensional LLM scoring
-6. **Content Summarization**: LLM-generated summaries and key insights
-7. **Final Filtering**: Rule-based decisions based on LLM outputs
-8. **Custom Processors**: User-defined processing logic
+**Component Types from Workflow Framework**:
+1. **Sources**: Complete interfaces to external content systems that output normalized ContentItem objects
+   - Handle authentication, rate limiting, pagination, error handling
+   - Auto-discover and attach JSON schemas describing their data structure
+   - Examples: RedditSource, RSSSource, TwitterSource, ForumScraperSource
+
+2. **Processors**: Discrete transformation, analysis, or enrichment units
+   - **Extractors**: Parse text, extract entities, clean formatting
+   - **Filters**: Rule-based quality checks, spam detection, keyword matching  
+   - **Enrichers**: Add metadata, resolve links, fetch additional context
+   - **Analyzers**: LLM-powered quality scoring, summarization, classification
+   - Characteristics: Stateless, composable, dependency-aware
+
+3. **Evaluators**: Specialized processors that assign quality scores for routing decisions
+   - Multi-dimensional scoring: Substantiveness, constructiveness, novelty, accuracy, relevance
+   - Output numerical scores, confidence levels, reasoning explanations
+   - Support multiple LLM backends (local Ollama, OpenAI API, etc.)
+
+4. **Routers**: Components that direct content through different processing paths
+   - If/then rules, score thresholds, content type detection
+   - Examples: "High-quality content → summarization path", "Low-quality → discard path"
+
+5. **Aggregators**: Components that collect processed content for output generation
+   - Deduplication, topic clustering, priority ranking
+   - Output structured collections ready for formatting
+
+6. **Formatters**: Transform aggregated content into deliverable formats
+   - Email digest, JSON feed, knowledge graph, dashboard data
+   - User-customizable output formatting templates
 
 **Pipeline Execution Model**:
-- **Dependency-aware**: Processors declare input requirements
-- **Fault-tolerant**: Failed processors skip individual items, continue pipeline
+- **Batch Processing**: Workflows run on cron schedules, process all new content since last run
+- **Dependency Resolution**: Processors declare input requirements, system validates before execution
+- **Parallel Execution**: Independent processors run concurrently
+- **Fault-tolerant**: Failed processors skip individual items, pipeline continues
 - **Retry Logic**: LLM failures trigger automatic retries with backoff
-- **Error Tracking**: All processing failures logged for analysis
-- **Flexible Ordering**: Pipeline validates dependencies but allows custom flows
+- **State Management**: Track processing checkpoints, support reprocessing failed items
 
-**Example Multi-LLM Pipeline**:
+**Example Workflow: AI Research Daily Digest**:
 ```
-Reddit Post → Text Extraction → Spam Filter → 
-Image Analysis (LLM) → Quality Assessment (LLM) → 
-Summary Generation (LLM) → Final Rules Filter → Output
+RedditSource (50 posts) + RSSSource (20 papers) → 
+TextExtractor → SpamFilter → LLMQuality (Evaluator) → 
+QualityRouter → [High: LLM Summary → TechAnalyze] + [Medium: Quick Summary] → 
+TopicClustering (Aggregator) → EmailDigest (Formatter) → HTML Email Output
 ```
 
 ### Type System & Data Flow
@@ -136,11 +164,40 @@ interface RedditContent {
 - **User Notification**: Alert when source schemas change unexpectedly
 - **Pipeline Migration**: Help users update configurations for new schemas
 
-### Pipeline Execution & Error Handling
+### Content Object Structure & Pipeline Execution
 
-**Cron-Based Processing**: Pipeline runs on scheduled intervals
-- **Batch Processing**: Each run processes all available new content
-- **State Management**: Track processing state between runs
+**ContentItem Structure**: Every piece of content flowing through the system carries:
+```go
+type ContentItem struct {
+    // Core identification
+    ID          string                 `json:"id"`
+    SourceType  string                 `json:"source_type"`  // "reddit", "rss", etc.
+    SourceID    string                 `json:"source_id"`    // Original source identifier
+    
+    // Raw data with schema
+    RawData     map[string]interface{} `json:"raw_data"`
+    Schema      *JSONSchema            `json:"schema"`
+    
+    // Processing metadata
+    ProcessedAt time.Time              `json:"processed_at"`
+    Pipeline    string                 `json:"pipeline"`     // Which workflow processed this
+    
+    // Analysis results
+    Scores      map[string]float64     `json:"scores"`       // Quality dimensions
+    Tags        []string               `json:"tags"`         // Classification labels
+    Summary     string                 `json:"summary"`      // LLM-generated summary
+    
+    // Processing trail
+    ProcessingLog []ProcessingStep     `json:"processing_log"`
+    Errors        []ProcessingError    `json:"errors"`
+}
+```
+
+**Workflow Execution Model**:
+- **Batch Processing**: Workflows run on cron schedules, process all new content since last successful run
+- **Dependency Resolution**: Processors declare input requirements, system validates dependencies before execution
+- **Parallel Execution**: Independent processors can run concurrently 
+- **State Management**: Track processing checkpoints between runs, support for reprocessing failed items
 - **Incremental Updates**: Only process new content since last successful run
 
 **Error Handling Strategy**:
@@ -241,20 +298,18 @@ Test Pipeline Configurations:
 - **Go**: Pipeline orchestration, high-performance content processing
 - **BadgerDB**: Pipeline state, content storage, benchmark results
 - **YAML/JSON**: Pipeline configuration and prompt templates
-- **Gin/Fiber**: HTTP API for frontend communication
+- **Echo**: HTTP API for frontend communication
 - **JSON Schema**: Runtime validation and TypeScript type generation
 
 ### Frontend (TypeScript/React)
-- **React**: Management interface for pipeline configuration and monitoring
-- **TypeScript**: Type-safe development with generated types from backend schemas
-- **Vite**: Fast development and build tooling
+- **NextJS**: UI Framework
 - **TailwindCSS**: Utility-first styling for rapid UI development
-- **React Query**: Efficient API state management and caching
 
 ### LLM Integration
-- **Ollama**: Local model serving with multiple model support
-- **OpenAI API**: Fallback for benchmark comparisons
-- **Custom Adapters**: Pluggable LLM provider interface
+- **OpenAI-compatible API**: Support for multiple LLM providers through standardized interface
+- **Model Abstraction**: Pluggable backends (Ollama, OpenAI, local models)
+- **Prompt Templates**: Configurable prompts per component type and model
+- **Response Parsing**: Structured JSON output handling with validation
 
 ### Benchmarking Infrastructure  
 - **Test Harness**: Automated pipeline testing and model comparison
@@ -268,34 +323,34 @@ Test Pipeline Configurations:
 
 ## 5. MVP Iterations
 
-### Iteration 1: Core Pipeline Engine + Basic UI
-- **Backend**: Basic adapter system (Reddit, RSS)
-- **Backend**: Configurable processor chain
-- **Backend**: LLM quality assessment integration
-- **Frontend**: Basic React app with pipeline status monitoring
+### Iteration 1: Core Workflow Engine + Basic UI
+- **Backend**: Basic source system (Reddit, RSS) implementing ContentItem structure
+- **Backend**: Configurable processor chain with Sources, Processors, Evaluators architecture
+- **Backend**: LLM quality assessment integration (Evaluators)
+- **Frontend**: Basic React app with workflow status monitoring
 - **DevOps**: Docker Compose setup for unified deployment
 - **Integration**: JSON Schema to TypeScript type generation
 
-### Iteration 2: Pipeline Configuration Interface
-- **Frontend**: Visual pipeline configuration interface
-- **Frontend**: Real-time pipeline execution monitoring
-- **Backend**: Pipeline configuration API endpoints
+### Iteration 2: Workflow Configuration Interface
+- **Frontend**: Visual workflow configuration interface supporting component hierarchy
+- **Frontend**: Real-time workflow execution monitoring with processing trail visualization
+- **Backend**: Workflow configuration API endpoints with YAML/JSON support
 - **Backend**: WebSocket support for real-time updates
-- **Integration**: Shared configuration validation
+- **Integration**: Shared configuration validation using workflow framework structure
 
-### Iteration 3: Benchmarking Foundation
+### Iteration 3: Advanced Workflow Components
+- **Backend**: Router implementation for flow control and content path routing
+- **Backend**: Aggregator components for content collection and grouping
+- **Backend**: Formatter components for multiple output generation
+- **Frontend**: Component-aware configuration interface for Routers, Aggregators, Formatters
+- **Integration**: End-to-end workflow execution with all component types
+
+### Iteration 4: Benchmarking Foundation & Management
 - **Backend**: Golden dataset creation tools
-- **Backend**: Multi-model comparison framework
-- **Frontend**: Benchmarking dashboard and visualizations
+- **Backend**: Multi-model comparison framework across workflow components
+- **Frontend**: Benchmarking dashboard and workflow performance visualizations
 - **Frontend**: Performance metrics and analytics interface
-- **Integration**: Real-time benchmark result streaming
-
-### Iteration 4: Advanced Features & Polish
-- **Frontend**: User rating interface for content quality
-- **Frontend**: Advanced pipeline analytics and optimization suggestions
-- **Backend**: Automated prompt optimization
-- **Backend**: Model size vs. quality analysis tools
-- **DevOps**: Production-ready deployment configurations
+- **Integration**: Real-time benchmark result streaming and workflow optimization suggestions
 
 ## 6. Success Metrics
 
