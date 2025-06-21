@@ -22,7 +22,7 @@ import {
 
 
 export default function CuratorWorkflow() {
-  const { nodes: workflowNodes, connections, workflowName, isLoading } = useWorkflow()
+  const { nodes: workflowNodes, connections, workflowName, workflowDescription, isLoading } = useWorkflow()
   const [isRunning, setIsRunning] = useState(false)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -97,15 +97,16 @@ export default function CuratorWorkflow() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono">
+    <div className="min-h-screen bg-black text-slate-100 font-mono">
       {/* Header */}
-      <div className="border-b border-white/10 bg-black/90 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-slate-100/10 bg-black/90 backdrop-blur-sm sticky top-0 z-10">
         <div className="mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-              <div className="flex items-baseline space-x-4">
-              <img src="/curator-logo.svg" alt="Curator.ai" className="h-8 w-auto" />
+              <div className="flex items-center space-x-3">
+              <img src="/curator-filled.svg" alt="curator.ai" className="h-8 w-auto text-white" />
+               
               <div>
-                <p className="text-sm text-gray-400 leading-[14px] ">Personal <br /> Intelligence Platform</p>
+                <p className="text-sm text-gray-400 leading-[14px] mb-[-8px]">Personal <br /> Intelligence Platform</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -123,7 +124,7 @@ export default function CuratorWorkflow() {
                 {isRunning ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                 {isRunning ? "PAUSE" : "RUN"}
               </Button>
-              <Button variant="outline" className="bg-transparent border-white/30 text-white hover:bg-white/10">
+              <Button variant="outline" className="bg-transparent border-slate-100/30 text-slate-100 hover:bg-slate-100/10">
                 <Settings className="w-4 h-4 mr-2" />
                 CONFIG
               </Button>
@@ -138,19 +139,21 @@ export default function CuratorWorkflow() {
         {/* 73px is header height */}
         {/* Workflow Title Overlay */}
         <div className="absolute top-6 left-6 z-30 pointer-events-none">
-          <h2 className="text-3xl font-bold mb-2 text-white drop-shadow-lg">
-            {isLoading ? "LOADING..." : workflowName.toUpperCase()}
+          <h2 className="text-3xl font-bold mb-2 text-slate-100 drop-shadow-lg">
+            {isLoading ? "LOADING..." : workflowName}
           </h2>
-          <p className="text-gray-400 drop-shadow-md">Transform scattered information into structured intelligence</p>
+          <p className="text-gray-400 drop-shadow-md">
+            {isLoading ? "Loading workflow..." : workflowDescription || "Transform scattered information into structured intelligence"}
+          </p>
         </div>
         {/* Workflow Canvas */}
-        <Card className="bg-black/40 border-white/10 w-full h-full relative overflow-hidden rounded-none border-0">
+        <Card className="bg-black/40 border-slate-100/10 w-full h-full relative overflow-hidden rounded-none border-0">
           {/* Zoom Controls */}
           <div className="absolute top-4 right-4 z-30 flex flex-col space-y-2">
             <Button
               onClick={zoomIn}
               size="sm"
-              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-white/20 text-white"
+              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-slate-100/20 text-slate-100"
               variant="outline"
             >
               <ZoomIn className="w-4 h-4" />
@@ -158,7 +161,7 @@ export default function CuratorWorkflow() {
             <Button
               onClick={zoomOut}
               size="sm"
-              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-white/20 text-white"
+              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-slate-100/20 text-slate-100"
               variant="outline"
             >
               <ZoomOut className="w-4 h-4" />
@@ -166,7 +169,7 @@ export default function CuratorWorkflow() {
             <Button
               onClick={resetView}
               size="sm"
-              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-white/20 text-white"
+              className="w-10 h-10 bg-black/60 hover:bg-black/80 border-slate-100/20 text-slate-100"
               variant="outline"
             >
               <RotateCcw className="w-4 h-4" />
@@ -186,8 +189,8 @@ export default function CuratorWorkflow() {
           </Button>
 
           {/* Zoom Level Indicator */}
-          <div className="absolute top-4 left-4 z-30">
-            <Badge variant="outline" className="border-white/20 text-white bg-black/60">
+          <div className="absolute bottom-4 left-4 z-30">
+            <Badge variant="outline" className="border-slate-100/20 text-slate-100 bg-black/60">
               {Math.round(zoom * 100)}%
             </Badge>
           </div>

@@ -190,4 +190,8 @@ export class WorkflowParser {
   public getWorkflowName(): string {
     return this.config.name
   }
+
+  public getWorkflowDescription(): string {
+    return this.config.description || ''
+  }
 }

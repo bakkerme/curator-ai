@@ -2,140 +2,42 @@ import { useState, useEffect } from 'react'
 import { WorkflowParser } from './workflow-parser'
 import type { WorkflowNode, WorkflowConnection } from './workflow-types'
 
-const WORKFLOW_YAML = `workflow:
-  name: "Localllama Daily Digest"
-
-  stages:
-    redditSrc:
-      type: source
-      dataID: post
-      use: reddit_source
-      produces: [ObjectBlock]
-      config:
-        subreddit: "localllama"
-        include_comments: true
-      next:
-        - agg
-        - urlRoute
-        - imgRoute
-
-    urlRoute:
-      type: router
-      operates_on: [ObjectBlock]
-      routes:
-        - when: "contains_urls == true"
-          extract: "external_urls"
-          to: webFetch
-        - else: drop
-
-    imgRoute:
-      type: router
-      operates_on: [TextBlock]
-      routes:
-        - when: "has_image_urls == true"
-          extract: "image_urls"
-          to: imgFetch
-        - else: drop
-
-    webFetch:
-      type: processor
-      dataID: web_summaries
-      use: web_fetcher
-      config:
-        readability: true
-      produces: [TextBlock]
-      next: [webSum]
-
-    webSum:
-      type: processor
-      use: summariser
-      operates_on: [TextBlock]
-      prompt_template: "./templates/websum.tmpl"
-      next: [agg]
-
-    imgFetch:
-      type: processor
-      use: url_fetcher
-      operates_on: [TextBlock]
-      produces: [ImageBlock]
-      next: [imgSum]
-
-    imgSum:
-      type: processor
-      dataID: image_summaries
-      use: image_summarizer
-      produces: [TextBlock]
-      next: [agg]
-
-    agg:
-      type: processor
-      use: thread_aggregator
-      operates_on: [ObjectBlock, TextBlock]
-      produces: [ObjectBlock]
-      config:
-        template: "reddit_digest_prompt"
-      selector_map:
-        post_text: 'post.body'
-        comment_texts: 'comment'
-        web_summaries: web_summaries
-        image_summaries: image_summaries
-      next: [threadSum]
-          
-    threadSum:
-      type: processor
-      use: summariser
-      operates_on: [ObjectBlock]
-      produces: [ObjectBlock]
-      prompt_template: "./templates/threadsum.tmpl"
-      schema: "./schemas/threadschema.json"
-      next: [batchJoin]
-
-    batchJoin:
-      type: batch_join
-      sources: redditSrc
-      produces: [ObjectBlock]
-      max_wait_sec: 60
-      next: [emailFmt]
-
-    emailFmt:
-      type: formatter
-      use: email_formatter
-      operates_on: [ObjectBlock]
-      produces: [TextBlock]
-      template: "./email_templates/email.tmpl"
-      next: [email]
-
-    email:
-      type: destination
-      use: smtp_email
-      operates_on: [TextBlock]
-      config:
-        to: ["digest@example.com"]
-        subject: "Localllama Daily Digest"`
-
 export function useWorkflow() {
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [connections, setConnections] = useState<WorkflowConnection[]>([])
   const [workflowName, setWorkflowName] = useState<string>('')
+  const [workflowDescription, setWorkflowDescription] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      const parser = new WorkflowParser(WORKFLOW_YAML)
-      setNodes(parser.getNodes())
-      setConnections(parser.getConnections())
-      setWorkflowName(parser.getWorkflowName())
-    } catch (error) {
-      console.error('Failed to parse workflow:', error)
-    } finally {
-      setIsLoading(false)
+    const loadWorkflow = async () => {
+      try {
+        const response = await fetch('/config/workflow.yaml')
+        if (!response.ok) {
+          throw new Error(`Failed to load workflow: ${response.statusText}`)
+        }
+        const yamlContent = await response.text()
+        
+        const parser = new WorkflowParser(yamlContent)
+        setNodes(parser.getNodes())
+        setConnections(parser.getConnections())
+        setWorkflowName(parser.getWorkflowName())
+        setWorkflowDescription(parser.getWorkflowDescription())
+      } catch (error) {
+        console.error('Failed to parse workflow:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    loadWorkflow()
   }, [])
 
   return {
     nodes,
     connections,
     workflowName,
+    workflowDescription,
     isLoading
   }
 }

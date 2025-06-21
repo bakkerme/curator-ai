@@ -27,6 +27,7 @@ export interface WorkflowStage {
 
 export interface WorkflowConfig {
   name: string
+  description?: string
   stages: Record<string, WorkflowStage>
 }
 
