@@ -61,10 +61,7 @@ export class WorkflowParser {
     const levels = new Map<string, number>()
     const columns = new Map<number, string[]>()
 
-    // Find root nodes (sources)
-    const rootNodes = Array.from(this.nodes.values()).filter(node => 
-      node.type === 'source' || !this.connections.some(conn => conn.to === node.id)
-    )
+    // Find root nodes (sources) - not used but kept for reference
 
     // Initialize all nodes with level 0
     Array.from(this.nodes.keys()).forEach(nodeId => {

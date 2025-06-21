@@ -9,7 +9,7 @@ export interface WorkflowStage {
   use?: string
   produces?: BlockType[]
   operates_on?: BlockType[]
-  config?: Record<string, any>
+  config?: Record<string, unknown>
   next?: string[]
   routes?: Array<{
     when?: string
@@ -39,7 +39,7 @@ export interface WorkflowNode {
   status: 'active' | 'processing' | 'idle'
   position: { x: number; y: number }
   blockType: BlockType
-  config?: Record<string, any>
+  config?: Record<string, unknown>
   connections: string[]
 }
 
