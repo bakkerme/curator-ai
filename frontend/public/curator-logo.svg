@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="145.96297mm"
+   height="27.133375mm"
+   viewBox="0 0 145.96297 27.133375"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   sodipodi:docname="curator-proto-logo.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#808080"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.7180275"
+     inkscape:cx="396.92073"
+     inkscape:cy="561.25984"
+     inkscape:window-width="1694"
+     inkscape:window-height="1057"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="fillet_chamfer"
+       id="path-effect1"
+       is_visible="true"
+       lpeversion="1"
+       nodesatellites_param="F,0,1,1,0,0.44410562,0,1 @ F,0,1,1,0,0.44410562,0,1 @ F,0,0,1,0,0.44410562,0,1"
+       radius="0"
+       unit="px"
+       method="auto"
+       mode="F"
+       chamfer_steps="1"
+       flexible="false"
+       use_knot_distance="true"
+       apply_no_radius="true"
+       apply_with_radius="true"
+       only_selected="false"
+       hide_knots="false" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g1"
+       transform="translate(-71.302186,-98.374401)">
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:41.7438px;font-family:Citizen;-inkscape-font-specification:'Citizen, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;letter-spacing:-1.77006px;fill:#ffffff;stroke-width:0.264583"
+         x="87.305443"
+         y="125.09041"
+         id="text349"><tspan
+           sodipodi:role="line"
+           id="tspan347"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:41.7438px;font-family:'Conduit ITC Medium';-inkscape-font-specification:'Conduit ITC Medium, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.264583"
+           x="87.305443"
+           y="125.09041">c<tspan
+   style="letter-spacing:-2.66435px"
+   id="tspan1562">u</tspan><tspan
+   style="letter-spacing:-1.26206px"
+   id="tspan1558">r</tspan><tspan
+   style="letter-spacing:-1.88912px"
+   id="tspan1518">a</tspan>tor.ai</tspan></text>
+      <path
+         style="fill:#ffffff;stroke-width:0.130543"
+         d="m 71.896798,106.75646 0.04323,18.30729 a 0.1783819,0.1783819 21.748322 0 0 0.307492,0.12266 L 89.934674,106.6338 a 0.19019737,0.19019737 66.815973 0 0 -0.137663,-0.32144 l -17.457156,0 a 0.44305811,0.44305811 134.93235 0 0 -0.443057,0.4441 z"
+         id="path1681"
+         sodipodi:nodetypes="cccc"
+         inkscape:path-effect="#path-effect1"
+         inkscape:original-d="m 71.895749,106.31236 0.04533,19.19549 18.300038,-19.19549 z"
+         transform="matrix(1.0375611,0,0,1.0375611,-3.2951337,-4.4381519)" />
+    </g>
+  </g>
+</svg>

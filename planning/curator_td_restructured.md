@@ -20,7 +20,7 @@ Rather than processors needing to understand arbitrary schemas from upstream com
 ```mermaid
 graph TB
     A[Web Frontend<br/>React/Next] <--> B[Workflow API<br/>Go/Echo]
-    B <--> C[LLM Service<br/>Ollama]
+    B <--> C[LLM Service<br/>OpenAI-compatible]
     B --> D[Workflow Engine<br/>Go Core]
     D <--> E[BadgerDB<br/>Storage]
     D --> F[Content Sources<br/>Reddit, RSS]
@@ -60,24 +60,6 @@ flowchart LR
 6. **Formatters**: Convert between block types
 7. **Destinations**: Output the data somewhere
 
-### 2.4 Data Flow Example: Document Translation
-
-```
-Element-001 Flow:
-
-Stage 1: Document Source
-├── DocumentBlock (PDF document)
-
-Stage 3: OCR Processor
-└── TextBlock (extracted text)
-
-Stage 4: Translation Processor
-└── TextBlock (translated text)
-
-Stage 5: Text to Formatter
-└── DocumentBlock (translated PDF)
-```
-
 ## 3. Core System Components
 
 ### 3.1 Trigger System Architecture
@@ -96,6 +78,11 @@ Stage 5: Text to Formatter
 - User-initiated workflow execution
 - Integration with external applications
 
+**EmailTrigger**: Email-based workflow initiation
+- Monitoring email inboxes for new content, like newsletters
+- Automated email processing
+- Content curation from email attachments
+
 #### Trigger Configuration Model
 ```yaml
 workflow:
@@ -109,10 +96,12 @@ workflow:
       
     # On-demand API
     - type: api_endpoint
-      path: "/analyze/document"
       method: POST
-      auth: bearer_token
-      rate_limit: "100/hour"
+      params:
+        - name: id
+          type: int
+        - name: operation
+          type: string
 ```
 
 ### 3.2 Block System Architecture
@@ -306,7 +295,7 @@ workflow:
 
 #### Model Abstraction
 - **OpenAI-Compatible Interface**: Standardized API supporting multiple providers
-- **Local Model Support**: Ollama integration for privacy-first processing  
+- **Local Model Support**: OpenAI-compatible integration for privacy-first processing  
 - **Per-Component Configuration**: Different models for different processor types
 - **Block-Aware Prompting**: Prompts designed for Block content types
 
@@ -366,7 +355,7 @@ LLM Evaluators assess Block content across dimensions:
 ### 5.3 Deployment Infrastructure
 - **Containerization**: Docker with multi-stage builds
 - **Orchestration**: Docker Compose for unified deployment
-- **LLM Backend**: Ollama integration for local model serving
+- **LLM Backend**: OpenAI-compatible integration for local model serving
 - **Monitoring**: Built-in Block processing metrics and health checks
 
 ## 6. Development Plan
