@@ -1,4 +1,5 @@
 import { parse } from 'yaml'
+import dagre from '@dagrejs/dagre'
 import type { WorkflowConfig, WorkflowStage, WorkflowNode, WorkflowConnection, StageType, BlockType } from './workflow-types'
 
 export class WorkflowParser {
@@ -58,60 +59,48 @@ export class WorkflowParser {
   }
 
   private calculateLayout() {
-    const levels = new Map<string, number>()
-    const columns = new Map<number, string[]>()
-
-    // Find root nodes (sources) - not used but kept for reference
-
-    // Initialize all nodes with level 0
-    Array.from(this.nodes.keys()).forEach(nodeId => {
-      levels.set(nodeId, 0)
+    // Create a new directed graph
+    const g = new dagre.graphlib.Graph()
+    
+    // Set graph properties for hierarchical layout
+    g.setGraph({
+      rankdir: 'LR',        // Left to Right
+      align: 'UL',          // Upper Left alignment
+      nodesep: 100,         // Horizontal spacing between nodes
+      ranksep: 200,         // Vertical spacing between ranks/levels
+      marginx: 80,          // Left margin
+      marginy: 80           // Top margin
     })
-
-    // Calculate maximum depth for each node using iterative approach
-    let changed = true
-    while (changed) {
-      changed = false
-      
-      this.connections.forEach(conn => {
-        const fromLevel = levels.get(conn.from) || 0
-        const currentToLevel = levels.get(conn.to) || 0
-        const newToLevel = fromLevel + 1
-        
-        if (newToLevel > currentToLevel) {
-          levels.set(conn.to, newToLevel)
-          changed = true
-        }
+    
+    // Default to assigning a new object as a label for each new edge
+    g.setDefaultEdgeLabel(() => ({}))
+    
+    // Add nodes to the graph
+    this.nodes.forEach((node, nodeId) => {
+      g.setNode(nodeId, {
+        width: 170,   // Node width
+        height: 125    // Node height
       })
-    }
-
-    // Group nodes by their final levels
-    levels.forEach((level, nodeId) => {
-      if (!columns.has(level)) {
-        columns.set(level, [])
+    })
+    
+    // Add edges to the graph
+    this.connections.forEach(conn => {
+      g.setEdge(conn.from, conn.to)
+    })
+    
+    // Run the layout algorithm
+    dagre.layout(g)
+    
+    // Apply the calculated positions to our nodes
+    g.nodes().forEach(nodeId => {
+      const nodeWithPosition = g.node(nodeId)
+      const node = this.nodes.get(nodeId)!
+      
+      // Dagre gives us the center point, but React Flow expects top-left
+      node.position = {
+        x: nodeWithPosition.x - nodeWithPosition.width / 2,
+        y: nodeWithPosition.y - nodeWithPosition.height / 2
       }
-      columns.get(level)!.push(nodeId)
-    })
-
-    // Position nodes
-    const COLUMN_WIDTH = 280
-    const ROW_HEIGHT = 120
-    const START_X = 80
-    const START_Y = 80
-
-    columns.forEach((nodeIds, level) => {
-      const x = START_X + (level * COLUMN_WIDTH)
-      
-      // Sort nodes in column by type and dependencies for better visual flow
-      const sortedNodes = this.sortNodesInColumn(nodeIds)
-      
-      sortedNodes.forEach((nodeId, index) => {
-        const node = this.nodes.get(nodeId)!
-        node.position = {
-          x,
-          y: START_Y + (index * ROW_HEIGHT)
-        }
-      })
     })
   }
 

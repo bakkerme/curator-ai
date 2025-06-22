@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.5",
     "@radix-ui/react-slot": "^1.2.3",
+    "@types/dagre": "^0.7.52",
     "@xyflow/react": "^12.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -3,7 +3,6 @@
 import type React from "react"
 
 import Image from "next/image"
-
 import { useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -129,31 +128,23 @@ export default function CuratorWorkflow() {
         </Button>
 
         {/* React Flow Canvas */}
-        <div className="w-full h-full bg-black/40 relative">
-          {/* Starscape Background */}
-          <div className="absolute inset-0 z-0">
-            <StarscapeBackground />
-          </div>
-          
+        <div className="w-full h-full bg-black/40 relative overflow-hidden">
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onConnect={onConnect} 
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             className="bg-transparent"
             fitView
             attributionPosition="bottom-left"
           >
-            <Controls className="bg-black/60 border-slate-100/20 text-slate-100" />
-            <Background 
-              variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1}
-              color="rgba(255,255,255,0.1)"
-            />
+            <Controls position="top-right" />
+            <div className="react-flow__background-layer absolute inset-0 pointer-events-none">
+              <StarscapeBackground opacity={0.6} />
+            </div>
           </ReactFlow>
         </div>
       </div>

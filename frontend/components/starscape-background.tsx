@@ -9,7 +9,7 @@ interface StarscapeBackgroundProps {
 }
 
 export const StarscapeBackground: React.FC<StarscapeBackgroundProps> = ({ 
-  className = "", 
+  className = "starscape", 
   opacity = 0.6,
   transform,
   transformOrigin = "0 0",
@@ -21,11 +21,7 @@ export const StarscapeBackground: React.FC<StarscapeBackgroundProps> = ({
       style={{
         transform,
         transformOrigin,
-        transition,
-        width: "200vw",
-        height: "200vh",
-        left: "-50vw",
-        top: "-50vh"
+        transition
       }}
     >
       {/* Starscape Background - Infinitely Tileable */}
@@ -80,7 +76,7 @@ export const StarscapeBackground: React.FC<StarscapeBackgroundProps> = ({
 
       {/* Dark Grid Background - Infinitely Tileable */}
       <div
-        className="absolute inset-0 w-full h-full opacity-30"
+        className="absolute inset-0 w-full h-full opacity-40"
         style={{
           backgroundImage: `
             linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px),
