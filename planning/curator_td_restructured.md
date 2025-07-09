@@ -62,6 +62,41 @@ flowchart LR
 
 ## 3. Core System Components
 
+### 3.1 Schema Transformation System
+
+#### Schema Evolution Model
+
+Every node in the workflow can declare how it transforms the data schema:
+
+```yaml
+# Schema transformation types
+schema_transform:
+  operation: "add" | "replace" | "merge" | "remove"
+  fields: {}        # For add/remove operations
+  preserve: []      # Fields to preserve during replace
+```
+
+#### Schema Discovery and Normalization
+
+For unstructured sources like web scraping:
+
+```yaml
+source:
+  use: web_scraper
+  url: "https://example.com"
+  extraction:
+    # Define extraction rules for initial schema
+    title: "css:h1.title || og:title || title"
+    content: "css:article.content || main || body"
+    author: "css:.author || meta[name='author']"
+  output_schema:
+    title: string
+    content: string
+    author: string?  # Optional field
+    url: string
+    scraped_at: timestamp
+```
+
 ### 3.1 Trigger System Architecture
 
 #### Trigger Types & Use Cases
@@ -184,11 +219,35 @@ processor_types:
 workflow:
   name: "Localllama Daily Digest"
 
+  schemas:
+    - name: reddit_post
+      schema:
+        id: string
+        title: string
+        post_text: string
+        comment_text: string_array
+        web_summaries: string_array
+        image_summaries: string_array
+        link: string
+        thumbnail_url: string
+    - name: summarised_post
+      schema:
+        id: string
+        title: string
+        overview: string_array
+        summary: string
+        comment_summary: string
+        link: string
+        is_relevant: bool
+        relevance_to_criteria: string
+        thumbnail_url: string
+
+
   stages:
     redditSrc:              # ── node ID
       type: source
       dataID: post
-      use: reddit_source
+      use: reddit_source # note - reddit_source has a built in schema
       produces: [ObjectBlock]
       config:
         subreddit: "localllama"
@@ -202,10 +261,41 @@ workflow:
       type: router
       operates_on: [ObjectBlock]
       routes:         # ordered routing table
-        - when: "contains_urls == true"
+        - when: "num_comments > 0"
           extract: "external_urls"
-          to: urlFetch
+          to: webFetch
         - else: drop  # built-in sink
+      schema:
+        operation: replace
+        fields: 
+          external_urls: string_array
+
+    webFetch:
+      type: processor
+      dataID: web_summaries
+      use: web_fetcher
+      config:
+        readability: true
+      schema_transform:
+        operation: add
+        fields:
+          web_content: string
+      produces: [TextBlock]
+      next: [webSum]
+
+    webSum:
+      type: processor
+      use: summariser
+      operates_on: [TextBlock]
+      prompt_template: "./templates/websum.tmpl"
+      schema_transform:
+        - operation: add
+          fields:
+            web_summary: string
+        - operation: remove
+          fields:
+            - web_content
+      next: [agg]
 
     imgRoute:
       type: router
@@ -215,24 +305,14 @@ workflow:
           extract: "image_urls"
           to: imgSum        # imgSum will fetch then summarize images
         - else: drop
-
-    webFetch:
-      type: processor
-      dataID: web_summaries
-      use: web_fetcher
-      config:
-        readability: true
-      produces: [TextBlock]
-      next: [agg]
-
-    webSum:
-      type: processor
-      use: summariser
-      operates_on: [TextBlock]
-      prompt_template: "./templates/websum.tmpl"
+      schema:
+        operation: replace
+        fields:
+          image_urls: string_array
+      next: [imgFetch]
 
     imgFetch:
-      type:processor
+      type: processor
       use: url_fetcher
       operates_on: [TextBlock]
       produces: [ImageBlock]
@@ -242,18 +322,20 @@ workflow:
       type: processor
       dataID: image_summaries
       use: image_summarizer
-      produces: [TextBlock]
+      produces: [ObjectBlock]
+      schema_transform:
+        - operation: replace
       next: [agg]     # converging edge
 
     agg: # ── join node; receives multiple inbound edges
       type: processor
-      use: thread_aggregator
+      use: aggregator
       operates_on: [ObjectBlock, TextBlock]
       produces: [ObjectBlock]
-      config:
-        template: "reddit_digest_prompt"
+      out_schema: reddit_post
       selector_map:
-        post_text: 'post.body'
+        id: 'post.id'
+        post_text: 'post.selftext'
         comment_texts: 'comment'
         web_summaries: web_summaries
         image_summaries: image_summaries
@@ -262,9 +344,9 @@ workflow:
       type: processor
       use: summariser
       operates_on: [ObjectBlock]
-      produces: [ObjectBlock] # By signalling an ObjectBlock, we tell the processor to expect JSON to be returned
+      produces: [ObjectBlock] 
       prompt_template: "./templates/threadsum.tmpl"
-      schema: "./schemas/threadschema.json"
+      out_schema: summrised_post
       next: [batchJoin]
 
     batchJoin: # Wait until everything from reddit source has entered the batch join
@@ -272,6 +354,7 @@ workflow:
       sources: redditSrc
       produces: [ObjectBlock]
       max_wait_sec: 60
+      out_schema: summarised_post
       next: [emailFmt]
 
     emailFmt:

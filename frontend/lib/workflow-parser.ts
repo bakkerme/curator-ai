@@ -66,10 +66,10 @@ export class WorkflowParser {
     g.setGraph({
       rankdir: 'LR',        // Left to Right
       align: 'UL',          // Upper Left alignment
-      nodesep: 100,         // Horizontal spacing between nodes
-      ranksep: 200,         // Vertical spacing between ranks/levels
-      marginx: 80,          // Left margin
-      marginy: 80           // Top margin
+      nodesep: 50,          // Horizontal spacing between nodes
+      ranksep: 120,         // Vertical spacing between ranks/levels
+      marginx: 40,          // Left margin
+      marginy: 40           // Top margin
     })
     
     // Default to assigning a new object as a label for each new edge
