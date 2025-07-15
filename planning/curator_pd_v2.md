@@ -121,7 +121,7 @@ Curator is a **personal intelligence platform** that:
 | **Social Media** (Twitter Lists) | Still subject to platform algorithms and engagement optimization | Platform-agnostic with user-controlled curation |
 | **News Aggregators** (Google News) | Corporate algorithm bias, advertising influence | Self-hosted with transparent, user-controlled filtering |
 
-## 10. MVP Scope (Phase 1 - 8 weeks)
+## 10. MVP Scope
 
 ### Must-Have Features
 - CLI-based pipeline configuration (YAML)
