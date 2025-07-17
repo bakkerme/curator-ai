@@ -26,12 +26,12 @@ Curator AI is an AI-driven Personal Intelligence Platform that is designed to pu
 ### High-Level Components
 
 - UI
-  - Login, Account Management etc.
-  - Curation Flow List
-  - Curation Flow Builder
-  - Settings
-  - Logs
-  - Evaluation
+  - Login & Account Management  
+  - Curation Flow List  
+  - Curation Flow Builder (YAML editor + visual chain designer)  
+  - Settings (models, SMTP, Slack, API keys)  
+  - Logs Viewer (real-time tail + filters)  
+  - Evaluation Dashboard (run comparison, score charts)
 - Backend
   - CRUD
   - Curation Flow Creator
@@ -73,24 +73,77 @@ The Curation Flow Creator is an AI-powered tool, designed to take a URL for a We
 - Accepts a URL initially, then lets the User specify other behaviour, like Quality metrics, Summarisation rules and required Outputs
 - Outputs a valid Curator Document that successfully curates data from the site the user provided
 
-### Component B: [Name]
+#### Curation Flow Runner
 
-**Purpose:** [What this component does]
+**Purpose:** Orchestrate the execution of a single Curation Flow instance as a state machine.
 
 **Responsibilities:**
-
-- [Responsibility 1]
-- [Responsibility 2]
+- React to Trigger events or manual Run requests.
+- Load Sources and execute the Processor chain in order.
+- Coordinate LLM calls through the LLM Service.
+- Persist intermediate Blocks for inspection and debugging.
+- Publish status updates and final Output Blocks.
 
 **Interfaces:**
-
-- Input: [Data format/API]
-- Output: [Data format/API]
+- Input: RunRequest(id) via API / Trigger event from Scheduler.
+- Output: RunStatus events over WebSocket, persisted Run records.
 
 **Implementation Notes:**
+- Worker-queue pattern using Redis Streams.
+- Each run executes in its own goroutine with context tracing.
+- Retry with exponential back-off per Processor.
 
-- [Key technical decision]
-- [Alternative considered]
+#### CRUD Service
+
+**Purpose:** Provide persistence and retrieval APIs for all domain entities (Users, Flows, Runs, Blocks, Logs).
+
+**Responsibilities:**
+- Expose REST endpoints for CRUD operations on primary entities.
+- Enforce authentication and row-level authorization.
+- Support pagination, filtering, soft delete, optimistic locking.
+- Translate HTTP requests into service-layer commands and DB queries.
+
+**Interfaces:**
+- Input: HTTP JSON (REST) queries & mutations.
+- Output: JSON responses, gRPC calls to internal services.
+
+**Implementation Notes:**
+- Go + Echo handlers → service layer → GORM (PostgreSQL).
+
+#### Evaluation Runner
+
+**Purpose:** Execute offline evaluations of stored Runs to measure quality and accuracy.
+
+**Responsibilities:**
+- Re-run saved Runs against evaluation prompts/criteria.
+- Compute metrics (precision, accuracy, latency).
+- Persist Evaluation Reports and surface them to the UI.
+
+**Interfaces:**
+- Input: EvalSpec referencing Run IDs (JSON).
+- Output: EvalReport entities, Prometheus metrics, WebSocket progress events.
+
+**Implementation Notes:**
+- Triggered by cron or manual UI action.
+- Results stored in PostgreSQL and visualised via UI.
+
+#### Log Manager
+
+**Purpose:** Centralised structured logging and error aggregation across services.
+
+**Responsibilities:**
+- Ingest logs from backend services and /api/v1/log/error endpoint.
+- Correlate log entries by trace ID, flow ID, run ID.
+- Provide search, filter and real-time tail capabilities to the UI.
+- Enforce retention and archival policies.
+
+**Interfaces:**
+- Input: HTTP POST (frontend errors), gRPC/UDP stream from services.
+- Output: Query API, WebSocket tail stream.
+
+**Implementation Notes:**
+- Stored in Redis
+- Default retention 30 days (configurable).
 
 ## 4. Data Models
 
