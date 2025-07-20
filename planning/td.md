@@ -224,13 +224,72 @@ Entity B {
 
 Curator AI's Curator Document is a YAML document providing a declarative document on where data is loaded from and how it is curated. The document is loosely temporal, with each individual Processor configured in each catagory being run one by one.
 
-Trigger Processors - Define when processing runs
-Source Processors - Fetch and ingest data
-Quality Processors - Filter and evaluate content
-Summary Processors - Transform and summarize content
-Output Processors - Deliver results
+* Trigger Processors - Define when processing runs
+* Source Processors - Fetch and ingest data
+* Quality Processors - Filter and evaluate content
+* Summary Processors - Transform and summarize content
+* Output Processors - Deliver results
 
 See @./planning/example_flow.yml for an example.
+
+## 6. Block Design and Flow
+To allow for abitrary data to effectively flow through the system without requiring bespoke schemas, a Source Processor's responsibility is to create a Block that fits the shape of one of the exiting block formats:
+
+- PostBlock
+  - Data and metadata of a Post
+  - Everything needed to represent and operate on the Post
+
+- CommentBlock
+  - Data and metadata representing a Comment attached to a Post
+
+- WebBlock
+  - Data and metadata of a website
+  - Can represent a URL attached to a post
+  - May also contain the contents of the website for further processing
+
+- ImageBlock
+  - Data and metadata of an Image
+  - Includes the URL of the image, if applicable
+  - An Image might start life as only containing a URL parsed from another Block, before being loaded and the data populated later
+
+See @./planning/block_design.md for specs of each Block.
+
+### Block Flow
+
+This example flow reproduces @./planning/example_flow.yml.
+
+#### 1. Trigger
+  - A scheduler (cron in the example) fires and asks the runner to start the flow.
+
+#### 2. Source adapter → PostBlock creation
+  - The Reddit adapter fetches a post and instantiates a PostBlock with only the raw data it can collect in one request:
+    - id, url, basic metadata
+    - empty placeholders for CommentBlock, WebBlocks, ImageBlocks, Summary, Quality.
+
+#### 3. Enrichment processors (still under “sources”)
+- If include_comments / include_web / include_images flags are true, the adapter also creates the corresponding child blocks (CommentBlock, WebBlock, ImageBlock) and attaches them to the PostBlock.
+- At this point all blocks carry raw content but no quality/summarisation data.
+
+#### 4. Quality stage
+- Rule based processor (“min_comments”) runs first.
+  - Reads comments.count; if it fails, the PostBlock is tagged Quality.result = drop and short-circuited.
+- LLM quality processor (“is_relevant”) runs next on surviving blocks.
+  - Sends the post text to an LLM, receives a relevance score / pass-drop decision.
+  - Writes the structured result back into PostBlock.Quality.
+
+#### 5. Summary stage
+- Per-post summariser (“post_sum”) is executed.
+  - Uses the prompt template and the interests param list.
+  - Writes the returned summary into PostBlock.Summary.
+- Any nested blocks (e.g. CommentBlock) may also be summarised if configured.
+
+#### 6. Run-level summariser
+- After every post has finished its own processors, the flow-level LLM (“full_sum”) creates an aggregate summary across all surviving PostBlocks.
+- Output stored separately (not inside each PostBlock).
+
+#### 7. Output stage
+- Email processor turns each surviving PostBlock plus the run summary into the final HTML email using emailTemplate.
+- Marks PostBlock as “delivered” (implementation detail: often a status flag or timestamp).
 
 ## 5. API Design
 
