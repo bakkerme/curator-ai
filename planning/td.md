@@ -39,11 +39,62 @@ Curator AI is an AI-driven Personal Intelligence Platform that is designed to pu
   - Evaluation Runner
   - Log Manager
 
-```
-[Component A] --> [Component B] --> [Component C]
-     |                 |                 |
-     v                 v                 v
-[Storage A]       [Storage B]       [Output]
+```mermaid
+graph TD
+  %% UI
+  subgraph UI
+    Login[Login & Account]
+    FlowList[Curation Flow List]
+    FlowBuilder[Curation Flow Builder]
+    Settings[Settings]
+    LogsViewer[Logs Viewer]
+    EvalDashboard[Evaluation Dashboard]
+  end
+
+  %% Backend
+  subgraph Backend
+    CRUD[CRUD Service]
+    FlowCreator[Curation Flow Creator]
+    FlowRunner[Curation Flow Runner]
+    EvalRunner[Evaluation Runner]
+    LogManager[Log Manager]
+  end
+
+  %% Storage
+  subgraph Storage
+    Postgres[(PostgreSQL)]
+    Redis[(Redis)]
+  end
+
+  %% External Outputs
+  subgraph External
+    SMTP[(Email)]
+    Slack[(Slack)]
+    MCP[(MCP)]
+  end
+
+  %% UI → Backend
+  Login -->|REST| CRUD
+  FlowList -->|REST| CRUD
+  FlowBuilder -->|REST| FlowCreator
+  Settings -->|REST| CRUD
+  LogsViewer -->|WebSocket| LogManager
+  EvalDashboard -->|REST| EvalRunner
+
+  %% Backend internal links
+  FlowCreator -->|gRPC| FlowRunner
+  CRUD -->|SQL| Postgres
+  LogManager -->|store| Redis
+  EvalRunner -->|SQL| Postgres
+  EvalRunner -->|cache| Redis
+  CRUD -->|gRPC| FlowRunner
+
+  %% Flow execution paths
+  FlowRunner -->|writes| Postgres
+  FlowRunner -->|cache| Redis
+  FlowRunner -->|send| SMTP
+  FlowRunner -->|send| Slack
+  FlowRunner -->|store| MCP
 ```
 
 ## 3. Core Components
