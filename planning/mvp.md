@@ -4,7 +4,7 @@
 The MVP is designed to build out the core Curation Flow Runner, getting to a point where it can load in a Curator Document, parse it and do the work.
 
 ## 2. Scope
-The scope is solely the flow runner, with no UI, auth or evaluation
+The scope is solely the flow runner, with no UI, auth or evaluation.
 
 ### In-Scope
 - Curator Document parser
@@ -23,7 +23,7 @@ The scope is solely the flow runner, with no UI, auth or evaluation
 - Output
     - Email
 
-#### Out-of-scope
+### Out-of-scope
 - Auth
 - Dashboard
 - Evaluation
@@ -36,11 +36,13 @@ Goals:
 
 ## 4. Assumptions
 
-## 5. Architecture Snapshot
-### 5.1 Minimal Services
-One single Docker container with a bespoke Go application.
-
-### 5.2 Data Flow Overview
+## 5. Technology Choice
+* Application
+    * Go (latest)
+    * Echo
+* Infrastructure
+    * Docker
+    * Alpine Linux
 
 ## 6. Key Components
 ### 6.1 Block System Design
@@ -56,14 +58,43 @@ The document is in yaml, so the parser should:
 - Convert the document into an internal format that contains:
     - Each Processor needed, and the order to execute them in
 
-#### 6.4 Design Processor Data Type
+#### 6.4 Curator Flow Runner
+1. Wait till a Trigger criteria is met
+1. Load a batch from the Source, with any enrichment required
+2. Send post to next Processor in the list
+3. Process each Post into each Processor, one by one
+4. If the next Processor is a Run Summary Processor, wait until every Post in the batch is processed up to the Run Summary
+5. If the next step is an Output, execute the output step with all Posts up until this point
 
-
-### 6.4 Reddit Source
+### 6.5 Reddit Source
 - Use the existing Reddit source from AI News Processor as the basis for this
-- 
+- Outputs a PostBlock for each Reddit post
 
-### 6.2 Processor Interfaces
-### 6.3 Trigger Scheduler
-### 6.4 Storage Layer
-### 6.5 Output Adapter (Email)
+## 6.6 LLM Foundation
+- Provides the backbone for LLM-based Processors including:
+    - LLM Quality
+    - LLM Summary
+    - LLM Run Summary
+- Uses an OpenAI-compatible API
+
+### 6.7 Output Processor (Email)
+- Processes Post inputs, inserting them into a defined email template via Go's built in templating library
+- Use SMTP details defined via config
+
+### 6.8 Logging & Observability
+- Centralised structured logging (zap or logrus) with log levels configurable via env vars  
+- Basic metrics (Prometheus exporter) for trigger runs, processor latencies and error counts
+
+### 6.9 Configuration & Secrets
+- Config via environment variables + optional `.env` file  
+- Secret values (API keys, SMTP creds) injected at runtime, never committed to VCS
+
+### 6.10 Error Handling & Retry Logic
+- Standard error type hierarchy for processors  
+- Auto-retry for LLM parse fails with no backoff time
+- Exponential backoff and retry for other fail types
+
+### 6.11 Testing Strategy
+- Unit tests for individual processors (Go’s `testing` pkg)  
+- Integration test that loads a sample Curator Document and runs the entire flow in-memory  
+- GitHub Actions workflow to run `go test ./...`
