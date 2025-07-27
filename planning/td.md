@@ -293,17 +293,65 @@ This example flow reproduces @./planning/example_flow.yml.
 
 ## 5. API Design
 
-### Core Endpoints
+### CRUD Service
 
-#### Error Logging
+### Auth
+- POST /api/v1/auth/login
+- POST /api/v1/auth/refresh
+- POST /api/v1/auth/logout
+- GET  /api/v1/auth/me
 
-```
-POST /api/v1/log/error - Log an error
-{
-    "error": "Some error",
-    "stack": "Stack trace"
-}
-```
+#### Curator Documents
+- GET  /api/v1/flows
+- POST /api/v1/flows
+- GET  /api/v1/flows/{id}
+- PUT  /api/v1/flows/{id}
+- DELETE /api/v1/flows/{id}
+
+#### Blocks
+- GET /api/v1/blocks?runId= – list blocks for a run
+- GET /api/v1/blocks/{id} – fetch single block (+type-specific fields)
+
+#### Curation Flow Creator (Backend → FlowCreator)
+- POST /api/v1/flow-creator/derive – body: { url, email } → returns draft Curator Document
+- POST /api/v1/flow-creator/validate – validate a supplied YAML/JSON Curator Document
+
+### Curation Flow Runner (Backend → FlowRunner)
+#### Execution control
+
+- POST /api/v1/flows/{id}/runs – manual trigger
+- POST /api/v1/runs/{id}/cancel – cancel in-flight run
+
+#### Run inspection
+- GET  /api/v1/runs – filter by flow / status / date
+- GET  /api/v1/runs/{id} – run metadata & stats
+- GET  /api/v1/runs/{id}/summary – aggregate “full_sum” output
+
+#### Live status (WebSocket)
+- WS   /api/v1/runs/{id}/events – stream RunStatus updates
+
+### Evaluation Runner (Backend → EvalRunner)
+- POST /api/v1/evaluations – body: EvalSpec
+- GET  /api/v1/evaluations/{id} – report
+- GET  /api/v1/evaluations – list / filter
+- WS   /api/v1/evaluations/{id}/events – progress stream
+
+### Log Manager (Backend → LogManager)
+#### Ingest
+
+- POST /api/v1/log/error – front-end error logging (already noted)
+- POST /api/v1/log – structured service log batch
+
+#### Query / tail
+- GET  /api/v1/logs – search / filter
+- WS   /api/v1/logs/stream – real-time tail (supports query params)
+
+### System Settings
+- GET  /api/v1/settings – current config (mask secrets)
+- PUT  /api/v1/settings – update SMTP, Slack, model paths, etc.
+
+### Health & Metrics
+- GET /healthcheck
 
 ## 6. Technology Stack
 
