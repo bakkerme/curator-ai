@@ -3,26 +3,26 @@ workflow:
 
   trigger:
     - cron:
-      schedule: "0 0 * * *" # midnight utc / 10am AEST
+        schedule: "0 0 * * *" # midnight utc / 10am AEST
 
 
   sources:
     - reddit: # outputs a list of PostBlocks
-      subreddits: ["MachineLearning", "LocalLLaMA"]
-      include_comments: true
-      include_web: true
-      include_images: true
+        subreddits: ["MachineLearning", "LocalLLaMA"]
+        include_comments: true
+        include_web: true
+        include_images: true
 
   quality:
     - quality_rule:
-      name: min_comments
-      rule: "comments.count > 5"
-      actionType: pass_drop
-      result: drop
+        name: min_comments
+        rule: "comments.count > 5"
+        actionType: pass_drop
+        result: drop
     - llm:
-      name: is_relevant
-      prompt_template: isRelevantTemplate
-      evaluations: 
+        name: is_relevant
+        prompt_template: isRelevantTemplate
+        evaluations: 
         - "Contains specific technical details or specifications"
         - "Explains the significance and impact of the development"
         - "Includes performance metrics, benchmarks, or comparisons"
@@ -30,22 +30,22 @@ workflow:
         - "Valuable insights into commercial applications of AI technology"
         - "New model releases or updates from major AI labs"
         - "Innovative use cases or applications of LLMs"
-      exclusions: 
-        - "Content entirely unrelated to AI/ML technology"
-        - "Questions that would be better suited for tech support"
-        - "Random complaints without technical content"
-        - "Humor posts"
-        - "Personal blog-style posts"
-        - "Career advice or job postings"
-      action_type: pass_drop
+        exclusions: 
+          - "Content entirely unrelated to AI/ML technology"
+          - "Questions that would be better suited for tech support"
+          - "Random complaints without technical content"
+          - "Humor posts"
+          - "Personal blog-style posts"
+          - "Career advice or job postings"
+        action_type: pass_drop
 
   post_summary:
     - llm:
-      name: post_sum  # post summary
-      type: llm
-      context: post
-      prompt_template: postSummaryTemplate
-      params:
+        name: post_sum  # post summary
+        type: llm
+        context: post
+        prompt_template: postSummaryTemplate
+        params:
         interests:
           - "New LLM models, runners or other infrastructure being released or open sourced"
           - "Big AI lab news (OpenAI, Anthropic, DeepSeek, Qwen etc.)"
@@ -53,11 +53,11 @@ workflow:
 
   run_summary:
     - llm: # full summary
-      name: full_sum
-      type: llm
-      context: flow
-      prompt_template: fullSummaryTemplate
-      params:
+        name: full_sum
+        type: llm
+        context: flow
+        prompt_template: fullSummaryTemplate
+        params:
         focus:
           - "Major advances in model architecture or capabilities"
           - "Emerging trends in open-source LLM development"

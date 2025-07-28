@@ -196,6 +196,26 @@ The Curation Flow Creator is an AI-powered tool, designed to take a URL for a We
 - Stored in Redis
 - Default retention 30 days (configurable).
 
+#### Rule Engine
+
+**Purpose:** Evaluate quality rule expressions against PostBlock data to filter content.
+
+**Responsibilities:**
+- Parse and compile rule expressions from Curator Documents.
+- Evaluate expressions against Go structs (PostBlocks) safely and efficiently.
+- Support field access, comparisons, logical operators, and array operations.
+- Provide compile-time validation of rule syntax and type checking.
+
+**Interfaces:**
+- Input: Rule expression string and PostBlock data.
+- Output: Boolean result (pass/drop decision).
+
+**Implementation Notes:**
+- Uses [expr](https://expr-lang.org) library for Go-native expression evaluation.
+- Supports syntax: `comments.count > 5`, `score >= 100 && author != "[deleted]"`, `len(title.text) < 200`.
+- Compile-time type checking against PostBlock struct definitions.
+- Sandboxed execution with no side effects for security.
+
 ## 4. Data Models
 
 ### Primary Entities
