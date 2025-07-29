@@ -1,19 +1,19 @@
 workflow:
   name: "AI Research Intelligence"
 
-  trigger:
+  - trigger:
     - cron:
         schedule: "0 0 * * *" # midnight utc / 10am AEST
 
 
-  sources:
+  - sources:
     - reddit: # outputs a list of PostBlocks
         subreddits: ["MachineLearning", "LocalLLaMA"]
         include_comments: true
         include_web: true
         include_images: true
 
-  quality:
+  - quality:
     - quality_rule:
         name: min_comments
         rule: "comments.count > 5"
@@ -39,7 +39,7 @@ workflow:
           - "Career advice or job postings"
         action_type: pass_drop
 
-  post_summary:
+  - post_summary:
     - llm:
         name: post_sum  # post summary
         type: llm
@@ -51,7 +51,7 @@ workflow:
           - "Big AI lab news (OpenAI, Anthropic, DeepSeek, Qwen etc.)"
           - "Security news"
 
-  run_summary:
+  - run_summary:
     - llm: # full summary
         name: full_sum
         type: llm
@@ -64,7 +64,7 @@ workflow:
           - "Notable performance breakthroughs"
           - "Industry impact and adoption patterns"
 
-  output:
+  - output:
     email:
       template: emailTemplate
       to: brandon@bdmd.com.au

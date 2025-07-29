@@ -138,9 +138,8 @@ email:
 ## Data Flow and Processing Order
 
 1. **Trigger** fires based on configured conditions. Always first.
--- Can come in any order --
 2. **Sources** fetch and create PostBlocks with raw data
-3. **Quality** processors filter posts (in order):
+3. **Quality** processors filter posts
 4. **Post Summary** processors enhance remaining posts
 5. **Run Summary** processors create aggregate summaries
 6. **Output** delivers results
