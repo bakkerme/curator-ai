@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bakkerme/curator-ai/internal/core"
 	"gopkg.in/yaml.v3"
 )
 
@@ -184,4 +185,134 @@ func TestValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseToFlow(t *testing.T) {
+	// Create a test document with all processor types
+	doc := CuratorDocument{
+		Workflow: Workflow{
+			Name:    "Test Workflow",
+			Version: "1.0",
+			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
+			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+			Quality: []QualityConfig{
+				{QualityRule: &QualityRule{
+					Name:       "min_score",
+					Rule:       "score > 10",
+					ActionType: "pass_drop",
+					Result:     "pass",
+				}},
+				{LLM: &LLMQuality{
+					Name:           "quality_check",
+					PromptTemplate: "test_template",
+					ActionType:     "pass_drop",
+				}},
+			},
+			PostSummary: []SummaryConfig{{LLM: &LLMSummary{
+				Name:           "post_summary",
+				Type:           "llm",
+				Context:        "post",
+				PromptTemplate: "summary_template",
+			}}},
+			RunSummary: []SummaryConfig{{LLM: &LLMSummary{
+				Name:           "run_summary",
+				Type:           "llm",
+				Context:        "flow",
+				PromptTemplate: "run_summary_template",
+			}}},
+			Output: map[string]any{"email": map[string]any{
+				"to":      "test@test.com",
+				"from":    "noreply@test.com",
+				"subject": "Test Subject",
+			}},
+		},
+	}
+
+	// Parse to Flow
+	flow, err := doc.ParseToFlow()
+	if err != nil {
+		t.Fatalf("Failed to parse to flow: %v", err)
+	}
+
+	// Validate basic properties
+	if flow.Name != "Test Workflow" {
+		t.Errorf("Expected flow name 'Test Workflow', got '%s'", flow.Name)
+	}
+
+	if flow.Version != "1.0" {
+		t.Errorf("Expected version '1.0', got '%s'", flow.Version)
+	}
+
+	if flow.Status != core.FlowStatusWaiting {
+		t.Errorf("Expected status '%s', got '%s'", core.FlowStatusWaiting, flow.Status)
+	}
+
+	// Validate OrderOfOperations sequence
+	expectedOrder := []core.ProcessorType{
+		core.TriggerProcessorType,
+		core.SourceProcessorType,
+		core.QualityProcessorType,
+		core.QualityProcessorType,
+		core.SummaryProcessorType,
+		core.RunSummaryProcessorType,
+		core.OutputProcessorType,
+	}
+
+	if len(flow.OrderOfOperations) != len(expectedOrder) {
+		t.Errorf("Expected %d operations, got %d", len(expectedOrder), len(flow.OrderOfOperations))
+	}
+
+	for i, expected := range expectedOrder {
+		if i >= len(flow.OrderOfOperations) {
+			t.Errorf("Missing operation at index %d", i)
+			continue
+		}
+		if flow.OrderOfOperations[i].Type != expected {
+			t.Errorf("Expected operation %d to be %s, got %s", i, expected, flow.OrderOfOperations[i].Type)
+		}
+	}
+
+	// Validate specific processor names in OrderOfOperations
+	expectedNames := []string{"cron", "reddit", "min_score", "quality_check", "post_summary", "run_summary", "email"}
+	for i, expectedName := range expectedNames {
+		if i >= len(flow.OrderOfOperations) {
+			t.Errorf("Missing operation at index %d", i)
+			continue
+		}
+		if flow.OrderOfOperations[i].Name != expectedName {
+			t.Errorf("Expected operation %d to have name '%s', got '%s'", i, expectedName, flow.OrderOfOperations[i].Name)
+		}
+	}
+
+	// Validate that typed processor lists are populated (even if with nil pointers for now)
+	if len(flow.Triggers) != 1 {
+		t.Errorf("Expected 1 trigger, got %d", len(flow.Triggers))
+	}
+
+	if len(flow.Sources) != 1 {
+		t.Errorf("Expected 1 source, got %d", len(flow.Sources))
+	}
+
+	if len(flow.Quality) != 2 {
+		t.Errorf("Expected 2 quality processors, got %d", len(flow.Quality))
+	}
+
+	if len(flow.PostSummary) != 1 {
+		t.Errorf("Expected 1 post summary processor, got %d", len(flow.PostSummary))
+	}
+
+	if len(flow.RunSummary) != 1 {
+		t.Errorf("Expected 1 run summary processor, got %d", len(flow.RunSummary))
+	}
+
+	if len(flow.Outputs) != 1 {
+		t.Errorf("Expected 1 output processor, got %d", len(flow.Outputs))
+	}
+
+	// Validate that RawConfig is populated
+	if flow.RawConfig == nil {
+		t.Error("RawConfig should not be nil")
+	}
+
+	t.Logf("Successfully parsed flow with %d operations in correct order", len(flow.OrderOfOperations))
 }

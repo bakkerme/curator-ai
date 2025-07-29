@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+// TriggerProcessor represents a processor that includes only one processor type, alongside the Name and Type.
+// It's done like this to avoid having to use a map[string]interface{} for the processor type.
 type ProcessReference struct {
 	Name        string
 	Type        ProcessorType
