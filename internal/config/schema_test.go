@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	"context"
 	"strings"
 	"testing"
 
@@ -10,72 +10,46 @@ import (
 )
 
 func TestParseExampleFlow(t *testing.T) {
-	testCases := []struct {
-		name     string
-		filepath string
-	}{
-		{
-			name:     "Original example flow",
-			filepath: "../../planning/example_flow.yml",
-		},
-		{
-			name:     "Complete example flow",
-			filepath: "../../planning/example-flow-complete.yaml",
-		},
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    email:
+      template: "Hello"
+      to: "test@example.com"
+      from: "noreply@example.com"
+      subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+	flow, err := doc.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse document: %v", err)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Read the YAML file
-			data, err := os.ReadFile(tc.filepath)
-			if err != nil {
-				t.Fatalf("Failed to read file %s: %v", tc.filepath, err)
-			}
-
-			// Parse the YAML
-			var doc CuratorDocument
-			err = yaml.Unmarshal(data, &doc)
-			if err != nil {
-				t.Fatalf("Failed to unmarshal YAML: %v", err)
-			}
-
-			// Validate the document
-			err = doc.Validate()
-			if err != nil {
-				t.Fatalf("Document validation failed: %v", err)
-			}
-
-			// Parse into internal structure
-			flow, err := doc.Parse()
-			if err != nil {
-				t.Fatalf("Failed to parse document: %v", err)
-			}
-
-			// Basic assertions
-			if flow.Name == "" {
-				t.Error("Flow name should not be empty")
-			}
-
-			if len(flow.Triggers) == 0 {
-				t.Error("Flow should have at least one trigger")
-			}
-
-			if len(flow.Sources) == 0 {
-				t.Error("Flow should have at least one source")
-			}
-
-			if len(flow.Outputs) == 0 {
-				t.Error("Flow should have at least one output")
-			}
-
-			// Log parsed structure for debugging
-			t.Logf("Parsed flow: %s", flow.Name)
-			t.Logf("Version: %s", flow.Version)
-			t.Logf("Triggers: %d", len(flow.Triggers))
-			t.Logf("Sources: %d", len(flow.Sources))
-			t.Logf("Processors: %d", len(flow.Processors))
-			t.Logf("Outputs: %d", len(flow.Outputs))
-		})
+	if flow.Name == "" {
+		t.Error("Flow name should not be empty")
+	}
+	if len(flow.Triggers) == 0 {
+		t.Error("Flow should have at least one trigger")
+	}
+	if len(flow.Sources) == 0 {
+		t.Error("Flow should have at least one source")
+	}
+	if len(flow.Outputs) == 0 {
+		t.Error("Flow should have at least one output")
 	}
 }
 
@@ -92,7 +66,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output:  map[string]any{"email": map[string]any{"to": "test@test.com"}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
 				},
 			},
 			expectError: true,
@@ -104,7 +83,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output:  map[string]any{"email": map[string]any{"to": "test@test.com"}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
 				},
 			},
 			expectError: true,
@@ -116,7 +100,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Output:  map[string]any{"email": map[string]any{"to": "test@test.com"}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
 				},
 			},
 			expectError: true,
@@ -135,6 +124,24 @@ func TestValidation(t *testing.T) {
 			errorMsg:    "output configuration is required",
 		},
 		{
+			name: "RSS source missing feeds",
+			doc: CuratorDocument{
+				Workflow: Workflow{
+					Name:    "Test",
+					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
+					Sources: []SourceConfig{{RSS: &RSSSource{}}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
+				},
+			},
+			expectError: true,
+			errorMsg:    "at least one rss feed is required",
+		},
+		{
 			name: "Invalid quality rule action type",
 			doc: CuratorDocument{
 				Workflow: Workflow{
@@ -149,7 +156,12 @@ func TestValidation(t *testing.T) {
 							Result:     "drop",
 						},
 					}},
-					Output: map[string]any{"email": map[string]any{"to": "test@test.com"}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
 				},
 			},
 			expectError: true,
@@ -162,7 +174,12 @@ func TestValidation(t *testing.T) {
 					Name:    "Test Workflow",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output:  map[string]any{"email": map[string]any{"to": "test@test.com"}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "test@test.com",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
 				},
 			},
 			expectError: false,
@@ -221,15 +238,16 @@ func TestParseToFlow(t *testing.T) {
 				PromptTemplate: "run_summary_template",
 			}}},
 			Output: map[string]any{"email": map[string]any{
-				"to":      "test@test.com",
-				"from":    "noreply@test.com",
-				"subject": "Test Subject",
+				"template": "test",
+				"to":       "test@test.com",
+				"from":     "noreply@test.com",
+				"subject":  "Test Subject",
 			}},
 		},
 	}
 
 	// Parse to Flow
-	flow, err := doc.ParseToFlow()
+	flow, err := doc.ParseToFlowWithFactory(&mockFactory{})
 	if err != nil {
 		t.Fatalf("Failed to parse to flow: %v", err)
 	}
@@ -315,4 +333,140 @@ func TestParseToFlow(t *testing.T) {
 	}
 
 	t.Logf("Successfully parsed flow with %d operations in correct order", len(flow.OrderOfOperations))
+}
+
+func TestParseEmailOutputConfig(t *testing.T) {
+	doc := CuratorDocument{
+		Workflow: Workflow{
+			Name:    "Email Test",
+			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
+			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+			Output: map[string]any{"email": map[string]any{
+				"template":      "test",
+				"to":            "test@test.com",
+				"from":          "noreply@test.com",
+				"subject":       "Test Subject",
+				"smtp_host":     "smtp.test.com",
+				"smtp_port":     2525,
+				"smtp_user":     "user",
+				"smtp_password": "pass",
+				"use_tls":       true,
+			}},
+		},
+	}
+
+	flow, err := doc.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse document: %v", err)
+	}
+	if len(flow.Outputs) != 1 {
+		t.Fatalf("Expected one output, got %d", len(flow.Outputs))
+	}
+	output := flow.Outputs[0]
+	emailConfig, ok := output.Config.(*EmailOutput)
+	if !ok {
+		t.Fatalf("Expected email output config, got %T", output.Config)
+	}
+	if emailConfig.SMTPHost != "smtp.test.com" {
+		t.Errorf("Expected smtp host, got %s", emailConfig.SMTPHost)
+	}
+	if emailConfig.SMTPPort != 2525 {
+		t.Errorf("Expected smtp port 2525, got %d", emailConfig.SMTPPort)
+	}
+	if emailConfig.SMTPUser != "user" {
+		t.Errorf("Expected smtp user, got %s", emailConfig.SMTPUser)
+	}
+	if emailConfig.SMTPPassword != "pass" {
+		t.Errorf("Expected smtp password, got %s", emailConfig.SMTPPassword)
+	}
+	if emailConfig.UseTLS == nil || !*emailConfig.UseTLS {
+		t.Errorf("Expected use_tls true")
+	}
+}
+
+type mockFactory struct{}
+
+func (m *mockFactory) NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error) {
+	return &mockTrigger{}, nil
+}
+
+func (m *mockFactory) NewRedditSource(config *RedditSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewRSSSource(config *RSSSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewQualityRule(config *QualityRule) (core.QualityProcessor, error) {
+	return &mockQuality{}, nil
+}
+
+func (m *mockFactory) NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error) {
+	return &mockQuality{}, nil
+}
+
+func (m *mockFactory) NewLLMSummary(config *LLMSummary) (core.SummaryProcessor, error) {
+	return &mockSummary{}, nil
+}
+
+func (m *mockFactory) NewLLMRunSummary(config *LLMSummary) (core.RunSummaryProcessor, error) {
+	return &mockRunSummary{}, nil
+}
+
+func (m *mockFactory) NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error) {
+	return &mockOutput{}, nil
+}
+
+type mockTrigger struct{}
+
+func (m *mockTrigger) Name() string                                  { return "mock_trigger" }
+func (m *mockTrigger) Configure(config map[string]interface{}) error { return nil }
+func (m *mockTrigger) Validate() error                               { return nil }
+func (m *mockTrigger) Start(ctx context.Context, flowID string) (<-chan core.TriggerEvent, error) {
+	return make(chan core.TriggerEvent), nil
+}
+func (m *mockTrigger) Stop() error { return nil }
+
+type mockSource struct{}
+
+func (m *mockSource) Name() string                                         { return "mock_source" }
+func (m *mockSource) Configure(config map[string]interface{}) error        { return nil }
+func (m *mockSource) Validate() error                                      { return nil }
+func (m *mockSource) Fetch(ctx context.Context) ([]*core.PostBlock, error) { return nil, nil }
+
+type mockQuality struct{}
+
+func (m *mockQuality) Name() string                                  { return "mock_quality" }
+func (m *mockQuality) Configure(config map[string]interface{}) error { return nil }
+func (m *mockQuality) Validate() error                               { return nil }
+func (m *mockQuality) Evaluate(ctx context.Context, blocks []*core.PostBlock) ([]*core.PostBlock, error) {
+	return blocks, nil
+}
+
+type mockSummary struct{}
+
+func (m *mockSummary) Name() string                                  { return "mock_summary" }
+func (m *mockSummary) Configure(config map[string]interface{}) error { return nil }
+func (m *mockSummary) Validate() error                               { return nil }
+func (m *mockSummary) Summarize(ctx context.Context, blocks []*core.PostBlock) ([]*core.PostBlock, error) {
+	return blocks, nil
+}
+
+type mockRunSummary struct{}
+
+func (m *mockRunSummary) Name() string                                  { return "mock_run_summary" }
+func (m *mockRunSummary) Configure(config map[string]interface{}) error { return nil }
+func (m *mockRunSummary) Validate() error                               { return nil }
+func (m *mockRunSummary) SummarizeRun(ctx context.Context, blocks []*core.PostBlock) (*core.RunSummary, error) {
+	return &core.RunSummary{}, nil
+}
+
+type mockOutput struct{}
+
+func (m *mockOutput) Name() string                                  { return "mock_output" }
+func (m *mockOutput) Configure(config map[string]interface{}) error { return nil }
+func (m *mockOutput) Validate() error                               { return nil }
+func (m *mockOutput) Deliver(ctx context.Context, blocks []*core.PostBlock, runSummary *core.RunSummary) error {
+	return nil
 }

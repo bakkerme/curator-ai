@@ -39,6 +39,7 @@ type CronTrigger struct {
 // SourceConfig wraps different source types
 type SourceConfig struct {
 	Reddit *RedditSource `yaml:"reddit,omitempty"`
+	RSS    *RSSSource    `yaml:"rss,omitempty"`
 }
 
 // RedditSource defines Reddit data source configuration
@@ -51,6 +52,14 @@ type RedditSource struct {
 	IncludeWeb      bool     `yaml:"include_web,omitempty"`
 	IncludeImages   bool     `yaml:"include_images,omitempty"`
 	MinScore        int      `yaml:"min_score,omitempty"`
+}
+
+// RSSSource defines RSS/Atom feed configuration
+type RSSSource struct {
+	Feeds          []string `yaml:"feeds"`
+	Limit          int      `yaml:"limit,omitempty"`
+	IncludeContent *bool    `yaml:"include_content,omitempty"`
+	UserAgent      string   `yaml:"user_agent,omitempty"`
 }
 
 // QualityConfig wraps different quality processor types
@@ -112,6 +121,7 @@ type ProcessorType string
 const (
 	ProcessorTriggerCron   ProcessorType = "trigger_cron"
 	ProcessorSourceReddit  ProcessorType = "source_reddit"
+	ProcessorSourceRSS     ProcessorType = "source_rss"
 	ProcessorQualityRule   ProcessorType = "quality_rule"
 	ProcessorQualityLLM    ProcessorType = "quality_llm"
 	ProcessorSummaryLLM    ProcessorType = "summary_llm"
@@ -136,6 +146,18 @@ type ParsedProcessor struct {
 	Config interface{} // Points to the specific config struct
 }
 
+// ProcessorFactory constructs concrete processor implementations for a parsed document.
+type ProcessorFactory interface {
+	NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error)
+	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
+	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
+	NewQualityRule(config *QualityRule) (core.QualityProcessor, error)
+	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
+	NewLLMSummary(config *LLMSummary) (core.SummaryProcessor, error)
+	NewLLMRunSummary(config *LLMSummary) (core.RunSummaryProcessor, error)
+	NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error)
+}
+
 // Validate performs validation on the curator document
 func (d *CuratorDocument) Validate() error {
 	if d.Workflow.Name == "" {
@@ -153,6 +175,16 @@ func (d *CuratorDocument) Validate() error {
 	if len(d.Workflow.Output) == 0 {
 		return fmt.Errorf("output configuration is required")
 	}
+	if output, ok := d.Workflow.Output["email"]; ok {
+		if configMap, ok := output.(map[string]interface{}); ok {
+			requiredFields := []string{"template", "to", "from", "subject"}
+			for _, field := range requiredFields {
+				if value, ok := configMap[field].(string); !ok || value == "" {
+					return fmt.Errorf("output email: %s is required", field)
+				}
+			}
+		}
+	}
 
 	// Validate triggers
 	for i, trigger := range d.Workflow.Trigger {
@@ -166,11 +198,14 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate sources
 	for i, source := range d.Workflow.Sources {
-		if source.Reddit == nil {
+		if source.Reddit == nil && source.RSS == nil {
 			return fmt.Errorf("source %d: unsupported source type", i)
 		}
-		if len(source.Reddit.Subreddits) == 0 {
+		if source.Reddit != nil && len(source.Reddit.Subreddits) == 0 {
 			return fmt.Errorf("source %d: at least one subreddit is required", i)
+		}
+		if source.RSS != nil && len(source.RSS.Feeds) == 0 {
+			return fmt.Errorf("source %d: at least one rss feed is required", i)
 		}
 	}
 
@@ -256,6 +291,13 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Config: source.Reddit,
 			})
 		}
+		if source.RSS != nil {
+			flow.Sources = append(flow.Sources, ParsedProcessor{
+				Type:   ProcessorSourceRSS,
+				Name:   "rss",
+				Config: source.RSS,
+			})
+		}
 	}
 
 	// Parse quality processors
@@ -316,6 +358,21 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				if v, ok := configMap["subject"].(string); ok {
 					emailConfig.Subject = v
 				}
+				if v, ok := configMap["smtp_host"].(string); ok {
+					emailConfig.SMTPHost = v
+				}
+				if v, ok := intFromConfig(configMap["smtp_port"]); ok {
+					emailConfig.SMTPPort = v
+				}
+				if v, ok := configMap["smtp_user"].(string); ok {
+					emailConfig.SMTPUser = v
+				}
+				if v, ok := configMap["smtp_password"].(string); ok {
+					emailConfig.SMTPPassword = v
+				}
+				if v, ok := boolFromConfig(configMap["use_tls"]); ok {
+					emailConfig.UseTLS = &v
+				}
 			}
 
 			flow.Outputs = append(flow.Outputs, ParsedProcessor{
@@ -331,6 +388,12 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 
 // ParseToFlow converts the document into a core.Flow structure with OrderOfOperations
 func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
+	return d.ParseToFlowWithFactory(nil)
+}
+
+// ParseToFlowWithFactory converts the document into a core.Flow structure with OrderOfOperations.
+// When factory is nil, the flow will be created without concrete processors.
+func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*core.Flow, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
@@ -350,22 +413,18 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 		flow.Version = "1.0"
 	}
 
-	// Store processor configurations for OrderOfOperations lookup
-	triggerMap := make(map[string]*core.TriggerProcessor)
-	sourceMap := make(map[string]*core.SourceProcessor)
-	qualityMap := make(map[string]*core.QualityProcessor)
-	postSummaryMap := make(map[string]*core.SummaryProcessor)
-	runSummaryMap := make(map[string]*core.RunSummaryProcessor)
-	outputMap := make(map[string]*core.OutputProcessor)
-
 	// Build OrderOfOperations in the correct sequence
 	// 1. Triggers (always first)
 	for _, trigger := range d.Workflow.Trigger {
 		if trigger.Cron != nil {
-			// Note: In a real implementation, these would be created by a processor factory
-			// For now, we're just creating placeholder instances
-			var triggerProcessor *core.TriggerProcessor
-			triggerMap["cron"] = triggerProcessor
+			var triggerProcessor core.TriggerProcessor
+			if factory != nil {
+				var err error
+				triggerProcessor, err = factory.NewCronTrigger(trigger.Cron)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Triggers = append(flow.Triggers, triggerProcessor)
 
 			processRef := core.ProcessReference{
@@ -380,12 +439,36 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 2. Sources
 	for _, source := range d.Workflow.Sources {
 		if source.Reddit != nil {
-			var sourceProcessor *core.SourceProcessor
-			sourceMap["reddit"] = sourceProcessor
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewRedditSource(source.Reddit)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Sources = append(flow.Sources, sourceProcessor)
 
 			processRef := core.ProcessReference{
 				Name:   "reddit",
+				Type:   core.SourceProcessorType,
+				Source: sourceProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		}
+		if source.RSS != nil {
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewRSSSource(source.RSS)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.Sources = append(flow.Sources, sourceProcessor)
+
+			processRef := core.ProcessReference{
+				Name:   "rss",
 				Type:   core.SourceProcessorType,
 				Source: sourceProcessor,
 			}
@@ -396,8 +479,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 3. Quality processors (in order defined in document)
 	for _, quality := range d.Workflow.Quality {
 		if quality.QualityRule != nil {
-			var qualityProcessor *core.QualityProcessor
-			qualityMap[quality.QualityRule.Name] = qualityProcessor
+			var qualityProcessor core.QualityProcessor
+			if factory != nil {
+				var err error
+				qualityProcessor, err = factory.NewQualityRule(quality.QualityRule)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Quality = append(flow.Quality, qualityProcessor)
 
 			processRef := core.ProcessReference{
@@ -407,8 +496,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 			}
 			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
 		} else if quality.LLM != nil {
-			var qualityProcessor *core.QualityProcessor
-			qualityMap[quality.LLM.Name] = qualityProcessor
+			var qualityProcessor core.QualityProcessor
+			if factory != nil {
+				var err error
+				qualityProcessor, err = factory.NewLLMQuality(quality.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Quality = append(flow.Quality, qualityProcessor)
 
 			processRef := core.ProcessReference{
@@ -423,8 +518,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 4. Post Summary processors
 	for _, summary := range d.Workflow.PostSummary {
 		if summary.LLM != nil {
-			var summaryProcessor *core.SummaryProcessor
-			postSummaryMap[summary.LLM.Name] = summaryProcessor
+			var summaryProcessor core.SummaryProcessor
+			if factory != nil {
+				var err error
+				summaryProcessor, err = factory.NewLLMSummary(summary.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.PostSummary = append(flow.PostSummary, summaryProcessor)
 
 			processRef := core.ProcessReference{
@@ -439,8 +540,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 5. Run Summary processors
 	for _, summary := range d.Workflow.RunSummary {
 		if summary.LLM != nil {
-			var runSummaryProcessor *core.RunSummaryProcessor
-			runSummaryMap[summary.LLM.Name] = runSummaryProcessor
+			var runSummaryProcessor core.RunSummaryProcessor
+			if factory != nil {
+				var err error
+				runSummaryProcessor, err = factory.NewLLMRunSummary(summary.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.RunSummary = append(flow.RunSummary, runSummaryProcessor)
 
 			processRef := core.ProcessReference{
@@ -455,8 +562,45 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 6. Output processors (always last)
 	for outputType := range d.Workflow.Output {
 		if outputType == "email" {
-			var outputProcessor *core.OutputProcessor
-			outputMap["email"] = outputProcessor
+			emailConfig := &EmailOutput{}
+			if configMap, ok := d.Workflow.Output["email"].(map[string]interface{}); ok {
+				if v, ok := configMap["template"].(string); ok {
+					emailConfig.Template = v
+				}
+				if v, ok := configMap["to"].(string); ok {
+					emailConfig.To = v
+				}
+				if v, ok := configMap["from"].(string); ok {
+					emailConfig.From = v
+				}
+				if v, ok := configMap["subject"].(string); ok {
+					emailConfig.Subject = v
+				}
+				if v, ok := configMap["smtp_host"].(string); ok {
+					emailConfig.SMTPHost = v
+				}
+				if v, ok := intFromConfig(configMap["smtp_port"]); ok {
+					emailConfig.SMTPPort = v
+				}
+				if v, ok := configMap["smtp_user"].(string); ok {
+					emailConfig.SMTPUser = v
+				}
+				if v, ok := configMap["smtp_password"].(string); ok {
+					emailConfig.SMTPPassword = v
+				}
+				if v, ok := boolFromConfig(configMap["use_tls"]); ok {
+					emailConfig.UseTLS = &v
+				}
+			}
+
+			var outputProcessor core.OutputProcessor
+			if factory != nil {
+				var err error
+				outputProcessor, err = factory.NewEmailOutput(emailConfig)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Outputs = append(flow.Outputs, outputProcessor)
 
 			processRef := core.ProcessReference{
@@ -475,4 +619,22 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	flow.RawConfig = rawConfig
 
 	return flow, nil
+}
+
+func intFromConfig(value interface{}) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
+}
+
+func boolFromConfig(value interface{}) (bool, bool) {
+	v, ok := value.(bool)
+	return v, ok
 }
