@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bakkerme/curator-ai/internal/retry"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 )
 
@@ -57,7 +58,7 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 		req.Header.Set("User-Agent", "curator-ai/0.1")
 	}
 
-	resp, err := f.client.Do(req)
+	resp, err := f.doRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +91,26 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 	}
 
 	return items, nil
+}
+
+func (f *Fetcher) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	var response *http.Response
+	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+		var err error
+		response, err = f.client.Do(req)
+		if err != nil {
+			return err
+		}
+		if response.StatusCode >= http.StatusInternalServerError {
+			response.Body.Close()
+			return fmt.Errorf("reddit transient error: %s", response.Status)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 type listingResponse struct {

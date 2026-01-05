@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/mail"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -176,13 +177,26 @@ func (d *CuratorDocument) Validate() error {
 		return fmt.Errorf("output configuration is required")
 	}
 	if output, ok := d.Workflow.Output["email"]; ok {
-		if configMap, ok := output.(map[string]interface{}); ok {
-			requiredFields := []string{"template", "to", "from", "subject"}
-			for _, field := range requiredFields {
-				if value, ok := configMap[field].(string); !ok || value == "" {
-					return fmt.Errorf("output email: %s is required", field)
-				}
+		emailConfig, err := decodeEmailOutput(output)
+		if err != nil {
+			return fmt.Errorf("output email: %w", err)
+		}
+		requiredFields := map[string]string{
+			"template": emailConfig.Template,
+			"to":       emailConfig.To,
+			"from":     emailConfig.From,
+			"subject":  emailConfig.Subject,
+		}
+		for field, value := range requiredFields {
+			if value == "" {
+				return fmt.Errorf("output email: %s is required", field)
 			}
+		}
+		if _, err := mail.ParseAddress(emailConfig.To); err != nil {
+			return fmt.Errorf("output email: invalid to address")
+		}
+		if _, err := mail.ParseAddress(emailConfig.From); err != nil {
+			return fmt.Errorf("output email: invalid from address")
 		}
 	}
 
@@ -342,37 +356,9 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 	// Parse outputs
 	for outputType, outputConfig := range d.Workflow.Output {
 		if outputType == "email" {
-			// Convert map to EmailOutput struct
-			emailConfig := &EmailOutput{}
-			if configMap, ok := outputConfig.(map[string]interface{}); ok {
-				// Manual mapping since we're dealing with interface{}
-				if v, ok := configMap["template"].(string); ok {
-					emailConfig.Template = v
-				}
-				if v, ok := configMap["to"].(string); ok {
-					emailConfig.To = v
-				}
-				if v, ok := configMap["from"].(string); ok {
-					emailConfig.From = v
-				}
-				if v, ok := configMap["subject"].(string); ok {
-					emailConfig.Subject = v
-				}
-				if v, ok := configMap["smtp_host"].(string); ok {
-					emailConfig.SMTPHost = v
-				}
-				if v, ok := intFromConfig(configMap["smtp_port"]); ok {
-					emailConfig.SMTPPort = v
-				}
-				if v, ok := configMap["smtp_user"].(string); ok {
-					emailConfig.SMTPUser = v
-				}
-				if v, ok := configMap["smtp_password"].(string); ok {
-					emailConfig.SMTPPassword = v
-				}
-				if v, ok := boolFromConfig(configMap["use_tls"]); ok {
-					emailConfig.UseTLS = &v
-				}
+			emailConfig, err := decodeEmailOutput(outputConfig)
+			if err != nil {
+				return nil, fmt.Errorf("output email: %w", err)
 			}
 
 			flow.Outputs = append(flow.Outputs, ParsedProcessor{
@@ -562,40 +548,13 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 	// 6. Output processors (always last)
 	for outputType := range d.Workflow.Output {
 		if outputType == "email" {
-			emailConfig := &EmailOutput{}
-			if configMap, ok := d.Workflow.Output["email"].(map[string]interface{}); ok {
-				if v, ok := configMap["template"].(string); ok {
-					emailConfig.Template = v
-				}
-				if v, ok := configMap["to"].(string); ok {
-					emailConfig.To = v
-				}
-				if v, ok := configMap["from"].(string); ok {
-					emailConfig.From = v
-				}
-				if v, ok := configMap["subject"].(string); ok {
-					emailConfig.Subject = v
-				}
-				if v, ok := configMap["smtp_host"].(string); ok {
-					emailConfig.SMTPHost = v
-				}
-				if v, ok := intFromConfig(configMap["smtp_port"]); ok {
-					emailConfig.SMTPPort = v
-				}
-				if v, ok := configMap["smtp_user"].(string); ok {
-					emailConfig.SMTPUser = v
-				}
-				if v, ok := configMap["smtp_password"].(string); ok {
-					emailConfig.SMTPPassword = v
-				}
-				if v, ok := boolFromConfig(configMap["use_tls"]); ok {
-					emailConfig.UseTLS = &v
-				}
+			emailConfig, err := decodeEmailOutput(d.Workflow.Output["email"])
+			if err != nil {
+				return nil, fmt.Errorf("output email: %w", err)
 			}
 
 			var outputProcessor core.OutputProcessor
 			if factory != nil {
-				var err error
 				outputProcessor, err = factory.NewEmailOutput(emailConfig)
 				if err != nil {
 					return nil, err
@@ -621,20 +580,17 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 	return flow, nil
 }
 
-func intFromConfig(value interface{}) (int, bool) {
-	switch v := value.(type) {
-	case int:
-		return v, true
-	case int64:
-		return int(v), true
-	case float64:
-		return int(v), true
-	default:
-		return 0, false
+func decodeEmailOutput(value interface{}) (*EmailOutput, error) {
+	if value == nil {
+		return nil, fmt.Errorf("missing configuration")
 	}
-}
-
-func boolFromConfig(value interface{}) (bool, bool) {
-	v, ok := value.(bool)
-	return v, ok
+	raw, err := yaml.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("marshal output config: %w", err)
+	}
+	var emailConfig EmailOutput
+	if err := yaml.Unmarshal(raw, &emailConfig); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	return &emailConfig, nil
 }

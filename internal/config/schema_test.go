@@ -184,6 +184,24 @@ func TestValidation(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "Invalid email address",
+			doc: CuratorDocument{
+				Workflow: Workflow{
+					Name:    "Test Workflow",
+					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Output: map[string]any{"email": map[string]any{
+						"template": "test",
+						"to":       "invalid-email",
+						"from":     "noreply@test.com",
+						"subject":  "Test Subject",
+					}},
+				},
+			},
+			expectError: true,
+			errorMsg:    "invalid to address",
+		},
 	}
 
 	for _, tc := range testCases {

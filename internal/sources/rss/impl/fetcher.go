@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bakkerme/curator-ai/internal/retry"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	"github.com/mmcdole/gofeed"
 )
@@ -24,7 +25,15 @@ func NewFetcher(timeout time.Duration, userAgent string) *Fetcher {
 }
 
 func (f *Fetcher) Fetch(ctx context.Context, feedURL string, options rss.FetchOptions) ([]rss.Item, error) {
-	feed, err := f.parser.ParseURLWithContext(feedURL, ctx)
+	var feed *gofeed.Feed
+	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+		parsed, err := f.parser.ParseURLWithContext(feedURL, ctx)
+		if err != nil {
+			return err
+		}
+		feed = parsed
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("parse feed: %w", err)
 	}

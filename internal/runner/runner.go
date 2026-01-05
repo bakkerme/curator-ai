@@ -10,14 +10,26 @@ import (
 )
 
 type Runner struct {
-	logger *slog.Logger
+	logger                   *slog.Logger
+	allowPartialSourceErrors bool
+}
+
+type Config struct {
+	AllowPartialSourceErrors bool
 }
 
 func New(logger *slog.Logger) *Runner {
+	return NewWithConfig(logger, Config{})
+}
+
+func NewWithConfig(logger *slog.Logger, config Config) *Runner {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Runner{logger: logger}
+	return &Runner{
+		logger:                   logger,
+		allowPartialSourceErrors: config.AllowPartialSourceErrors,
+	}
 }
 
 func (r *Runner) Start(ctx context.Context, flow *core.Flow) error {
@@ -55,6 +67,10 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		}
 		fetched, err := source.Fetch(ctx)
 		if err != nil {
+			if r.allowPartialSourceErrors {
+				r.logger.Warn("source fetch failed", "error", err)
+				continue
+			}
 			run.Status = core.RunStatusFailed
 			return run, err
 		}
