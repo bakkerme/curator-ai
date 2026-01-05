@@ -13,6 +13,7 @@ The scope is solely the flow runner, with no UI, auth or evaluation.
     - Cron Trigger
 - Sources
     - Reddit
+    - RSS
 - Quality
     - Quality Rule
     - LLM
