@@ -50,6 +50,7 @@ func TestRunnerEndToEnd(t *testing.T) {
 			Sources: []config.SourceConfig{{RSS: &config.RSSSource{Feeds: []string{"https://example.com/feed.xml"}}}},
 			Quality: []config.QualityConfig{{LLM: &config.LLMQuality{
 				Name:           "quality",
+				SystemTemplate: "system",
 				PromptTemplate: `{"title":"{{.Title}}"}`,
 				ActionType:     "pass_drop",
 				Threshold:      0.5,
@@ -64,14 +65,15 @@ func TestRunnerEndToEnd(t *testing.T) {
 				Name:           "run_summary",
 				Type:           "llm",
 				Context:        "flow",
+				SystemTemplate: "system",
 				PromptTemplate: "{{len .Blocks}} posts",
 			}}},
-			Output: map[string]any{"email": map[string]any{
-				"template": "Posts: {{range .Blocks}}{{.Title}}{{end}}",
-				"to":       "test@example.com",
-				"from":     "noreply@example.com",
-				"subject":  "Daily",
-			}},
+			Output: []config.OutputConfig{{Email: &config.EmailOutput{
+				Template: "Posts: {{range .Blocks}}{{.Title}}{{end}}",
+				To:       "test@example.com",
+				From:     "noreply@example.com",
+				Subject:  "Daily",
+			}}},
 		},
 	}
 

@@ -3,6 +3,7 @@ package summary
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"text/template"
 	"time"
 
@@ -21,9 +22,14 @@ type PostLLMProcessor struct {
 	defaultModel   string
 	systemTemplate *template.Template
 	template       *template.Template
+	logger         *slog.Logger
 }
 
 func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*PostLLMProcessor, error) {
+	return NewPostLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+}
+
+func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger) (*PostLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("summary config is required")
 	}
@@ -33,6 +39,10 @@ func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel
 		return nil, err
 	}
 
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &PostLLMProcessor{
 		name:           cfg.Name,
 		config:         *cfg,
@@ -40,6 +50,7 @@ func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel
 		defaultModel:   defaultModel,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		logger:         logger,
 	}, nil
 }
 
@@ -65,6 +76,12 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
+	logger := p.logger
+	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
+		logger = ctxLogger
+	}
+	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+
 	for _, block := range blocks {
 		data := struct {
 			*core.PostBlock
@@ -85,6 +102,8 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model)
+
 		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil)
 		if err != nil {
 			return nil, err

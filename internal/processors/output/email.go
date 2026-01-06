@@ -68,15 +68,59 @@ func renderEmailTemplate(templateText string, blocks []*core.PostBlock, runSumma
 		return "", fmt.Errorf("parse email template failed: %w", err)
 	}
 	var builder strings.Builder
-	data := struct {
-		Blocks     []*core.PostBlock
-		RunSummary *core.RunSummary
-	}{
-		Blocks:     blocks,
-		RunSummary: runSummary,
-	}
+	data := newEmailTemplateData(blocks, runSummary)
 	if err := tmpl.Execute(&builder, data); err != nil {
 		return "", fmt.Errorf("execute email template failed: %w", err)
 	}
 	return builder.String(), nil
+}
+
+type emailTemplateData struct {
+	Blocks     []*emailPostBlock
+	RunSummary *emailRunSummary
+}
+
+type emailPostBlock struct {
+	*core.PostBlock
+	Summary *emailSummaryResult
+}
+
+type emailSummaryResult struct {
+	*core.SummaryResult
+	HTML template.HTML
+}
+
+type emailRunSummary struct {
+	*core.RunSummary
+	HTML template.HTML
+}
+
+func newEmailTemplateData(blocks []*core.PostBlock, runSummary *core.RunSummary) emailTemplateData {
+	emailBlocks := make([]*emailPostBlock, 0, len(blocks))
+	for _, block := range blocks {
+		var summary *emailSummaryResult
+		if block != nil && block.Summary != nil {
+			summary = &emailSummaryResult{
+				SummaryResult: block.Summary,
+				HTML:          template.HTML(block.Summary.HTML),
+			}
+		}
+		emailBlocks = append(emailBlocks, &emailPostBlock{
+			PostBlock: block,
+			Summary:   summary,
+		})
+	}
+
+	var emailRun *emailRunSummary
+	if runSummary != nil {
+		emailRun = &emailRunSummary{
+			RunSummary: runSummary,
+			HTML:       template.HTML(runSummary.HTML),
+		}
+	}
+
+	return emailTemplateData{
+		Blocks:     emailBlocks,
+		RunSummary: emailRun,
+	}
 }

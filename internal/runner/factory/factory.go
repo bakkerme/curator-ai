@@ -83,15 +83,23 @@ func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor
 }
 
 func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
-	return quality.NewLLMProcessor(cfg, f.LLMClient, f.DefaultModel)
+	return quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
 }
 
 func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
-	return summary.NewPostLLMProcessor(cfg, f.LLMClient, f.DefaultModel)
+	return summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
 }
 
 func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
-	return summary.NewRunLLMProcessor(cfg, f.LLMClient, f.DefaultModel)
+	return summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+}
+
+func (f *Factory) NewMarkdownSummary(cfg *config.MarkdownSummary) (core.SummaryProcessor, error) {
+	return summary.NewPostMarkdownProcessor(cfg)
+}
+
+func (f *Factory) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSummaryProcessor, error) {
+	return summary.NewRunMarkdownProcessor(cfg)
 }
 
 func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor, error) {

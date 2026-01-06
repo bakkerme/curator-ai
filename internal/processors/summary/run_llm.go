@@ -3,6 +3,7 @@ package summary
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"text/template"
 	"time"
 
@@ -21,9 +22,14 @@ type RunLLMProcessor struct {
 	defaultModel   string
 	systemTemplate *template.Template
 	template       *template.Template
+	logger         *slog.Logger
 }
 
 func NewRunLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*RunLLMProcessor, error) {
+	return NewRunLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+}
+
+func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger) (*RunLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("run summary config is required")
 	}
@@ -33,7 +39,9 @@ func NewRunLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel 
 		return nil, err
 	}
 
-	// fmt.Printf("%+v", cfg)
+	if logger == nil {
+		logger = slog.Default()
+	}
 
 	return &RunLLMProcessor{
 		name:           cfg.Name,
@@ -42,6 +50,7 @@ func NewRunLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel 
 		defaultModel:   defaultModel,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		logger:         logger,
 	}, nil
 }
 
@@ -70,10 +79,16 @@ func (p *RunLLMProcessor) Validate() error {
 	return nil
 }
 
-func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostBlock) (*core.RunSummary, error) {
+func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostBlock, current *core.RunSummary) (*core.RunSummary, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
+	logger := p.logger
+	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
+		logger = ctxLogger
+	}
+	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+
 	data := struct {
 		Blocks []*core.PostBlock
 		Params map[string]interface{}
@@ -93,6 +108,7 @@ func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostB
 	}
 
 	model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+	logger.Info("llm run summary summarizing", "blocks", len(blocks), "model", model, "has_current_summary", current != nil)
 
 	var summary string
 	_, err = llmutil.ChatSystemUserWithRetries(

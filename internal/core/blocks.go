@@ -77,6 +77,7 @@ type QualityResult struct {
 type SummaryResult struct {
 	ProcessorName string            `json:"processor_name" yaml:"processor_name"`
 	Summary       string            `json:"summary" yaml:"summary"`
+	HTML          string            `json:"html,omitempty" yaml:"html,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	ProcessedAt   time.Time         `json:"processed_at" yaml:"processed_at"`
 }
@@ -93,6 +94,7 @@ type ProcessError struct {
 type RunSummary struct {
 	ProcessorName string            `json:"processor_name" yaml:"processor_name"`
 	Summary       string            `json:"summary" yaml:"summary"`
+	HTML          string            `json:"html,omitempty" yaml:"html,omitempty"`
 	PostCount     int               `json:"post_count" yaml:"post_count"`
 	Metadata      map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	ProcessedAt   time.Time         `json:"processed_at" yaml:"processed_at"`

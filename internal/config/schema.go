@@ -16,7 +16,7 @@ type CuratorDocument struct {
 }
 
 // TemplateDefinition stores a named template that can be referenced by ID from processors.
-// Templates use Go's standard library text/template syntax.
+// Templates use Go's standard library template syntax (text/template; email output uses html/template with the same syntax).
 type TemplateDefinition struct {
 	ID             string `yaml:"id"`
 	SystemTemplate string `yaml:"system_template"`
@@ -102,7 +102,8 @@ type LLMQuality struct {
 
 // SummaryConfig wraps LLM summary processors
 type SummaryConfig struct {
-	LLM *LLMSummary `yaml:"llm,omitempty"`
+	LLM      *LLMSummary      `yaml:"llm,omitempty"`
+	Markdown *MarkdownSummary `yaml:"markdown,omitempty"`
 }
 
 // LLMSummary defines LLM-based summarization
@@ -114,6 +115,13 @@ type LLMSummary struct {
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+}
+
+// MarkdownSummary defines markdown-to-HTML summarization
+type MarkdownSummary struct {
+	Name    string `yaml:"name"`
+	Type    string `yaml:"type"`
+	Context string `yaml:"context"`
 }
 
 type OutputConfig struct {
@@ -144,6 +152,8 @@ const (
 	ProcessorQualityLLM    ProcessorType = "quality_llm"
 	ProcessorSummaryLLM    ProcessorType = "summary_llm"
 	ProcessorRunSummaryLLM ProcessorType = "run_summary_llm"
+	ProcessorSummaryMD     ProcessorType = "summary_markdown"
+	ProcessorRunSummaryMD  ProcessorType = "run_summary_markdown"
 	ProcessorOutputEmail   ProcessorType = "output_email"
 )
 
@@ -173,12 +183,17 @@ type ProcessorFactory interface {
 	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
 	NewLLMSummary(config *LLMSummary) (core.SummaryProcessor, error)
 	NewLLMRunSummary(config *LLMSummary) (core.RunSummaryProcessor, error)
+	NewMarkdownSummary(config *MarkdownSummary) (core.SummaryProcessor, error)
+	NewMarkdownRunSummary(config *MarkdownSummary) (core.RunSummaryProcessor, error)
 	NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error)
 }
 
 // Validate performs validation on the curator document
 func (d *CuratorDocument) Validate() error {
 	if err := d.resolveTemplateReferences(); err != nil {
+		return err
+	}
+	if err := d.validateTemplateTypes(); err != nil {
 		return err
 	}
 
@@ -274,19 +289,25 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate summaries
 	for i, summary := range d.Workflow.PostSummary {
-		if summary.LLM == nil {
+		if summary.LLM == nil && summary.Markdown == nil {
 			return fmt.Errorf("post_summary %d: unsupported summary type", i)
 		}
-		if summary.LLM.Context != "post" {
+		if summary.LLM != nil && summary.LLM.Context != "post" {
+			return fmt.Errorf("post_summary %d: context must be 'post'", i)
+		}
+		if summary.Markdown != nil && summary.Markdown.Context != "post" {
 			return fmt.Errorf("post_summary %d: context must be 'post'", i)
 		}
 	}
 
 	for i, summary := range d.Workflow.RunSummary {
-		if summary.LLM == nil {
+		if summary.LLM == nil && summary.Markdown == nil {
 			return fmt.Errorf("run_summary %d: unsupported summary type", i)
 		}
-		if summary.LLM.Context != "flow" {
+		if summary.LLM != nil && summary.LLM.Context != "flow" {
+			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
+		}
+		if summary.Markdown != nil && summary.Markdown.Context != "flow" {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
 		}
 	}
@@ -435,6 +456,12 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Name:   summary.LLM.Name,
 				Config: summary.LLM,
 			})
+		} else if summary.Markdown != nil {
+			flow.Processors = append(flow.Processors, ParsedProcessor{
+				Type:   ProcessorSummaryMD,
+				Name:   summary.Markdown.Name,
+				Config: summary.Markdown,
+			})
 		}
 	}
 
@@ -446,13 +473,19 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Name:   summary.LLM.Name,
 				Config: summary.LLM,
 			})
+		} else if summary.Markdown != nil {
+			flow.Processors = append(flow.Processors, ParsedProcessor{
+				Type:   ProcessorRunSummaryMD,
+				Name:   summary.Markdown.Name,
+				Config: summary.Markdown,
+			})
 		}
 	}
 
 	// Parse outputs
 	for _, output := range d.Workflow.Output {
 		if output.Email != nil {
-			flow.Processors = append(flow.Processors, ParsedProcessor{
+			flow.Outputs = append(flow.Outputs, ParsedProcessor{
 				Type:   ProcessorOutputEmail,
 				Name:   "email",
 				Config: output.Email,
@@ -611,6 +644,23 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 				PostSummary: summaryProcessor,
 			}
 			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		} else if summary.Markdown != nil {
+			var summaryProcessor core.SummaryProcessor
+			if factory != nil {
+				var err error
+				summaryProcessor, err = factory.NewMarkdownSummary(summary.Markdown)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.PostSummary = append(flow.PostSummary, summaryProcessor)
+
+			processRef := core.ProcessReference{
+				Name:        summary.Markdown.Name,
+				Type:        core.SummaryProcessorType,
+				PostSummary: summaryProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
 		}
 	}
 
@@ -629,6 +679,23 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 
 			processRef := core.ProcessReference{
 				Name:       summary.LLM.Name,
+				Type:       core.RunSummaryProcessorType,
+				RunSummary: runSummaryProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		} else if summary.Markdown != nil {
+			var runSummaryProcessor core.RunSummaryProcessor
+			if factory != nil {
+				var err error
+				runSummaryProcessor, err = factory.NewMarkdownRunSummary(summary.Markdown)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.RunSummary = append(flow.RunSummary, runSummaryProcessor)
+
+			processRef := core.ProcessReference{
+				Name:       summary.Markdown.Name,
 				Type:       core.RunSummaryProcessorType,
 				RunSummary: runSummaryProcessor,
 			}

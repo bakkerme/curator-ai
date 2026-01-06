@@ -9,6 +9,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func TestParseExampleFlow(t *testing.T) {
 	data := []byte(`
 workflow:
@@ -20,11 +24,11 @@ workflow:
     - reddit:
         subreddits: ["MachineLearning"]
   output:
-    email:
-      template: "Hello"
-      to: "test@example.com"
-      from: "noreply@example.com"
-      subject: "Daily Report"
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
 `)
 
 	var doc CuratorDocument
@@ -53,57 +57,181 @@ workflow:
 	}
 }
 
+func TestTemplateTypeCheckFailsOnBadPostSummaryTemplate(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        system_template: "SYSTEM"
+        prompt_template: "POST {{ .DoesNotExist }}"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	err := doc.Validate()
+	if err == nil {
+		t.Fatalf("Expected validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "post_summary 0") {
+		t.Fatalf("Expected error to mention post_summary 0, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "DoesNotExist") {
+		t.Fatalf("Expected error to mention DoesNotExist, got: %v", err)
+	}
+}
+
+func TestTemplateTypeCheckFailsOnBadRunSummaryTemplate(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  run_summary:
+    - llm:
+        name: run_sum
+        type: llm
+        context: flow
+        system_template: "SYSTEM"
+        prompt_template: "RUN {{ .Title }}"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	err := doc.Validate()
+	if err == nil {
+		t.Fatalf("Expected validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "run_summary 0") {
+		t.Fatalf("Expected error to mention run_summary 0, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Title") {
+		t.Fatalf("Expected error to mention Title, got: %v", err)
+	}
+}
+
+func TestTemplateTypeCheckFailsOnBadEmailTemplate(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    - email:
+        template: "EMAIL {{ .RunSummary.DoesNotExist }}"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	err := doc.Validate()
+	if err == nil {
+		t.Fatalf("Expected validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "output 0") {
+		t.Fatalf("Expected error to mention output 0, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "DoesNotExist") {
+		t.Fatalf("Expected error to mention DoesNotExist, got: %v", err)
+	}
+}
+
 func TestTemplateResolution(t *testing.T) {
 	data := []byte(`
 workflow:
-	name: "Test Flow"
-	trigger:
-		- cron:
-				schedule: "0 0 * * *"
-	sources:
-		- reddit:
-				subreddits: ["MachineLearning"]
-	quality:
-		- llm:
-				name: quality_check
-				prompt_template: quality_template
-				action_type: pass_drop
-	post_summary:
-		- llm:
-				name: post_sum
-				type: llm
-				context: post
-				prompt_template: post_template
-				params:
-					interests: ["A", "B"]
-	run_summary:
-		- llm:
-				name: run_sum
-				type: llm
-				context: flow
-				prompt_template: run_template
-				params:
-					focus: ["X"]
-	output:
-		email:
-			template: email_template
-			to: "test@example.com"
-			from: "noreply@example.com"
-			subject: "Daily Report"
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  quality:
+    - llm:
+        name: quality_check
+        prompt_template: quality_template
+        action_type: pass_drop
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        prompt_template: post_template
+        params:
+          interests: ["A", "B"]
+  run_summary:
+    - llm:
+        name: run_sum
+        type: llm
+        context: flow
+        prompt_template: run_template
+        params:
+          focus: ["X"]
+  output:
+    - email:
+        template: email_template
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
 
 templates:
-	- id: quality_template
-		template: |-
-			QUALITY {{.Title}}
-	- id: post_template
-		template: |-
-			POST {{.Title}}
-	- id: run_template
-		template: |-
-			RUN {{len .Blocks}}
-	- id: email_template
-		template: |-
-			EMAIL {{len .Blocks}}
+  - id: quality_template
+    system_template: |-
+      SYSTEM QUALITY
+    template: |-
+      QUALITY {{.Title}}
+  - id: post_template
+    system_template: |-
+      SYSTEM POST
+    template: |-
+      POST {{.Title}}
+  - id: run_template
+    system_template: |-
+      SYSTEM RUN
+    template: |-
+      RUN {{len .Blocks}}
+  - id: email_template
+    system_template: |-
+      SYSTEM EMAIL
+    template: |-
+      EMAIL {{len .Blocks}}
 `)
 
 	var doc CuratorDocument
@@ -167,12 +295,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -184,12 +312,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -201,12 +329,12 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -231,12 +359,12 @@ func TestValidation(t *testing.T) {
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
 					Sources: []SourceConfig{{RSS: &RSSSource{}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -257,12 +385,12 @@ func TestValidation(t *testing.T) {
 							Result:     "drop",
 						},
 					}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -275,12 +403,12 @@ func TestValidation(t *testing.T) {
 					Name:    "Test Workflow",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "test@test.com",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: false,
@@ -292,12 +420,12 @@ func TestValidation(t *testing.T) {
 					Name:    "Test Workflow",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
 					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-					Output: map[string]any{"email": map[string]any{
-						"template": "test",
-						"to":       "invalid-email",
-						"from":     "noreply@test.com",
-						"subject":  "Test Subject",
-					}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "invalid-email",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
 				},
 			},
 			expectError: true,
@@ -356,12 +484,12 @@ func TestParseToFlow(t *testing.T) {
 				Context:        "flow",
 				PromptTemplate: "run_summary_template",
 			}}},
-			Output: map[string]any{"email": map[string]any{
-				"template": "test",
-				"to":       "test@test.com",
-				"from":     "noreply@test.com",
-				"subject":  "Test Subject",
-			}},
+			Output: []OutputConfig{{Email: &EmailOutput{
+				Template: "test",
+				To:       "test@test.com",
+				From:     "noreply@test.com",
+				Subject:  "Test Subject",
+			}}},
 		},
 	}
 
@@ -460,17 +588,17 @@ func TestParseEmailOutputConfig(t *testing.T) {
 			Name:    "Email Test",
 			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
 			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
-			Output: map[string]any{"email": map[string]any{
-				"template":      "test",
-				"to":            "test@test.com",
-				"from":          "noreply@test.com",
-				"subject":       "Test Subject",
-				"smtp_host":     "smtp.test.com",
-				"smtp_port":     2525,
-				"smtp_user":     "user",
-				"smtp_password": "pass",
-				"use_tls":       true,
-			}},
+			Output: []OutputConfig{{Email: &EmailOutput{
+				Template:     "test",
+				To:           "test@test.com",
+				From:         "noreply@test.com",
+				Subject:      "Test Subject",
+				SMTPHost:     "smtp.test.com",
+				SMTPPort:     2525,
+				SMTPUser:     "user",
+				SMTPPassword: "pass",
+				UseTLS:       boolPtr(true),
+			}}},
 		},
 	}
 
@@ -533,6 +661,14 @@ func (m *mockFactory) NewLLMRunSummary(config *LLMSummary) (core.RunSummaryProce
 	return &mockRunSummary{}, nil
 }
 
+func (m *mockFactory) NewMarkdownSummary(config *MarkdownSummary) (core.SummaryProcessor, error) {
+	return &mockSummary{}, nil
+}
+
+func (m *mockFactory) NewMarkdownRunSummary(config *MarkdownSummary) (core.RunSummaryProcessor, error) {
+	return &mockRunSummary{}, nil
+}
+
 func (m *mockFactory) NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error) {
 	return &mockOutput{}, nil
 }
@@ -577,7 +713,7 @@ type mockRunSummary struct{}
 func (m *mockRunSummary) Name() string                                  { return "mock_run_summary" }
 func (m *mockRunSummary) Configure(config map[string]interface{}) error { return nil }
 func (m *mockRunSummary) Validate() error                               { return nil }
-func (m *mockRunSummary) SummarizeRun(ctx context.Context, blocks []*core.PostBlock) (*core.RunSummary, error) {
+func (m *mockRunSummary) SummarizeRun(ctx context.Context, blocks []*core.PostBlock, current *core.RunSummary) (*core.RunSummary, error) {
 	return &core.RunSummary{}, nil
 }
 

@@ -103,6 +103,16 @@ llm:
     my_additional_param: [string]          # An additional example param
 ```
 
+#### Markdown Summary (Post-level)
+Converts markdown summaries on posts into HTML (GitHub Flavored Markdown; raw HTML is not rendered).
+
+```yaml
+markdown:
+  name: string                   # Unique identifier
+  type: string                   # "markdown" - processor type
+  context: string                # "post" - operates on individual posts
+```
+
 #### LLM Summary (Run-level)
 Generates aggregate summaries across all posts in a run.
 
@@ -115,6 +125,16 @@ llm:
   prompt_template: string         # Reference to prompt template
   params:                         # Optional: Additional parameters
     my_additional_param: [string] # An additional example param
+```
+
+#### Markdown Summary (Run-level)
+Converts markdown run summaries into HTML (GitHub Flavored Markdown; raw HTML is not rendered).
+
+```yaml
+markdown:
+  name: string                    # Unique identifier
+  type: string                    # "markdown" - processor type
+  context: string                 # "flow" - operates on entire flow results
 ```
 
 ### Output Processors
@@ -160,7 +180,7 @@ Examples:
 
 ## Template References
 
-Curator uses Go's standard library templating language (`text/template`) for all templates (LLM prompts and outputs).
+Curator uses Go's standard library templating language (`text/template`) for LLM prompts; email output templates use `html/template` (same syntax, with HTML auto-escaping).
 
 This is a good fit because:
 - It's already used in the codebase.
@@ -259,11 +279,12 @@ There are {{len .Blocks}} posts.
 
 #### Email templates (`output.email.template`)
 
-Email templates are rendered as `text/plain` bodies.
+Email templates are rendered as HTML bodies.
 
 Root object contains:
 - `.Blocks []*PostBlock`
 - `.RunSummary *RunSummary`
+- `PostBlock.Summary.HTML` and `RunSummary.HTML` when markdown summary processors are used (inserted as raw HTML, not escaped)
 
 Example:
 

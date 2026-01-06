@@ -59,6 +59,13 @@ workflow:
             - "Big AI lab news (OpenAI, Anthropic, DeepSeek, Qwen etc.)"
             - "Security news"
 
+    - markdown:
+        name: markdown_to_html_post_sum
+        type: markdown
+        context: post
+
+
+
   run_summary:
     - llm:
         name: full_sum
@@ -71,6 +78,11 @@ workflow:
             - "Emerging trends in open-source LLM development"
             - "Notable performance breakthroughs"
             - "Industry impact and adoption patterns"
+    - markdown:
+        name: markdown_to_html_sum
+        type: markdown
+        context: "flow"
+
 
   output:
     - email:
@@ -180,9 +192,8 @@ templates:
       {{- end }}
 
       Output format:
-      1) Executive summary (4-8 bullets)
-      2) Notable items (bulleted, include post title + 1 sentence)
-      3) Links (bulleted list of URLs)
+      # Executive summary (4-8 bullets)
+      # Notable items (bulleted, include post title + 1 sentence)
 
     template: |-
       There are {{ len .Blocks }} posts.
@@ -210,7 +221,7 @@ templates:
             <h1 style="margin:0 0 12px 0;font-size:22px;">Daily AI Research Digest</h1>
 
             {{- if .RunSummary }}
-            {{- .RunSummary.Summary }}
+            {{- .RunSummary.HTML }}
             {{- end }}
 
             <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
@@ -225,7 +236,7 @@ templates:
               </div>
               <div style="font-size:13px;margin:0;">
                 {{- if .Summary }}
-                {{ .Summary.Summary }}
+                {{ .Summary.HTML }}
                 {{- else }}
                 (no summary)
                 {{- end }}

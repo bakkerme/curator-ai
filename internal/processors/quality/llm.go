@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"text/template"
 	"time"
 
@@ -22,6 +23,7 @@ type LLMProcessor struct {
 	defaultModel   string
 	systemTemplate *template.Template
 	template       *template.Template
+	logger         *slog.Logger
 }
 
 type qualityResponse struct {
@@ -30,6 +32,10 @@ type qualityResponse struct {
 }
 
 func NewLLMProcessor(cfg *config.LLMQuality, client llm.Client, defaultModel string) (*LLMProcessor, error) {
+	return NewLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+}
+
+func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaultModel string, logger *slog.Logger) (*LLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("llm quality config is required")
 	}
@@ -39,6 +45,10 @@ func NewLLMProcessor(cfg *config.LLMQuality, client llm.Client, defaultModel str
 		return nil, err
 	}
 
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &LLMProcessor{
 		name:           cfg.Name,
 		config:         *cfg,
@@ -46,6 +56,7 @@ func NewLLMProcessor(cfg *config.LLMQuality, client llm.Client, defaultModel str
 		defaultModel:   defaultModel,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		logger:         logger,
 	}, nil
 }
 
@@ -74,6 +85,12 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
+	logger := p.logger
+	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
+		logger = ctxLogger
+	}
+	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+
 	filtered := make([]*core.PostBlock, 0, len(blocks))
 	threshold := p.config.Threshold
 	if threshold == 0 {
@@ -102,6 +119,8 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+		logger.Info("llm quality evaluating block", "block_id", block.ID, "model", model)
+
 		var parsed qualityResponse
 		_, err = llmutil.ChatSystemUserWithRetries(
 			ctx,

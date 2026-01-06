@@ -69,7 +69,7 @@ type SummaryProcessor interface {
 type RunSummaryProcessor interface {
 	Processor
 	// SummarizeRun creates a summary across all blocks in a run
-	SummarizeRun(ctx context.Context, blocks []*PostBlock) (*RunSummary, error)
+	SummarizeRun(ctx context.Context, blocks []*PostBlock, current *RunSummary) (*RunSummary, error)
 }
 
 // OutputProcessor delivers results
