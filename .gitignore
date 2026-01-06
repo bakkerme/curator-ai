@@ -1,6 +1,7 @@
 .envrc
 .gocache
 .gomodcache
+.gopath
 
 # Build artifacts
 /bin/

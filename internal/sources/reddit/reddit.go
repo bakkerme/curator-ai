@@ -18,6 +18,14 @@ type Config struct {
 	UserAgent       string
 }
 
+// Comment represents a single reddit comment.
+type Comment struct {
+	ID        string
+	Author    string
+	Content   string
+	CreatedAt time.Time
+}
+
 // Item represents a single reddit post.
 type Item struct {
 	ID        string
@@ -27,6 +35,9 @@ type Item struct {
 	Author    string
 	Score     int
 	CreatedAt time.Time
+	Comments  []Comment
+	WebURLs   []string
+	ImageURLs []string
 }
 
 // Fetcher retrieves reddit posts based on config.

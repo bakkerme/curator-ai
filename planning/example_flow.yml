@@ -125,21 +125,6 @@ templates:
 
       Content:
       {{ .Content }}
-
-      Comments ({{ len .Comments }}):
-      {{- range $i, $c := .Comments }}
-      - {{ $c.Author }}: {{ $c.Content }}
-      {{- end }}
-
-      Linked URLs ({{ len .WebBlocks }}):
-      {{- range .WebBlocks }}
-      - {{ .URL }}
-      {{- end }}
-
-      Images ({{ len .ImageBlocks }}):
-      {{- range .ImageBlocks }}
-      - {{ .URL }}
-      {{- end }}
       -----USER CONTENT END-----
 
   - id: postSummaryTemplate
@@ -148,6 +133,7 @@ templates:
 
       Write a concise summary of the following post. Focus on the reader interests.
       Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
 
       Reader interests:
       {{- range (index .Params "interests") }}
@@ -157,6 +143,7 @@ templates:
       Output format:
       - 3-6 bullet points
       - then "Why it matters:" (1-2 sentences)
+      - then "Community response:" (1-2 sentences if comments are provided)
       - then "Key entities:" (comma-separated list)
 
     template: |-
@@ -184,7 +171,7 @@ templates:
     system_template: |-
       You are writing an aggregate digest across multiple posts.
 
-      Produce an executive summary, then group notable items, then list links.
+      Produce an executive summary, then group notable items.
 
       Focus areas:
       {{- range (index .Params "focus") }}

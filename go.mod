@@ -6,6 +6,8 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/expr-lang/expr v1.17.7 // indirect
+	github.com/golang/protobuf v1.2.0 // indirect
+	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mmcdole/gofeed v1.3.0 // indirect
 	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
@@ -17,9 +19,12 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
+	github.com/vartanbeno/go-reddit/v2 v2.0.0 // indirect
 	github.com/wneessen/go-mail v0.7.2 // indirect
 	github.com/yuin/goldmark v1.7.4 // indirect
 	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/text v0.29.0 // indirect
+	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

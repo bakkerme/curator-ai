@@ -44,6 +44,15 @@ func NewFromEnv() *Factory {
 	llmClient := llmopenai.NewClient(apiKey, baseURL)
 
 	redditTimeout := envDuration("REDDIT_HTTP_TIMEOUT", 10*time.Second)
+	redditUserAgent := os.Getenv("REDDIT_USER_AGENT")
+	if redditUserAgent == "" {
+		redditUserAgent = "curator-ai/0.1"
+	}
+	redditClientID := os.Getenv("REDDIT_CLIENT_ID")
+	redditClientSecret := os.Getenv("REDDIT_CLIENT_SECRET")
+	redditUsername := os.Getenv("REDDIT_USERNAME")
+	redditPassword := os.Getenv("REDDIT_PASSWORD")
+
 	rssTimeout := envDuration("RSS_HTTP_TIMEOUT", 10*time.Second)
 	rssUserAgent := os.Getenv("RSS_USER_AGENT")
 	if rssUserAgent == "" {
@@ -60,7 +69,7 @@ func NewFromEnv() *Factory {
 		Logger:        logger,
 		LLMClient:     llmClient,
 		DefaultModel:  defaultModel,
-		RedditFetcher: redditimpl.NewFetcher(redditTimeout),
+		RedditFetcher: redditimpl.NewFetcher(logger, redditTimeout, redditUserAgent, redditClientID, redditClientSecret, redditUsername, redditPassword),
 		RSSFetcher:    rssimpl.NewFetcher(rssTimeout, rssUserAgent),
 		EmailSender:   smtp.NewSender(smtpHost, smtpPort, smtpUser, smtpPassword, smtpUseTLS),
 	}

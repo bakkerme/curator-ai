@@ -28,6 +28,11 @@ go run ./cmd/curator -config curator.yaml -run-once
 
 ### HTTP Source Settings
 - `REDDIT_HTTP_TIMEOUT` (optional, e.g. `10s`)
+- `REDDIT_USER_AGENT` (optional, default: `curator-ai/0.1`)
+- `REDDIT_CLIENT_ID` (optional; when set with `REDDIT_CLIENT_SECRET`, Curator uses the Reddit API instead of the public `.json` endpoint)
+- `REDDIT_CLIENT_SECRET` (optional; required with `REDDIT_CLIENT_ID`)
+- `REDDIT_USERNAME` (optional; if set with `REDDIT_PASSWORD`, uses password grant instead of client credentials)
+- `REDDIT_PASSWORD` (optional; required with `REDDIT_USERNAME`)
 - `RSS_HTTP_TIMEOUT` (optional, e.g. `10s`)
 - `RSS_USER_AGENT` (optional, default: `curator-ai/0.1`)
 

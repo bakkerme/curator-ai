@@ -2,8 +2,8 @@ package impl
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,19 +11,45 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/retry"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
+	goreddit "github.com/vartanbeno/go-reddit/v2/reddit"
 )
 
 type Fetcher struct {
-	client *http.Client
+	client  *goreddit.Client
+	initErr error
+	logger  *slog.Logger
 }
 
-func NewFetcher(timeout time.Duration) *Fetcher {
-	return &Fetcher{
-		client: &http.Client{Timeout: timeout},
+func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID, clientSecret, username, password string) *Fetcher {
+	if userAgent == "" {
+		userAgent = "curator-ai/0.1"
 	}
+
+	httpClient := &http.Client{Timeout: timeout}
+	var (
+		client *goreddit.Client
+		err    error
+	)
+	if clientID != "" && clientSecret != "" && username != "" && password != "" {
+		logger.Info("Using authenticated Reddit client", slog.String("clientID", clientID))
+		client, err = goreddit.NewClient(goreddit.Credentials{
+			ID:       clientID,
+			Secret:   clientSecret,
+			Username: username,
+			Password: password,
+		}, goreddit.WithHTTPClient(httpClient), goreddit.WithUserAgent(userAgent))
+	} else {
+		logger.Info("Using readonly Reddit client")
+		client, err = goreddit.NewReadonlyClient(goreddit.WithHTTPClient(httpClient), goreddit.WithUserAgent(userAgent))
+	}
+
+	return &Fetcher{client: client, initErr: err, logger: logger}
 }
 
 func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Item, error) {
+	if f.initErr != nil {
+		return nil, f.initErr
+	}
 	if len(config.Subreddits) == 0 {
 		return nil, fmt.Errorf("no subreddits configured")
 	}
@@ -38,93 +64,237 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 		limit = 25
 	}
 
+	f.logger.Info("Fetching Reddit posts", slog.String("subreddits", strings.Join(config.Subreddits, ",")), slog.String("sort", sort), slog.Int("limit", limit))
 	subreddits := strings.Join(config.Subreddits, "+")
-	endpoint := fmt.Sprintf("https://www.reddit.com/r/%s/%s.json", url.PathEscape(subreddits), url.PathEscape(sort))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	posts, err := f.fetchPosts(ctx, subreddits, sort, limit, config.TimeFilter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("got error fetching reddit posts %w", err)
 	}
 
-	query := req.URL.Query()
-	query.Set("limit", fmt.Sprintf("%d", limit))
-	if config.TimeFilter != "" {
-		query.Set("t", config.TimeFilter)
-	}
-	req.URL.RawQuery = query.Encode()
-
-	if config.UserAgent != "" {
-		req.Header.Set("User-Agent", config.UserAgent)
-	} else {
-		req.Header.Set("User-Agent", "curator-ai/0.1")
-	}
-
-	resp, err := f.doRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("reddit fetch failed: %s", resp.Status)
-	}
-
-	var payload listingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode reddit response: %w", err)
-	}
-
-	items := make([]reddit.Item, 0, len(payload.Data.Children))
-	for _, child := range payload.Data.Children {
-		if config.MinScore > 0 && child.Data.Score < config.MinScore {
+	items := make([]reddit.Item, 0, len(posts))
+	for _, post := range posts {
+		if post == nil {
 			continue
 		}
-		item := reddit.Item{
-			ID:        child.Data.ID,
-			Title:     child.Data.Title,
-			URL:       child.Data.URL,
-			Content:   child.Data.SelfText,
-			Author:    child.Data.Author,
-			Score:     child.Data.Score,
-			CreatedAt: time.Unix(int64(child.Data.CreatedUTC), 0).UTC(),
+		if config.MinScore > 0 && post.Score < config.MinScore {
+			continue
 		}
+
+		item := reddit.Item{
+			ID:        post.ID,
+			Title:     post.Title,
+			URL:       canonicalRedditPostURL(post.Permalink),
+			Content:   post.Body,
+			Author:    post.Author,
+			Score:     post.Score,
+			CreatedAt: timestampToTime(post.Created),
+		}
+
+		if config.IncludeWeb || config.IncludeImages {
+			item.WebURLs, item.ImageURLs = extractPostURLs(post)
+			if !config.IncludeWeb {
+				item.WebURLs = nil
+			}
+			if !config.IncludeImages {
+				item.ImageURLs = nil
+			}
+		}
+
+		if config.IncludeComments {
+			comments, err := f.fetchTopLevelComments(ctx, post.ID, 25)
+			if err != nil {
+				return nil, err
+			}
+			item.Comments = comments
+		}
+
 		items = append(items, item)
 	}
 
 	return items, nil
 }
 
-func (f *Fetcher) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
-	var response *http.Response
+func (f *Fetcher) fetchPosts(ctx context.Context, subreddit, sort string, limit int, timeFilter string) ([]*goreddit.Post, error) {
+	var (
+		posts []*goreddit.Post
+		resp  *goreddit.Response
+	)
 	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
 		var err error
-		response, err = f.client.Do(req)
-		if err != nil {
-			return err
+		switch strings.ToLower(sort) {
+		case "hot":
+			posts, resp, err = f.client.Subreddit.HotPosts(ctx, subreddit, &goreddit.ListOptions{Limit: limit})
+		case "new":
+			posts, resp, err = f.client.Subreddit.NewPosts(ctx, subreddit, &goreddit.ListOptions{Limit: limit})
+		case "rising":
+			posts, resp, err = f.client.Subreddit.RisingPosts(ctx, subreddit, &goreddit.ListOptions{Limit: limit})
+		case "top":
+			posts, resp, err = f.client.Subreddit.TopPosts(ctx, subreddit, &goreddit.ListPostOptions{
+				ListOptions: goreddit.ListOptions{Limit: limit},
+				Time:        timeFilter,
+			})
+		case "controversial":
+			posts, resp, err = f.client.Subreddit.ControversialPosts(ctx, subreddit, &goreddit.ListPostOptions{
+				ListOptions: goreddit.ListOptions{Limit: limit},
+				Time:        timeFilter,
+			})
+		default:
+			return fmt.Errorf("unsupported reddit sort: %q", sort)
 		}
-		if response.StatusCode >= http.StatusInternalServerError {
-			response.Body.Close()
-			return fmt.Errorf("reddit transient error: %s", response.Status)
+		if err != nil {
+			if resp != nil && resp.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("reddit transient error: %w", err)
+			}
+			return err
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return response, nil
+	return posts, nil
 }
 
-type listingResponse struct {
-	Data struct {
-		Children []struct {
-			Data struct {
-				ID         string  `json:"id"`
-				Title      string  `json:"title"`
-				URL        string  `json:"url"`
-				SelfText   string  `json:"selftext"`
-				Author     string  `json:"author"`
-				Score      int     `json:"score"`
-				CreatedUTC float64 `json:"created_utc"`
-			} `json:"data"`
-		} `json:"children"`
-	} `json:"data"`
+func (f *Fetcher) fetchTopLevelComments(ctx context.Context, postID string, limit int) ([]reddit.Comment, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	var (
+		pc   *goreddit.PostAndComments
+		resp *goreddit.Response
+	)
+	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+		var err error
+		pc, resp, err = f.client.Post.Get(ctx, postID)
+		if err != nil {
+			if resp != nil && resp.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("reddit transient error: %w", err)
+			}
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pc == nil || len(pc.Comments) == 0 {
+		return nil, nil
+	}
+
+	parentFullID := "t3_" + postID
+	out := make([]reddit.Comment, 0, min(len(pc.Comments), limit))
+	for _, c := range pc.Comments {
+		if c == nil || c.ParentID != parentFullID {
+			continue
+		}
+		body := strings.TrimSpace(c.Body)
+		if body == "" || body == "[deleted]" || body == "[removed]" {
+			continue
+		}
+		out = append(out, reddit.Comment{
+			ID:        c.ID,
+			Author:    c.Author,
+			Content:   body,
+			CreatedAt: timestampToTime(c.Created),
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func canonicalRedditPostURL(permalink string) string {
+	if permalink == "" {
+		return ""
+	}
+	if strings.HasPrefix(permalink, "http://") || strings.HasPrefix(permalink, "https://") {
+		return permalink
+	}
+	if strings.HasPrefix(permalink, "/") {
+		return "https://www.reddit.com" + permalink
+	}
+	return "https://www.reddit.com/" + permalink
+}
+
+func timestampToTime(ts *goreddit.Timestamp) time.Time {
+	if ts == nil {
+		return time.Time{}
+	}
+	return ts.Time.UTC()
+}
+
+func extractPostURLs(post *goreddit.Post) (urls []string, images []string) {
+	if post == nil {
+		return nil, nil
+	}
+
+	seenURL := map[string]bool{}
+	seenImage := map[string]bool{}
+
+	add := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || (!strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://")) {
+			return
+		}
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return
+		}
+		normalized := parsed.String()
+		if isImageURL(parsed) {
+			if !seenImage[normalized] {
+				seenImage[normalized] = true
+				images = append(images, normalized)
+			}
+			return
+		}
+		if !seenURL[normalized] {
+			seenURL[normalized] = true
+			urls = append(urls, normalized)
+		}
+	}
+
+	if !post.IsSelfPost && post.URL != "" {
+		add(post.URL)
+	}
+
+	for _, token := range strings.FieldsFunc(post.Body, func(r rune) bool {
+		switch r {
+		case ' ', '\n', '\t', '\r', '(', ')', '[', ']', '{', '}', '<', '>', '"', '\'':
+			return true
+		default:
+			return false
+		}
+	}) {
+		add(token)
+	}
+
+	return urls, images
+}
+
+func isImageURL(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.ToLower(u.Host)
+	switch host {
+	case "i.redd.it", "preview.redd.it", "i.imgur.com":
+		return true
+	}
+	path := strings.ToLower(u.Path)
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"} {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
