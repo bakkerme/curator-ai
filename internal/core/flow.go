@@ -9,12 +9,12 @@ import (
 type ProcessReference struct {
 	Name        string
 	Type        ProcessorType
-	Trigger     *TriggerProcessor
-	Source      *SourceProcessor
-	Quality     *QualityProcessor
-	PostSummary *SummaryProcessor
-	RunSummary  *RunSummaryProcessor
-	Output      *OutputProcessor
+	Trigger     TriggerProcessor
+	Source      SourceProcessor
+	Quality     QualityProcessor
+	PostSummary SummaryProcessor
+	RunSummary  RunSummaryProcessor
+	Output      OutputProcessor
 }
 
 // Flow represents the internal structure of a parsed Curator Document
@@ -26,12 +26,12 @@ type Flow struct {
 	CreatedAt         time.Time              `json:"created_at" yaml:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at" yaml:"updated_at"`
 	Status            FlowStatus             `json:"status" yaml:"status"`
-	Triggers          []*TriggerProcessor    `json:"-" yaml:"-"`
-	Sources           []*SourceProcessor     `json:"-" yaml:"-"`
-	Quality           []*QualityProcessor    `json:"-" yaml:"-"`
-	PostSummary       []*SummaryProcessor    `json:"-" yaml:"-"`
-	RunSummary        []*RunSummaryProcessor `json:"-" yaml:"-"`
-	Outputs           []*OutputProcessor     `json:"-" yaml:"-"`
+	Triggers          []TriggerProcessor     `json:"-" yaml:"-"`
+	Sources           []SourceProcessor      `json:"-" yaml:"-"`
+	Quality           []QualityProcessor     `json:"-" yaml:"-"`
+	PostSummary       []SummaryProcessor     `json:"-" yaml:"-"`
+	RunSummary        []RunSummaryProcessor  `json:"-" yaml:"-"`
+	Outputs           []OutputProcessor      `json:"-" yaml:"-"`
 	RawConfig         map[string]interface{} `json:"raw_config" yaml:"raw_config"`
 	OrderOfOperations []ProcessReference     `json:"-" yaml:"-"` // These point to the attached processors seen in in the flow above, in the resolved order of operations
 }

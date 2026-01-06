@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/mail"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -10,7 +11,16 @@ import (
 
 // CuratorDocument represents the top-level structure of a curator.yaml file
 type CuratorDocument struct {
-	Workflow Workflow `yaml:"workflow"`
+	Workflow  Workflow             `yaml:"workflow"`
+	Templates []TemplateDefinition `yaml:"templates,omitempty"`
+}
+
+// TemplateDefinition stores a named template that can be referenced by ID from processors.
+// Templates use Go's standard library text/template syntax.
+type TemplateDefinition struct {
+	ID             string `yaml:"id"`
+	SystemTemplate string `yaml:"system_template"`
+	Template       string `yaml:"template"`
 }
 
 // Workflow contains the complete workflow configuration
@@ -22,7 +32,7 @@ type Workflow struct {
 	Quality     []QualityConfig `yaml:"quality,omitempty"`
 	PostSummary []SummaryConfig `yaml:"post_summary,omitempty"`
 	RunSummary  []SummaryConfig `yaml:"run_summary,omitempty"`
-	Output      map[string]any  `yaml:"output"`
+	Output      []OutputConfig  `yaml:"output"`
 }
 
 // TriggerConfig wraps different trigger types
@@ -39,6 +49,7 @@ type CronTrigger struct {
 // SourceConfig wraps different source types
 type SourceConfig struct {
 	Reddit *RedditSource `yaml:"reddit,omitempty"`
+	RSS    *RSSSource    `yaml:"rss,omitempty"`
 }
 
 // RedditSource defines Reddit data source configuration
@@ -51,6 +62,14 @@ type RedditSource struct {
 	IncludeWeb      bool     `yaml:"include_web,omitempty"`
 	IncludeImages   bool     `yaml:"include_images,omitempty"`
 	MinScore        int      `yaml:"min_score,omitempty"`
+}
+
+// RSSSource defines RSS/Atom feed configuration
+type RSSSource struct {
+	Feeds          []string `yaml:"feeds"`
+	Limit          int      `yaml:"limit,omitempty"`
+	IncludeContent *bool    `yaml:"include_content,omitempty"`
+	UserAgent      string   `yaml:"user_agent,omitempty"`
 }
 
 // QualityConfig wraps different quality processor types
@@ -71,11 +90,14 @@ type QualityRule struct {
 type LLMQuality struct {
 	Name           string   `yaml:"name"`
 	Model          string   `yaml:"model,omitempty"`
+	SystemTemplate string   `yaml:"system_template"`
 	PromptTemplate string   `yaml:"prompt_template"`
 	Evaluations    []string `yaml:"evaluations,omitempty"`
 	Exclusions     []string `yaml:"exclusions,omitempty"`
 	ActionType     string   `yaml:"action_type"`
 	Threshold      float64  `yaml:"threshold,omitempty"`
+	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
+	InvalidJSONRetries int `yaml:"invalid_json_retries,omitempty"`
 }
 
 // SummaryConfig wraps LLM summary processors
@@ -89,8 +111,13 @@ type LLMSummary struct {
 	Type           string                 `yaml:"type"`
 	Context        string                 `yaml:"context"`
 	Model          string                 `yaml:"model,omitempty"`
+	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+}
+
+type OutputConfig struct {
+	Email *EmailOutput `yaml:"email,omitempty"`
 }
 
 // EmailOutput defines email delivery configuration
@@ -112,6 +139,7 @@ type ProcessorType string
 const (
 	ProcessorTriggerCron   ProcessorType = "trigger_cron"
 	ProcessorSourceReddit  ProcessorType = "source_reddit"
+	ProcessorSourceRSS     ProcessorType = "source_rss"
 	ProcessorQualityRule   ProcessorType = "quality_rule"
 	ProcessorQualityLLM    ProcessorType = "quality_llm"
 	ProcessorSummaryLLM    ProcessorType = "summary_llm"
@@ -136,8 +164,24 @@ type ParsedProcessor struct {
 	Config interface{} // Points to the specific config struct
 }
 
+// ProcessorFactory constructs concrete processor implementations for a parsed document.
+type ProcessorFactory interface {
+	NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error)
+	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
+	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
+	NewQualityRule(config *QualityRule) (core.QualityProcessor, error)
+	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
+	NewLLMSummary(config *LLMSummary) (core.SummaryProcessor, error)
+	NewLLMRunSummary(config *LLMSummary) (core.RunSummaryProcessor, error)
+	NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error)
+}
+
 // Validate performs validation on the curator document
 func (d *CuratorDocument) Validate() error {
+	if err := d.resolveTemplateReferences(); err != nil {
+		return err
+	}
+
 	if d.Workflow.Name == "" {
 		return fmt.Errorf("workflow name is required")
 	}
@@ -154,6 +198,32 @@ func (d *CuratorDocument) Validate() error {
 		return fmt.Errorf("output configuration is required")
 	}
 
+	for _, output := range d.Workflow.Output {
+		emailConfig, err := decodeEmailOutput(output.Email)
+		if err != nil {
+			return fmt.Errorf("output email: %w", err)
+		}
+		requiredFields := map[string]string{
+			"template": emailConfig.Template,
+			"to":       emailConfig.To,
+			"subject":  emailConfig.Subject,
+		}
+		for field, value := range requiredFields {
+			if value == "" {
+				return fmt.Errorf("output email: '%s' field is required. Provided %+v", field, emailConfig)
+			}
+		}
+		if _, err := mail.ParseAddress(emailConfig.To); err != nil {
+			return fmt.Errorf("output email: invalid to address")
+		}
+
+		if emailConfig.From != "" { // From is optional, but if provided must be valid
+			if _, err := mail.ParseAddress(emailConfig.From); err != nil {
+				return fmt.Errorf("output email: invalid from address")
+			}
+		}
+	}
+
 	// Validate triggers
 	for i, trigger := range d.Workflow.Trigger {
 		if trigger.Cron == nil {
@@ -166,11 +236,14 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate sources
 	for i, source := range d.Workflow.Sources {
-		if source.Reddit == nil {
+		if source.Reddit == nil && source.RSS == nil {
 			return fmt.Errorf("source %d: unsupported source type", i)
 		}
-		if len(source.Reddit.Subreddits) == 0 {
+		if source.Reddit != nil && len(source.Reddit.Subreddits) == 0 {
 			return fmt.Errorf("source %d: at least one subreddit is required", i)
+		}
+		if source.RSS != nil && len(source.RSS.Feeds) == 0 {
+			return fmt.Errorf("source %d: at least one rss feed is required", i)
 		}
 	}
 
@@ -221,6 +294,78 @@ func (d *CuratorDocument) Validate() error {
 	return nil
 }
 
+func (d *CuratorDocument) resolveTemplateReferences() error {
+	if len(d.Templates) == 0 {
+		return nil
+	}
+
+	byID := make(map[string]TemplateDefinition, len(d.Templates))
+	for i, t := range d.Templates {
+		if t.ID == "" {
+			return fmt.Errorf("templates %d: id is required", i)
+		}
+		if _, exists := byID[t.ID]; exists {
+			return fmt.Errorf("templates: duplicate id %q", t.ID)
+		}
+		if t.SystemTemplate == "" {
+			return fmt.Errorf("templates %q: system_template is required", t.ID)
+		}
+		if t.Template == "" {
+			return fmt.Errorf("templates %q: template is required", t.ID)
+		}
+		byID[t.ID] = t
+	}
+
+	// Quality LLM
+	for i := range d.Workflow.Quality {
+		q := d.Workflow.Quality[i].LLM
+		if q == nil {
+			continue
+		}
+		if resolved, ok := byID[q.PromptTemplate]; ok {
+			q.SystemTemplate = resolved.SystemTemplate
+			q.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Post summary LLM
+	for i := range d.Workflow.PostSummary {
+		s := d.Workflow.PostSummary[i].LLM
+		if s == nil {
+			continue
+		}
+		if resolved, ok := byID[s.PromptTemplate]; ok {
+			s.SystemTemplate = resolved.SystemTemplate
+			s.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Run summary LLM
+	for i := range d.Workflow.RunSummary {
+		s := d.Workflow.RunSummary[i].LLM
+		if s == nil {
+			continue
+		}
+		if resolved, ok := byID[s.PromptTemplate]; ok {
+			s.SystemTemplate = resolved.SystemTemplate
+			s.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Outputs (currently only email).
+	for i := range d.Workflow.Output {
+		o := d.Workflow.Output[i].Email
+		if o == nil {
+			continue
+		}
+		if resolved, ok := byID[o.Template]; ok {
+			o.Template = resolved.Template
+		}
+	}
+
+	return nil
+}
+
 // Parse converts the document into an internal ParsedFlow structure
 func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 	if err := d.Validate(); err != nil {
@@ -254,6 +399,13 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Type:   ProcessorSourceReddit,
 				Name:   "reddit",
 				Config: source.Reddit,
+			})
+		}
+		if source.RSS != nil {
+			flow.Sources = append(flow.Sources, ParsedProcessor{
+				Type:   ProcessorSourceRSS,
+				Name:   "rss",
+				Config: source.RSS,
 			})
 		}
 	}
@@ -298,30 +450,12 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 	}
 
 	// Parse outputs
-	for outputType, outputConfig := range d.Workflow.Output {
-		if outputType == "email" {
-			// Convert map to EmailOutput struct
-			emailConfig := &EmailOutput{}
-			if configMap, ok := outputConfig.(map[string]interface{}); ok {
-				// Manual mapping since we're dealing with interface{}
-				if v, ok := configMap["template"].(string); ok {
-					emailConfig.Template = v
-				}
-				if v, ok := configMap["to"].(string); ok {
-					emailConfig.To = v
-				}
-				if v, ok := configMap["from"].(string); ok {
-					emailConfig.From = v
-				}
-				if v, ok := configMap["subject"].(string); ok {
-					emailConfig.Subject = v
-				}
-			}
-
-			flow.Outputs = append(flow.Outputs, ParsedProcessor{
+	for _, output := range d.Workflow.Output {
+		if output.Email != nil {
+			flow.Processors = append(flow.Processors, ParsedProcessor{
 				Type:   ProcessorOutputEmail,
 				Name:   "email",
-				Config: emailConfig,
+				Config: output.Email,
 			})
 		}
 	}
@@ -331,6 +465,12 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 
 // ParseToFlow converts the document into a core.Flow structure with OrderOfOperations
 func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
+	return d.ParseToFlowWithFactory(nil)
+}
+
+// ParseToFlowWithFactory converts the document into a core.Flow structure with OrderOfOperations.
+// When factory is nil, the flow will be created without concrete processors.
+func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*core.Flow, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
@@ -350,22 +490,18 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 		flow.Version = "1.0"
 	}
 
-	// Store processor configurations for OrderOfOperations lookup
-	triggerMap := make(map[string]*core.TriggerProcessor)
-	sourceMap := make(map[string]*core.SourceProcessor)
-	qualityMap := make(map[string]*core.QualityProcessor)
-	postSummaryMap := make(map[string]*core.SummaryProcessor)
-	runSummaryMap := make(map[string]*core.RunSummaryProcessor)
-	outputMap := make(map[string]*core.OutputProcessor)
-
 	// Build OrderOfOperations in the correct sequence
 	// 1. Triggers (always first)
 	for _, trigger := range d.Workflow.Trigger {
 		if trigger.Cron != nil {
-			// Note: In a real implementation, these would be created by a processor factory
-			// For now, we're just creating placeholder instances
-			var triggerProcessor *core.TriggerProcessor
-			triggerMap["cron"] = triggerProcessor
+			var triggerProcessor core.TriggerProcessor
+			if factory != nil {
+				var err error
+				triggerProcessor, err = factory.NewCronTrigger(trigger.Cron)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Triggers = append(flow.Triggers, triggerProcessor)
 
 			processRef := core.ProcessReference{
@@ -380,12 +516,36 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 2. Sources
 	for _, source := range d.Workflow.Sources {
 		if source.Reddit != nil {
-			var sourceProcessor *core.SourceProcessor
-			sourceMap["reddit"] = sourceProcessor
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewRedditSource(source.Reddit)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Sources = append(flow.Sources, sourceProcessor)
 
 			processRef := core.ProcessReference{
 				Name:   "reddit",
+				Type:   core.SourceProcessorType,
+				Source: sourceProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		}
+		if source.RSS != nil {
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewRSSSource(source.RSS)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.Sources = append(flow.Sources, sourceProcessor)
+
+			processRef := core.ProcessReference{
+				Name:   "rss",
 				Type:   core.SourceProcessorType,
 				Source: sourceProcessor,
 			}
@@ -396,8 +556,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 3. Quality processors (in order defined in document)
 	for _, quality := range d.Workflow.Quality {
 		if quality.QualityRule != nil {
-			var qualityProcessor *core.QualityProcessor
-			qualityMap[quality.QualityRule.Name] = qualityProcessor
+			var qualityProcessor core.QualityProcessor
+			if factory != nil {
+				var err error
+				qualityProcessor, err = factory.NewQualityRule(quality.QualityRule)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Quality = append(flow.Quality, qualityProcessor)
 
 			processRef := core.ProcessReference{
@@ -407,8 +573,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 			}
 			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
 		} else if quality.LLM != nil {
-			var qualityProcessor *core.QualityProcessor
-			qualityMap[quality.LLM.Name] = qualityProcessor
+			var qualityProcessor core.QualityProcessor
+			if factory != nil {
+				var err error
+				qualityProcessor, err = factory.NewLLMQuality(quality.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Quality = append(flow.Quality, qualityProcessor)
 
 			processRef := core.ProcessReference{
@@ -423,8 +595,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 4. Post Summary processors
 	for _, summary := range d.Workflow.PostSummary {
 		if summary.LLM != nil {
-			var summaryProcessor *core.SummaryProcessor
-			postSummaryMap[summary.LLM.Name] = summaryProcessor
+			var summaryProcessor core.SummaryProcessor
+			if factory != nil {
+				var err error
+				summaryProcessor, err = factory.NewLLMSummary(summary.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.PostSummary = append(flow.PostSummary, summaryProcessor)
 
 			processRef := core.ProcessReference{
@@ -439,8 +617,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	// 5. Run Summary processors
 	for _, summary := range d.Workflow.RunSummary {
 		if summary.LLM != nil {
-			var runSummaryProcessor *core.RunSummaryProcessor
-			runSummaryMap[summary.LLM.Name] = runSummaryProcessor
+			var runSummaryProcessor core.RunSummaryProcessor
+			if factory != nil {
+				var err error
+				runSummaryProcessor, err = factory.NewLLMRunSummary(summary.LLM)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.RunSummary = append(flow.RunSummary, runSummaryProcessor)
 
 			processRef := core.ProcessReference{
@@ -453,10 +637,20 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	}
 
 	// 6. Output processors (always last)
-	for outputType := range d.Workflow.Output {
-		if outputType == "email" {
-			var outputProcessor *core.OutputProcessor
-			outputMap["email"] = outputProcessor
+	for _, output := range d.Workflow.Output {
+		if output.Email != nil {
+			emailConfig, err := decodeEmailOutput(output.Email)
+			if err != nil {
+				return nil, fmt.Errorf("output email: %w", err)
+			}
+
+			var outputProcessor core.OutputProcessor
+			if factory != nil {
+				outputProcessor, err = factory.NewEmailOutput(emailConfig)
+				if err != nil {
+					return nil, err
+				}
+			}
 			flow.Outputs = append(flow.Outputs, outputProcessor)
 
 			processRef := core.ProcessReference{
@@ -475,4 +669,19 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 	flow.RawConfig = rawConfig
 
 	return flow, nil
+}
+
+func decodeEmailOutput(value interface{}) (*EmailOutput, error) {
+	if value == nil {
+		return nil, fmt.Errorf("missing configuration")
+	}
+	raw, err := yaml.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("marshal output config: %w", err)
+	}
+	var emailConfig EmailOutput
+	if err := yaml.Unmarshal(raw, &emailConfig); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	return &emailConfig, nil
 }
