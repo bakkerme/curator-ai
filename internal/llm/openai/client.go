@@ -38,6 +38,7 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 	tracer := otel.Tracer("curator-ai/llm/openai")
 	ctx, span := tracer.Start(ctx, "llm.openai.chat.completions")
 	span.SetAttributes(
+		attribute.String("openinference.span.kind", "LLM"),
 		attribute.String("llm.provider", "openai"),
 		attribute.String("llm.model", request.Model),
 		attribute.Float64("llm.temperature", request.Temperature),

@@ -2,11 +2,12 @@ package openai
 
 import (
 	"bytes"
-	"github.com/bakkerme/curator-ai/internal/config"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/bakkerme/curator-ai/internal/config"
 
 	"github.com/openai/openai-go/option"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,10 +19,18 @@ func openAIMiddleware(cfg config.OpenAIOTelEnvConfig) option.Middleware {
 		span := trace.SpanFromContext(req.Context())
 		if cfg.CaptureBodies && span.IsRecording() && req.Body != nil {
 			req.Body = newCaptureReadCloser(req.Body, cfg.MaxBodyBytes, func(body []byte, truncated bool) {
+				bodyStr := bytesToString(body)
+				span.SetAttributes(
+					attribute.String("input.mime_type", "application/json"),
+					attribute.String("input.value", bodyStr),
+					attribute.Bool("input.truncated", truncated),
+					attribute.String("openai.request.body", bodyStr),
+					attribute.Bool("openai.request.body.truncated", truncated),
+				)
 				span.AddEvent("openai.request.body", trace.WithAttributes(
 					attribute.String("http.method", req.Method),
 					attribute.String("http.url", req.URL.String()),
-					attribute.String("body", bytesToString(body)),
+					attribute.String("body", bodyStr),
 					attribute.Bool("truncated", truncated),
 				))
 			})
@@ -43,9 +52,17 @@ func openAIMiddleware(cfg config.OpenAIOTelEnvConfig) option.Middleware {
 
 		if cfg.CaptureBodies && span.IsRecording() && res.Body != nil {
 			res.Body = newCaptureReadCloser(res.Body, cfg.MaxBodyBytes, func(body []byte, truncated bool) {
+				bodyStr := bytesToString(body)
+				span.SetAttributes(
+					attribute.String("output.mime_type", "application/json"),
+					attribute.String("output.value", bodyStr),
+					attribute.Bool("output.truncated", truncated),
+					attribute.String("openai.response.body", bodyStr),
+					attribute.Bool("openai.response.body.truncated", truncated),
+				)
 				span.AddEvent("openai.response.body", trace.WithAttributes(
 					attribute.Int("http.status_code", res.StatusCode),
-					attribute.String("body", bytesToString(body)),
+					attribute.String("body", bodyStr),
 					attribute.Bool("truncated", truncated),
 				))
 			})

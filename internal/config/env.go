@@ -71,7 +71,6 @@ func LoadEnv() EnvConfig {
 	flowID := envString("FLOW_ID", "flow-1")
 
 	otlpEndpoint := strings.TrimSpace(envString("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
-	otelEnabled := envBool("CURATOR_OTEL_ENABLED", envBool("OTEL_ENABLED", otlpEndpoint != ""))
 
 	openAIModel := strings.TrimSpace(envString("OPENAI_MODEL", ""))
 	if openAIModel == "" {
@@ -83,25 +82,25 @@ func LoadEnv() EnvConfig {
 		FlowID:                   flowID,
 		RunOnce:                  envBool("RUN_ONCE", false),
 		AllowPartialSourceErrors: envBool("ALLOW_PARTIAL_SOURCE_ERRORS", false),
-		SessionID:                strings.TrimSpace(envString("CURATOR_SESSION_ID", "")),
+		SessionID:                strings.TrimSpace(envString("SESSION_ID", "")),
 		OpenAI: OpenAIEnvConfig{
 			APIKey:  strings.TrimSpace(envString("OPENAI_API_KEY", "")),
 			BaseURL: strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
 			Model:   openAIModel,
 			OTel: OpenAIOTelEnvConfig{
-				Enabled:       envBool("CURATOR_OTEL_OPENAI_ENABLED", true),
-				CaptureBodies: envBool("CURATOR_OTEL_CAPTURE_OPENAI_BODIES", false),
-				MaxBodyBytes:  envInt("CURATOR_OTEL_OPENAI_MAX_BODY_BYTES", 64*1024),
+				Enabled:       envBool("OTEL_OPENAI_ENABLED", true),
+				CaptureBodies: envBool("OTEL_CAPTURE_OPENAI_BODIES", false),
+				MaxBodyBytes:  envInt("OTEL_OPENAI_MAX_BODY_BYTES", 64*1024),
 			},
 		},
 		OTel: OTelEnvConfig{
-			Enabled:     otelEnabled,
+			Enabled:     envBool("OTEL_ENABLED", false),
 			ServiceName: strings.TrimSpace(envString("OTEL_SERVICE_NAME", "curator-ai")),
 			Endpoint:    otlpEndpoint,
-			Protocol:    strings.ToLower(strings.TrimSpace(envString("OTEL_EXPORTER_OTLP_PROTOCOL", ""))),
+			Protocol:    strings.ToLower(strings.TrimSpace(envString("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc"))),
 			Headers:     parseHeaders(envString("OTEL_EXPORTER_OTLP_HEADERS", "")),
 			Insecure:    envBool("OTEL_EXPORTER_OTLP_INSECURE", defaultInsecure(otlpEndpoint)),
-			SampleRatio: clamp01(envFloat("CURATOR_OTEL_TRACES_SAMPLE_RATIO", envFloat("OTEL_TRACES_SAMPLE_RATIO", 1.0))),
+			SampleRatio: clamp01(envFloat("OTEL_TRACES_SAMPLE_RATIO", 1.0)),
 		},
 		Reddit: RedditEnvConfig{
 			HTTPTimeout:  envDuration("REDDIT_HTTP_TIMEOUT", 10*time.Second),
