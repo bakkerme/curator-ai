@@ -2,10 +2,6 @@ package factory
 
 import (
 	"log/slog"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -28,50 +24,25 @@ type Factory struct {
 	Logger        *slog.Logger
 	LLMClient     llm.Client
 	DefaultModel  string
+	SMTPDefaults  config.SMTPEnvConfig
 	RedditFetcher reddit.Fetcher
 	RSSFetcher    rss.Fetcher
 	EmailSender   email.Sender
 }
 
-func NewFromEnv() *Factory {
-	logger := slog.Default()
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-	defaultModel := os.Getenv("OPENAI_MODEL")
-	if defaultModel == "" {
-		defaultModel = "gpt-4o-mini"
+func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
+	if logger == nil {
+		logger = slog.Default()
 	}
-	llmClient := llmopenai.NewClient(apiKey, baseURL)
-
-	redditTimeout := envDuration("REDDIT_HTTP_TIMEOUT", 10*time.Second)
-	redditUserAgent := os.Getenv("REDDIT_USER_AGENT")
-	if redditUserAgent == "" {
-		redditUserAgent = "curator-ai/0.1"
-	}
-	redditClientID := os.Getenv("REDDIT_CLIENT_ID")
-	redditClientSecret := os.Getenv("REDDIT_CLIENT_SECRET")
-	redditUsername := os.Getenv("REDDIT_USERNAME")
-	redditPassword := os.Getenv("REDDIT_PASSWORD")
-
-	rssTimeout := envDuration("RSS_HTTP_TIMEOUT", 10*time.Second)
-	rssUserAgent := os.Getenv("RSS_USER_AGENT")
-	if rssUserAgent == "" {
-		rssUserAgent = "curator-ai/0.1"
-	}
-
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := envInt("SMTP_PORT", 587)
-	smtpUser := os.Getenv("SMTP_USER")
-	smtpPassword := os.Getenv("SMTP_PASSWORD")
-	smtpUseTLS := envBool("SMTP_USE_TLS", true)
-
+	llmClient := llmopenai.NewClient(env.OpenAI)
 	return &Factory{
 		Logger:        logger,
 		LLMClient:     llmClient,
-		DefaultModel:  defaultModel,
-		RedditFetcher: redditimpl.NewFetcher(logger, redditTimeout, redditUserAgent, redditClientID, redditClientSecret, redditUsername, redditPassword),
-		RSSFetcher:    rssimpl.NewFetcher(rssTimeout, rssUserAgent),
-		EmailSender:   smtp.NewSender(smtpHost, smtpPort, smtpUser, smtpPassword, smtpUseTLS),
+		DefaultModel:  env.OpenAI.Model,
+		SMTPDefaults:  env.SMTP,
+		RedditFetcher: redditimpl.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
+		RSSFetcher:    rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
+		EmailSender:   smtp.NewSender(env.SMTP.Host, env.SMTP.Port, env.SMTP.User, env.SMTP.Password, env.SMTP.UseTLS),
 	}
 }
 
@@ -112,7 +83,7 @@ func (f *Factory) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSu
 }
 
 func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor, error) {
-	merged := mergeEmailConfig(cfg)
+	merged := f.mergeEmailConfig(cfg)
 	sender := f.EmailSender
 	if sender == nil {
 		useTLS := true
@@ -124,62 +95,26 @@ func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor,
 	return output.NewEmailProcessor(merged, sender)
 }
 
-func mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput {
+func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput {
 	if cfg == nil {
 		return &config.EmailOutput{}
 	}
 	merged := *cfg
 	if merged.SMTPHost == "" {
-		merged.SMTPHost = os.Getenv("SMTP_HOST")
+		merged.SMTPHost = f.SMTPDefaults.Host
 	}
 	if merged.SMTPPort == 0 {
-		merged.SMTPPort = envInt("SMTP_PORT", 587)
+		merged.SMTPPort = f.SMTPDefaults.Port
 	}
 	if merged.SMTPUser == "" {
-		merged.SMTPUser = os.Getenv("SMTP_USER")
+		merged.SMTPUser = f.SMTPDefaults.User
 	}
 	if merged.SMTPPassword == "" {
-		merged.SMTPPassword = os.Getenv("SMTP_PASSWORD")
+		merged.SMTPPassword = f.SMTPDefaults.Password
 	}
 	if merged.UseTLS == nil {
-		useTLS := envBool("SMTP_USE_TLS", true)
+		useTLS := f.SMTPDefaults.UseTLS
 		merged.UseTLS = &useTLS
 	}
 	return &merged
-}
-
-func envInt(key string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-func envBool(key string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-func envDuration(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }

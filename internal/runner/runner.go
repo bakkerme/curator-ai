@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func logStage(logger *slog.Logger, stage string, processorName string, processorType string, before int, after int, duration time.Duration) {
@@ -82,6 +85,21 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 
 	logger := r.logger.With("flow_id", flow.ID, "run_id", run.ID)
 	ctx = core.WithLogger(ctx, logger)
+	ctx = core.WithFlowID(ctx, flow.ID)
+	ctx = core.WithRunID(ctx, run.ID)
+
+	tracer := otel.Tracer("curator-ai/runner")
+	ctx, span := tracer.Start(
+		ctx,
+		"curator.run",
+	)
+	span.SetAttributes(
+		attribute.String("flow.id", flow.ID),
+		attribute.String("run.id", run.ID),
+		attribute.String("session.id", run.ID),
+	)
+	defer span.End()
+
 	logger.Info("run started")
 
 	blocks := []*core.PostBlock{}
@@ -112,6 +130,8 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 				"processor_type", fmt.Sprintf("%T", source),
 				"error", err,
 			)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return run, err
 		}
 		before := len(blocks)
@@ -144,6 +164,8 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 				"blocks_before", before,
 				"error", err,
 			)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return run, err
 		}
 		blocks = next
@@ -174,6 +196,8 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 				"blocks_before", before,
 				"error", err,
 			)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return run, err
 		}
 		blocks = next
@@ -198,6 +222,8 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 				"blocks", len(blocks),
 				"error", err,
 			)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return run, err
 		}
 		runSummary = summary
@@ -234,6 +260,8 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 				"blocks", len(blocks),
 				"error", err,
 			)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return run, err
 		}
 		logger.Info(
@@ -251,6 +279,7 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 	run.Status = core.RunStatusCompleted
 	run.Blocks = blocks
 	run.RunSummary = runSummary
+	span.SetStatus(codes.Ok, "")
 	logger.Info("run completed", "status", run.Status, "blocks", len(blocks), "has_run_summary", runSummary != nil)
 	return run, nil
 }
