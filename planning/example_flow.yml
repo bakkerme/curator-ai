@@ -203,31 +203,46 @@ templates:
   - id: emailTemplate
     system_template: "--" # Email is still considered a prompt template right now
     template: |-
-      Daily AI Research Digest
-      =======================
+      <!doctype html>
+      <html>
+        <body style="margin:0;padding:0;background:#ffffff;">
+          <div style="max-width:720px;margin:0 auto;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
+            <h1 style="margin:0 0 12px 0;font-size:22px;">Daily AI Research Digest</h1>
 
-      {{- if .RunSummary }}
-      Run Summary
-      ----------
-      {{ .RunSummary.Summary }}
+            {{- if .RunSummary }}
+            {{- .RunSummary.Summary }}
+            {{- end }}
 
-      {{- end }}
-      Posts ({{ len .Blocks }})
-      -------------
-      {{- range .Blocks }}
-      - {{ .Title }}
-        {{ .URL }}
-        {{- if .Summary }}
-        Summary: {{ .Summary.Summary }}
-        {{- else }}
-        Summary: (none)
-        {{- end }}
+            <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
 
-      {{- if .WebBlocks }}
-        Links:
-        {{- range .WebBlocks }}
-        - {{ .URL }}
-        {{- end }}
-      {{- end }}
+            {{- range .Blocks }}
+            <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+              <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
+                <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
+              </div>
+              <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
+                <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
+              </div>
+              <div style="font-size:13px;margin:0;">
+                {{- if .Summary }}
+                {{ .Summary.Summary }}
+                {{- else }}
+                (no summary)
+                {{- end }}
+              </div>
 
-      {{- end }}
+              {{- if .WebBlocks }}
+              <div style="margin:10px 0 0 0;font-size:13px;">
+                <div style="font-weight:700;margin:0 0 4px 0;">Links</div>
+                <ul style="margin:0;padding-left:18px;">
+                  {{- range .WebBlocks }}
+                  <li style="margin:0 0 4px 0;"><a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .URL }}</a></li>
+                  {{- end }}
+                </ul>
+              </div>
+              {{- end }}
+            </div>
+            {{- end }}
+          </div>
+        </body>
+      </html>

@@ -44,7 +44,7 @@ func (s *Sender) Send(ctx context.Context, message email.Message) error {
 		return fmt.Errorf("invalid to address(es) %q: %w", message.To, err)
 	}
 	m.Subject(message.Subject)
-	m.SetBodyString(mail.TypeTextPlain, message.Body)
+	m.SetBodyString(mail.TypeTextHTML, message.Body)
 	if err := m.EnvelopeFrom(message.From); err != nil {
 		return fmt.Errorf("invalid envelope from address %q: %w", message.From, err)
 	}

@@ -3,8 +3,8 @@ package output
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"strings"
-	"text/template"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
