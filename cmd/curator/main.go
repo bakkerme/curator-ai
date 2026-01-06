@@ -28,13 +28,13 @@ func main() {
 
 	doc, err := loadDocument(*configPath)
 	if err != nil {
-		log.Fatalf("failed to load document: %v", err)
+		log.Panicf("failed to load document: %v", err)
 	}
 
 	factory := factory.NewFromEnv()
 	flow, err := doc.ParseToFlowWithFactory(factory)
 	if err != nil {
-		log.Fatalf("failed to parse flow: %v", err)
+		log.Panicf("failed to parse flow: %v", err)
 	}
 	flow.ID = *flowID
 
@@ -46,13 +46,13 @@ func main() {
 	if *runOnce {
 		_, err := runner.RunOnce(ctx, flow)
 		if err != nil {
-			log.Fatalf("run failed: %v", err)
+			log.Panicf("run failed: %v", err)
 		}
 		return
 	}
 
 	if err := runner.Start(ctx, flow); err != nil {
-		log.Fatalf("failed to start runner: %v", err)
+		log.Panicf("failed to start runner: %v", err)
 	}
 
 	<-ctx.Done()

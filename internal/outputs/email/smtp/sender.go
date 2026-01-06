@@ -5,10 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"net/smtp"
-	"strings"
 
 	"github.com/bakkerme/curator-ai/internal/outputs/email"
+	mail "github.com/wneessen/go-mail"
 )
 
 type Sender struct {
@@ -30,62 +29,60 @@ func NewSender(host string, port int, username, password string, useTLS bool) *S
 }
 
 func (s *Sender) Send(ctx context.Context, message email.Message) error {
-	_ = ctx
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-	auth := smtp.PlainAuth("", s.username, s.password, s.host)
+	if message.From == "" {
+		message.From = s.username
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	msg := buildMessage(message)
+	m := mail.NewMsg()
+	if err := m.From(message.From); err != nil {
+		return fmt.Errorf("invalid from address %q: %w", message.From, err)
+	}
+	if err := m.ToFromString(message.To); err != nil {
+		return fmt.Errorf("invalid to address(es) %q: %w", message.To, err)
+	}
+	m.Subject(message.Subject)
+	m.SetBodyString(mail.TypeTextPlain, message.Body)
+	if err := m.EnvelopeFrom(message.From); err != nil {
+		return fmt.Errorf("invalid envelope from address %q: %w", message.From, err)
+	}
 
+	clientOpts := []mail.Option{
+		mail.WithPort(s.port),
+		mail.WithTLSConfig(&tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}),
+	}
 	if s.useTLS {
-		return s.sendTLS(addr, auth, msg, message)
+		// Preserve prior behavior: when useTLS is true and port is 465, use implicit TLS.
+		// Otherwise, prefer STARTTLS.
+		if s.port == 465 {
+			clientOpts = append(clientOpts, mail.WithSSL())
+		} else {
+			clientOpts = append(clientOpts, mail.WithTLSPortPolicy(mail.TLSMandatory))
+		}
+	} else {
+		clientOpts = append(clientOpts, mail.WithTLSPortPolicy(mail.NoTLS))
 	}
-	return smtp.SendMail(addr, auth, message.From, []string{message.To}, []byte(msg))
-}
 
-func (s *Sender) sendTLS(addr string, auth smtp.Auth, msg string, message email.Message) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{
-		ServerName: s.host,
-	})
-	if err != nil {
-		return err
+	if s.username != "" {
+		clientOpts = append(
+			clientOpts,
+			mail.WithUsername(s.username),
+			mail.WithPassword(s.password),
+			mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover),
+		)
 	}
-	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, s.host)
+	client, err := mail.NewClient(s.host, clientOpts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create SMTP client: %w", err)
 	}
-	defer client.Quit()
 
-	if err := client.Auth(auth); err != nil {
-		return err
+	if err := client.DialAndSendWithContext(ctx, m); err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
 	}
-	if err := client.Mail(message.From); err != nil {
-		return err
-	}
-	if err := client.Rcpt(message.To); err != nil {
-		return err
-	}
-	writer, err := client.Data()
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write([]byte(msg))
-	if err != nil {
-		return err
-	}
-	return writer.Close()
-}
-
-func buildMessage(message email.Message) string {
-	headers := []string{
-		fmt.Sprintf("From: %s", message.From),
-		fmt.Sprintf("To: %s", message.To),
-		fmt.Sprintf("Subject: %s", message.Subject),
-		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=\"UTF-8\"",
-	}
-	return strings.Join(headers, "\r\n") + "\r\n\r\n" + message.Body
+	return nil
 }
 
 func ValidateConfig(host string, port int) error {

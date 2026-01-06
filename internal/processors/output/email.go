@@ -40,7 +40,7 @@ func (p *EmailProcessor) Validate() error {
 	if p.sender == nil {
 		return fmt.Errorf("email sender is required")
 	}
-	if p.config.Template == "" || p.config.To == "" || p.config.From == "" || p.config.Subject == "" {
+	if p.config.Template == "" || p.config.To == "" || p.config.Subject == "" {
 		return fmt.Errorf("email template, to, from, subject are required")
 	}
 	return nil
@@ -48,11 +48,11 @@ func (p *EmailProcessor) Validate() error {
 
 func (p *EmailProcessor) Deliver(ctx context.Context, blocks []*core.PostBlock, runSummary *core.RunSummary) error {
 	if err := p.Validate(); err != nil {
-		return err
+		return fmt.Errorf("email processor validation failed: %w", err)
 	}
 	body, err := renderEmailTemplate(p.config.Template, blocks, runSummary)
 	if err != nil {
-		return err
+		return fmt.Errorf("render email template failed: %w", err)
 	}
 	return p.sender.Send(ctx, email.Message{
 		From:    p.config.From,
@@ -65,7 +65,7 @@ func (p *EmailProcessor) Deliver(ctx context.Context, blocks []*core.PostBlock, 
 func renderEmailTemplate(templateText string, blocks []*core.PostBlock, runSummary *core.RunSummary) (string, error) {
 	tmpl, err := template.New("email").Parse(templateText)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse email template failed: %w", err)
 	}
 	var builder strings.Builder
 	data := struct {
@@ -76,7 +76,7 @@ func renderEmailTemplate(templateText string, blocks []*core.PostBlock, runSumma
 		RunSummary: runSummary,
 	}
 	if err := tmpl.Execute(&builder, data); err != nil {
-		return "", err
+		return "", fmt.Errorf("execute email template failed: %w", err)
 	}
 	return builder.String(), nil
 }

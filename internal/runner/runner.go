@@ -77,6 +77,12 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		blocks = append(blocks, fetched...)
 	}
 
+	if len(blocks) == 0 {
+		r.logger.Info("source returned no blocks, skipping processing and outputs")
+		run.Status = core.RunStatusCompleted
+		return run, nil
+	}
+
 	for _, processor := range flow.Quality {
 		if processor == nil {
 			continue
@@ -87,6 +93,12 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 			return run, err
 		}
 		blocks = next
+	}
+
+	if len(blocks) == 0 {
+		r.logger.Info("no blocks left after quality processing, skipping summary and outputs")
+		run.Status = core.RunStatusCompleted
+		return run, nil
 	}
 
 	for _, processor := range flow.PostSummary {
@@ -112,6 +124,12 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 			return run, err
 		}
 		runSummary = summary
+	}
+
+	if len(blocks) == 0 {
+		r.logger.Info("no blocks to deliver, skipping outputs")
+		run.Status = core.RunStatusCompleted
+		return run, nil
 	}
 
 	for _, output := range flow.Outputs {

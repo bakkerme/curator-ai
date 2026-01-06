@@ -3,37 +3,43 @@ package summary
 import (
 	"context"
 	"fmt"
-	"strings"
 	"text/template"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/llm"
+	"github.com/bakkerme/curator-ai/internal/processors/llmutil"
 )
 
+var RETRIES = 3
+
 type PostLLMProcessor struct {
-	name         string
-	config       config.LLMSummary
-	client       llm.Client
-	defaultModel string
-	template     *template.Template
+	name           string
+	config         config.LLMSummary
+	client         llm.Client
+	defaultModel   string
+	systemTemplate *template.Template
+	template       *template.Template
 }
 
 func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*PostLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("summary config is required")
 	}
-	tmpl, err := template.New(cfg.Name).Parse(cfg.PromptTemplate)
+
+	systemTmpl, tmpl, err := llmutil.ParseSystemAndPromptTemplates(cfg.Name, cfg.SystemTemplate, cfg.PromptTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("parse prompt template: %w", err)
+		return nil, err
 	}
+
 	return &PostLLMProcessor{
-		name:         cfg.Name,
-		config:       *cfg,
-		client:       client,
-		defaultModel: defaultModel,
-		template:     tmpl,
+		name:           cfg.Name,
+		config:         *cfg,
+		client:         client,
+		defaultModel:   defaultModel,
+		systemTemplate: systemTmpl,
+		template:       tmpl,
 	}, nil
 }
 
@@ -60,20 +66,26 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		return nil, err
 	}
 	for _, block := range blocks {
-		prompt, err := executeTemplate(p.template, block)
+		data := struct {
+			*core.PostBlock
+			Params map[string]interface{}
+		}{
+			PostBlock: block,
+			Params:    p.config.Params,
+		}
+
+		systemPrompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
 		if err != nil {
 			return nil, err
 		}
-		model := p.config.Model
-		if model == "" {
-			model = p.defaultModel
+
+		userPrompt, err := llmutil.ExecuteTemplate(p.template, data)
+		if err != nil {
+			return nil, err
 		}
-		response, err := p.client.ChatCompletion(ctx, llm.ChatRequest{
-			Model: model,
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: prompt},
-			},
-		})
+
+		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -84,12 +96,4 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		}
 	}
 	return blocks, nil
-}
-
-func executeTemplate(tmpl *template.Template, data interface{}) (string, error) {
-	builder := &strings.Builder{}
-	if err := tmpl.Execute(builder, data); err != nil {
-		return "", err
-	}
-	return builder.String(), nil
 }

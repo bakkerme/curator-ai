@@ -53,6 +53,107 @@ workflow:
 	}
 }
 
+func TestTemplateResolution(t *testing.T) {
+	data := []byte(`
+workflow:
+	name: "Test Flow"
+	trigger:
+		- cron:
+				schedule: "0 0 * * *"
+	sources:
+		- reddit:
+				subreddits: ["MachineLearning"]
+	quality:
+		- llm:
+				name: quality_check
+				prompt_template: quality_template
+				action_type: pass_drop
+	post_summary:
+		- llm:
+				name: post_sum
+				type: llm
+				context: post
+				prompt_template: post_template
+				params:
+					interests: ["A", "B"]
+	run_summary:
+		- llm:
+				name: run_sum
+				type: llm
+				context: flow
+				prompt_template: run_template
+				params:
+					focus: ["X"]
+	output:
+		email:
+			template: email_template
+			to: "test@example.com"
+			from: "noreply@example.com"
+			subject: "Daily Report"
+
+templates:
+	- id: quality_template
+		template: |-
+			QUALITY {{.Title}}
+	- id: post_template
+		template: |-
+			POST {{.Title}}
+	- id: run_template
+		template: |-
+			RUN {{len .Blocks}}
+	- id: email_template
+		template: |-
+			EMAIL {{len .Blocks}}
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	flow, err := doc.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse document: %v", err)
+	}
+
+	var foundQuality, foundPost, foundRun, foundEmail bool
+	for _, p := range flow.Processors {
+		switch p.Type {
+		case ProcessorQualityLLM:
+			cfg := p.Config.(*LLMQuality)
+			foundQuality = true
+			if !strings.Contains(cfg.PromptTemplate, "QUALITY") {
+				t.Fatalf("Expected resolved quality template, got: %q", cfg.PromptTemplate)
+			}
+		case ProcessorSummaryLLM:
+			cfg := p.Config.(*LLMSummary)
+			foundPost = true
+			if !strings.Contains(cfg.PromptTemplate, "POST") {
+				t.Fatalf("Expected resolved post template, got: %q", cfg.PromptTemplate)
+			}
+		case ProcessorRunSummaryLLM:
+			cfg := p.Config.(*LLMSummary)
+			foundRun = true
+			if !strings.Contains(cfg.PromptTemplate, "RUN") {
+				t.Fatalf("Expected resolved run template, got: %q", cfg.PromptTemplate)
+			}
+		}
+	}
+	for _, o := range flow.Outputs {
+		if o.Type != ProcessorOutputEmail {
+			continue
+		}
+		cfg := o.Config.(*EmailOutput)
+		foundEmail = true
+		if !strings.Contains(cfg.Template, "EMAIL") {
+			t.Fatalf("Expected resolved email template, got: %q", cfg.Template)
+		}
+	}
+
+	if !foundQuality || !foundPost || !foundRun || !foundEmail {
+		t.Fatalf("Expected all processors/outputs to be present; got quality=%v post=%v run=%v email=%v", foundQuality, foundPost, foundRun, foundEmail)
+	}
+}
+
 func TestValidation(t *testing.T) {
 	testCases := []struct {
 		name        string

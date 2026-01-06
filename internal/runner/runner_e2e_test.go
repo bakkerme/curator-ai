@@ -64,7 +64,7 @@ func TestRunnerEndToEnd(t *testing.T) {
 				Name:           "run_summary",
 				Type:           "llm",
 				Context:        "flow",
-				PromptTemplate: "{{len .}} posts",
+				PromptTemplate: "{{len .Blocks}} posts",
 			}}},
 			Output: map[string]any{"email": map[string]any{
 				"template": "Posts: {{range .Blocks}}{{.Title}}{{end}}",

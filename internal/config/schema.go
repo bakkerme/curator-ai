@@ -11,7 +11,16 @@ import (
 
 // CuratorDocument represents the top-level structure of a curator.yaml file
 type CuratorDocument struct {
-	Workflow Workflow `yaml:"workflow"`
+	Workflow  Workflow             `yaml:"workflow"`
+	Templates []TemplateDefinition `yaml:"templates,omitempty"`
+}
+
+// TemplateDefinition stores a named template that can be referenced by ID from processors.
+// Templates use Go's standard library text/template syntax.
+type TemplateDefinition struct {
+	ID             string `yaml:"id"`
+	SystemTemplate string `yaml:"system_template"`
+	Template       string `yaml:"template"`
 }
 
 // Workflow contains the complete workflow configuration
@@ -23,7 +32,7 @@ type Workflow struct {
 	Quality     []QualityConfig `yaml:"quality,omitempty"`
 	PostSummary []SummaryConfig `yaml:"post_summary,omitempty"`
 	RunSummary  []SummaryConfig `yaml:"run_summary,omitempty"`
-	Output      map[string]any  `yaml:"output"`
+	Output      []OutputConfig  `yaml:"output"`
 }
 
 // TriggerConfig wraps different trigger types
@@ -81,11 +90,14 @@ type QualityRule struct {
 type LLMQuality struct {
 	Name           string   `yaml:"name"`
 	Model          string   `yaml:"model,omitempty"`
+	SystemTemplate string   `yaml:"system_template"`
 	PromptTemplate string   `yaml:"prompt_template"`
 	Evaluations    []string `yaml:"evaluations,omitempty"`
 	Exclusions     []string `yaml:"exclusions,omitempty"`
 	ActionType     string   `yaml:"action_type"`
 	Threshold      float64  `yaml:"threshold,omitempty"`
+	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
+	InvalidJSONRetries int `yaml:"invalid_json_retries,omitempty"`
 }
 
 // SummaryConfig wraps LLM summary processors
@@ -99,8 +111,13 @@ type LLMSummary struct {
 	Type           string                 `yaml:"type"`
 	Context        string                 `yaml:"context"`
 	Model          string                 `yaml:"model,omitempty"`
+	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+}
+
+type OutputConfig struct {
+	Email *EmailOutput `yaml:"email,omitempty"`
 }
 
 // EmailOutput defines email delivery configuration
@@ -161,6 +178,10 @@ type ProcessorFactory interface {
 
 // Validate performs validation on the curator document
 func (d *CuratorDocument) Validate() error {
+	if err := d.resolveTemplateReferences(); err != nil {
+		return err
+	}
+
 	if d.Workflow.Name == "" {
 		return fmt.Errorf("workflow name is required")
 	}
@@ -176,27 +197,30 @@ func (d *CuratorDocument) Validate() error {
 	if len(d.Workflow.Output) == 0 {
 		return fmt.Errorf("output configuration is required")
 	}
-	if output, ok := d.Workflow.Output["email"]; ok {
-		emailConfig, err := decodeEmailOutput(output)
+
+	for _, output := range d.Workflow.Output {
+		emailConfig, err := decodeEmailOutput(output.Email)
 		if err != nil {
 			return fmt.Errorf("output email: %w", err)
 		}
 		requiredFields := map[string]string{
 			"template": emailConfig.Template,
 			"to":       emailConfig.To,
-			"from":     emailConfig.From,
 			"subject":  emailConfig.Subject,
 		}
 		for field, value := range requiredFields {
 			if value == "" {
-				return fmt.Errorf("output email: %s is required", field)
+				return fmt.Errorf("output email: '%s' field is required. Provided %+v", field, emailConfig)
 			}
 		}
 		if _, err := mail.ParseAddress(emailConfig.To); err != nil {
 			return fmt.Errorf("output email: invalid to address")
 		}
-		if _, err := mail.ParseAddress(emailConfig.From); err != nil {
-			return fmt.Errorf("output email: invalid from address")
+
+		if emailConfig.From != "" { // From is optional, but if provided must be valid
+			if _, err := mail.ParseAddress(emailConfig.From); err != nil {
+				return fmt.Errorf("output email: invalid from address")
+			}
 		}
 	}
 
@@ -264,6 +288,78 @@ func (d *CuratorDocument) Validate() error {
 		}
 		if summary.LLM.Context != "flow" {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
+		}
+	}
+
+	return nil
+}
+
+func (d *CuratorDocument) resolveTemplateReferences() error {
+	if len(d.Templates) == 0 {
+		return nil
+	}
+
+	byID := make(map[string]TemplateDefinition, len(d.Templates))
+	for i, t := range d.Templates {
+		if t.ID == "" {
+			return fmt.Errorf("templates %d: id is required", i)
+		}
+		if _, exists := byID[t.ID]; exists {
+			return fmt.Errorf("templates: duplicate id %q", t.ID)
+		}
+		if t.SystemTemplate == "" {
+			return fmt.Errorf("templates %q: system_template is required", t.ID)
+		}
+		if t.Template == "" {
+			return fmt.Errorf("templates %q: template is required", t.ID)
+		}
+		byID[t.ID] = t
+	}
+
+	// Quality LLM
+	for i := range d.Workflow.Quality {
+		q := d.Workflow.Quality[i].LLM
+		if q == nil {
+			continue
+		}
+		if resolved, ok := byID[q.PromptTemplate]; ok {
+			q.SystemTemplate = resolved.SystemTemplate
+			q.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Post summary LLM
+	for i := range d.Workflow.PostSummary {
+		s := d.Workflow.PostSummary[i].LLM
+		if s == nil {
+			continue
+		}
+		if resolved, ok := byID[s.PromptTemplate]; ok {
+			s.SystemTemplate = resolved.SystemTemplate
+			s.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Run summary LLM
+	for i := range d.Workflow.RunSummary {
+		s := d.Workflow.RunSummary[i].LLM
+		if s == nil {
+			continue
+		}
+		if resolved, ok := byID[s.PromptTemplate]; ok {
+			s.SystemTemplate = resolved.SystemTemplate
+			s.PromptTemplate = resolved.Template
+		}
+	}
+
+	// Outputs (currently only email).
+	for i := range d.Workflow.Output {
+		o := d.Workflow.Output[i].Email
+		if o == nil {
+			continue
+		}
+		if resolved, ok := byID[o.Template]; ok {
+			o.Template = resolved.Template
 		}
 	}
 
@@ -354,17 +450,12 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 	}
 
 	// Parse outputs
-	for outputType, outputConfig := range d.Workflow.Output {
-		if outputType == "email" {
-			emailConfig, err := decodeEmailOutput(outputConfig)
-			if err != nil {
-				return nil, fmt.Errorf("output email: %w", err)
-			}
-
-			flow.Outputs = append(flow.Outputs, ParsedProcessor{
+	for _, output := range d.Workflow.Output {
+		if output.Email != nil {
+			flow.Processors = append(flow.Processors, ParsedProcessor{
 				Type:   ProcessorOutputEmail,
 				Name:   "email",
-				Config: emailConfig,
+				Config: output.Email,
 			})
 		}
 	}
@@ -546,9 +637,9 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 	}
 
 	// 6. Output processors (always last)
-	for outputType := range d.Workflow.Output {
-		if outputType == "email" {
-			emailConfig, err := decodeEmailOutput(d.Workflow.Output["email"])
+	for _, output := range d.Workflow.Output {
+		if output.Email != nil {
+			emailConfig, err := decodeEmailOutput(output.Email)
 			if err != nil {
 				return nil, fmt.Errorf("output email: %w", err)
 			}

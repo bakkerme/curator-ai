@@ -160,10 +160,116 @@ Examples:
 
 ## Template References
 
-Templates are referenced by name and should be defined separately. The system will look for templates in:
-1. Inline definitions within the curator document
-2. External template files
-3. System default templates
+Curator uses Go's standard library templating language (`text/template`) for all templates (LLM prompts and outputs).
+
+This is a good fit because:
+- It's already used in the codebase.
+- It supports basic control flow (`if`, `with`, `range`) and pipelines.
+- It can iterate over slices like `Comments`, `WebBlocks`, and `ImageBlocks`.
+
+### Where templates live
+
+Templates are defined at the top-level of the Curator Document:
+
+```yaml
+templates:
+  - id: myTemplate
+    template: |-
+      Hello {{.Title}}
+```
+
+### Referencing templates
+
+Processors reference templates by ID:
+
+```yaml
+prompt_template: myTemplate
+```
+
+At load time, Curator resolves these IDs into the actual template text.
+
+Notes:
+- If `prompt_template` (or `email.template`) matches a template `id`, it is treated as a reference.
+- Otherwise it is treated as inline template content.
+
+### Template language basics (Go `text/template`)
+
+- Interpolation: `{{.Title}}`
+- Conditionals:
+
+```gotemplate
+{{if .Summary}}Has summary{{end}}
+```
+
+- Looping:
+
+```gotemplate
+{{range .Comments}}
+- {{.Author}}: {{.Content}}
+{{end}}
+```
+
+- Common helpers:
+  - `len` for slice/map/string length: `{{len .Comments}}`
+  - `index` for map access: `{{index .Params "interests"}}`
+
+### Template data available
+
+Templates are executed with different root objects depending on where they are used.
+
+#### LLM Quality templates (`quality.llm.prompt_template`)
+
+Root object contains:
+- All `PostBlock` fields directly (e.g. `.Title`, `.Content`, `.Comments`, `.WebBlocks`)
+- `.Evaluations []string` from the processor config
+- `.Exclusions []string` from the processor config
+
+Example:
+
+```gotemplate
+Title: {{.Title}}
+Evals: {{range .Evaluations}}- {{.}}{{end}}
+```
+
+#### Post Summary templates (`post_summary.llm.prompt_template`)
+
+Root object contains:
+- All `PostBlock` fields directly
+- `.Params map[string]any` from the processor config
+
+Example:
+
+```gotemplate
+Interests:
+{{range (index .Params "interests")}}- {{.}}{{end}}
+```
+
+#### Run Summary templates (`run_summary.llm.prompt_template`)
+
+Root object contains:
+- `.Blocks []*PostBlock`
+- `.Params map[string]any`
+
+Example:
+
+```gotemplate
+There are {{len .Blocks}} posts.
+{{range .Blocks}}- {{.Title}}{{end}}
+```
+
+#### Email templates (`output.email.template`)
+
+Email templates are rendered as `text/plain` bodies.
+
+Root object contains:
+- `.Blocks []*PostBlock`
+- `.RunSummary *RunSummary`
+
+Example:
+
+```gotemplate
+Daily Digest\n\n{{.RunSummary.Summary}}\n\n{{range .Blocks}}- {{.Title}} ({{.URL}})\n{{end}}
+```
 
 ## Extensibility
 

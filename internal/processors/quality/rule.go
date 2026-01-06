@@ -22,7 +22,7 @@ func NewRuleProcessor(cfg *config.QualityRule) (*RuleProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("quality rule config is required")
 	}
-	program, err := expr.Compile(cfg.Rule, expr.Env(map[string]interface{}{}))
+	program, err := expr.Compile(cfg.Rule, expr.Env(sampleRuleEnv()))
 	if err != nil {
 		return nil, fmt.Errorf("compile quality rule: %w", err)
 	}
@@ -90,20 +90,83 @@ func (p *RuleProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) 
 }
 
 func qualityEnv(block *core.PostBlock) map[string]interface{} {
+	comments := map[string]interface{}{
+		"count": len(block.Comments),
+		"Count": len(block.Comments),
+	}
 	return map[string]interface{}{
 		"title": map[string]interface{}{
 			"value":  block.Title,
 			"length": len(block.Title),
+			"Value":  block.Title,
+			"Length": len(block.Title),
+		},
+		"Title": map[string]interface{}{
+			"value":  block.Title,
+			"length": len(block.Title),
+			"Value":  block.Title,
+			"Length": len(block.Title),
 		},
 		"content": map[string]interface{}{
 			"value":  block.Content,
 			"length": len(block.Content),
+			"Value":  block.Content,
+			"Length": len(block.Content),
 		},
-		"author": block.Author,
-		"url":    block.URL,
-		"comments": map[string]interface{}{
-			"count": len(block.Comments),
+		"Content": map[string]interface{}{
+			"value":  block.Content,
+			"length": len(block.Content),
+			"Value":  block.Content,
+			"Length": len(block.Content),
 		},
+		"author":     block.Author,
+		"Author":     block.Author,
+		"url":        block.URL,
+		"URL":        block.URL,
+		"comments":   comments,
+		"Comments":   comments,
 		"created_at": block.CreatedAt,
+		"CreatedAt":  block.CreatedAt,
+	}
+}
+
+func sampleRuleEnv() map[string]interface{} {
+	comments := map[string]interface{}{
+		"count": 0,
+		"Count": 0,
+	}
+	return map[string]interface{}{
+		"title": map[string]interface{}{
+			"value":  "",
+			"length": 0,
+			"Value":  "",
+			"Length": 0,
+		},
+		"Title": map[string]interface{}{
+			"value":  "",
+			"length": 0,
+			"Value":  "",
+			"Length": 0,
+		},
+		"content": map[string]interface{}{
+			"value":  "",
+			"length": 0,
+			"Value":  "",
+			"Length": 0,
+		},
+		"Content": map[string]interface{}{
+			"value":  "",
+			"length": 0,
+			"Value":  "",
+			"Length": 0,
+		},
+		"author":     "",
+		"Author":     "",
+		"url":        "",
+		"URL":        "",
+		"comments":   comments,
+		"Comments":   comments,
+		"created_at": time.Time{},
+		"CreatedAt":  time.Time{},
 	}
 }
