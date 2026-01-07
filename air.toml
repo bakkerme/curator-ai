@@ -1,0 +1,16 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "GOFLAGS=-buildvcs=false go build -o ./tmp/curator ./cmd/curator"
+  bin = "./tmp/curator"
+  full_bin = "./tmp/curator -config /app/curator.yaml"
+  include_ext = ["go", "yaml", "yml"]
+  exclude_dir = ["tmp", ".git"]
+  delay = 200
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

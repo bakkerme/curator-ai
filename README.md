@@ -69,6 +69,29 @@ docker compose -f docker-compose.yml up -d
 open http://localhost:8025
 ```
 
+## Docker (Test Deploy)
+
+Build and run Curator + Mailpit:
+
+```bash
+docker compose up -d --build curator mailpit
+```
+
+Notes:
+- The `curator` service expects `./curator.yaml` mounted at `/app/curator.yaml`.
+- Provide any required runtime env vars (e.g. `OPENAI_API_KEY`) via your shell or a `.env` file.
+- SMTP is pre-wired to Mailpit inside Compose (`SMTP_HOST=mailpit`, port `1025`, TLS off).
+
+## Docker (Dev Container with Reload)
+
+Run the reloadable dev container (uses `air` inside the container):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+This mounts the repo into the container and rebuilds/restarts on `.go` and `.yml/.yaml` changes.
+
 E2E test (local RSS fixture → Curator → Mailpit API assertion):
 
 ```bash

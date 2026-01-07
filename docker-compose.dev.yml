@@ -1,0 +1,59 @@
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: curator-mailpit
+    ports:
+      - "8025:8025" # web UI + API
+      - "1025:1025" # SMTP
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mailpit-data:/data
+    restart: unless-stopped
+
+
+  curator:
+    image: curator-ai:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    environment:
+      CURATOR_CONFIG: /app/curator.yaml
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_USE_TLS: "false"
+      SMTP_USER: "dummy@dummy"
+      SMTP_PASSWORD: "dummy"
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+
+      REDDIT_HTTP_TIMEOUT: ${REDDIT_HTTP_TIMEOUT}
+      RSS_HTTP_TIMEOUT: ${RSS_HTTP_TIMEOUT}
+      RSS_USER_AGENT: ${RSS_USER_AGENT}
+
+      FLOW_ID: ${FLOW_ID}
+      RUN_ONCE: ${RUN_ONCE}
+      ALLOW_PARTIAL_SOURCE_ERRORS: ${ALLOW_PARTIAL_SOURCE_ERRORS}
+
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
+      REDDIT_USERNAME: ${REDDIT_USERNAME}
+      REDDIT_PASSWORD: ${REDDIT_PASSWORD}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT}
+
+      OTEL_ENABLED: ${OTEL_ENABLED}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_CAPTURE_OPENAI_BODIES: ${OTEL_CAPTURE_OPENAI_BODIES}
+
+      JINA_API_KEY: ${JINA_API_KEY}
+    volumes:
+      - ./:/app
+
+volumes:
+  mailpit-data:

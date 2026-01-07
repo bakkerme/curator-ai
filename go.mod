@@ -1,6 +1,6 @@
 module github.com/bakkerme/curator-ai
 
-go 1.24.4
+go 1.25.5
 
 require (
 	github.com/expr-lang/expr v1.17.7

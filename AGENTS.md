@@ -5,7 +5,7 @@ This repository is a Go-based MVP “flow runner” for Curator AI. It loads a C
 ## Start Here
 
 - Project overview and env vars: `README.md`
-- Go version/toolchain: `go.mod` (currently `go 1.24.4`)
+- Go version/toolchain: `go.mod` (currently `go 1.25.5`)
 - Curator Document YAML reference: `planning/curator_document_spec.md`
 - Example Curator Document: `planning/example_flow.yml` (treat as a starting point; it may need required fields like `output.email.from`)
 - Runner execution model: `planning/runner_logic.md`
