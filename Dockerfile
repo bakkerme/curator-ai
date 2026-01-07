@@ -28,11 +28,7 @@ COPY --from=build /out/curator /usr/local/bin/curator
 
 USER 10001:10001
 
-# Default config location (can be overridden by flag or env).
-ENV CURATOR_CONFIG=/app/curator.yaml
-
 ENTRYPOINT ["/usr/local/bin/curator"]
-CMD ["-config", "/app/curator.yaml"]
 
 FROM golang:${GO_VERSION} AS dev
 WORKDIR /app
