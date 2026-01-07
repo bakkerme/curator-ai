@@ -125,6 +125,12 @@ templates:
 
       Content:
       {{ .Content }}
+
+      Web Content:
+      {{- range .WebBlocks }}
+      - {{ .URL }}
+        {{ .Page }}
+      {{- end }}
       -----USER CONTENT END-----
 
   - id: postSummaryTemplate
@@ -164,6 +170,7 @@ templates:
       Linked URLs:
       {{- range .WebBlocks }}
       - {{ .URL }}
+        {{ .Page }}
       {{- end }}
       -----USER CONTENT START-----
       
@@ -173,14 +180,18 @@ templates:
 
       Produce an executive summary, then group notable items.
 
+      Include an:
+      - Executive summary, focused on 4-8 bullet points
+      - Notable Items, pick 5 most relevant items to the focus area, bulleted, include post title + 1 sentence
+
       Focus areas:
       {{- range (index .Params "focus") }}
       - {{ . }}
       {{- end }}
 
       Output format:
-      # Executive summary (4-8 bullets)
-      # Notable items (bulleted, include post title + 1 sentence)
+      # Executive summary
+      # Notable items
 
     template: |-
       There are {{ len .Blocks }} posts.

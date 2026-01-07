@@ -1,0 +1,17 @@
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: curator-mailpit
+    ports:
+      - "8025:8025" # web UI + API
+      - "1025:1025" # SMTP
+    environment:
+      MP_DATABSE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mailpit-data:/data
+    restart: unless-stopped
+
+volumes:
+  mailpit-data:

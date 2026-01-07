@@ -14,8 +14,9 @@ import (
 	"github.com/bakkerme/curator-ai/internal/processors/source"
 	"github.com/bakkerme/curator-ai/internal/processors/summary"
 	"github.com/bakkerme/curator-ai/internal/processors/trigger"
+	"github.com/bakkerme/curator-ai/internal/sources/jina"
+	jinaimpl "github.com/bakkerme/curator-ai/internal/sources/jina/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
-	redditimpl "github.com/bakkerme/curator-ai/internal/sources/reddit/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssimpl "github.com/bakkerme/curator-ai/internal/sources/rss/impl"
 )
@@ -25,6 +26,7 @@ type Factory struct {
 	LLMClient     llm.Client
 	DefaultModel  string
 	SMTPDefaults  config.SMTPEnvConfig
+	JinaReader    jina.Reader
 	RedditFetcher reddit.Fetcher
 	RSSFetcher    rss.Fetcher
 	EmailSender   email.Sender
@@ -40,9 +42,13 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 		LLMClient:     llmClient,
 		DefaultModel:  env.OpenAI.Model,
 		SMTPDefaults:  env.SMTP,
-		RedditFetcher: redditimpl.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
+		JinaReader:    jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
+		RedditFetcher: reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
 		RSSFetcher:    rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
-		EmailSender:   smtp.NewSender(env.SMTP.Host, env.SMTP.Port, env.SMTP.User, env.SMTP.Password, env.SMTP.UseTLS),
+		// Leave EmailSender nil so the output processor can build it from the merged
+		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
+		// Document to take effect.
+		EmailSender: nil,
 	}
 }
 
@@ -51,7 +57,7 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 }
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	return source.NewRedditProcessor(cfg, f.RedditFetcher)
+	return source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.Logger)
 }
 
 func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {

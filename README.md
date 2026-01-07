@@ -36,6 +36,12 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `RSS_HTTP_TIMEOUT` (optional, e.g. `10s`)
 - `RSS_USER_AGENT` (optional, default: `curator-ai/0.1`)
 
+### Jina Reader (URL → markdown)
+- `JINA_API_KEY` (required to use the Jina Reader client)
+- `JINA_BASE_URL` (optional, default: `https://r.jina.ai/`)
+- `JINA_HTTP_TIMEOUT` (optional, e.g. `15s`)
+- `JINA_USER_AGENT` (optional, default: `curator-ai/0.1`)
+
 ## Optional Runtime Flags / Envars
 
 - `CURATOR_CONFIG` (default: `curator.yaml`)
@@ -52,4 +58,19 @@ export SMTP_USER="user"
 export SMTP_PASSWORD="pass"
 
 go run ./cmd/curator -config curator.yaml -run-once
+```
+
+## Local Email Dev (Mailpit)
+
+Run Mailpit (SMTP sink + web UI/API):
+
+```bash
+docker compose -f docker-compose.yml up -d
+open http://localhost:8025
+```
+
+E2E test (local RSS fixture → Curator → Mailpit API assertion):
+
+```bash
+CURATOR_E2E=1 go test -tags=e2e ./internal/e2e -run TestMailpitE2E
 ```

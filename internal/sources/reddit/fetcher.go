@@ -1,4 +1,4 @@
-package impl
+package reddit
 
 import (
 	"context"
@@ -10,17 +10,16 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/retry"
-	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	goreddit "github.com/vartanbeno/go-reddit/v2/reddit"
 )
 
-type Fetcher struct {
+type RedditFetcher struct {
 	client  *goreddit.Client
 	initErr error
 	logger  *slog.Logger
 }
 
-func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID, clientSecret, username, password string) *Fetcher {
+func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID, clientSecret, username, password string) Fetcher {
 	if userAgent == "" {
 		userAgent = "curator-ai/0.1"
 	}
@@ -43,10 +42,10 @@ func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID,
 		client, err = goreddit.NewReadonlyClient(goreddit.WithHTTPClient(httpClient), goreddit.WithUserAgent(userAgent))
 	}
 
-	return &Fetcher{client: client, initErr: err, logger: logger}
+	return &RedditFetcher{client: client, initErr: err, logger: logger}
 }
 
-func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Item, error) {
+func (f *RedditFetcher) Fetch(ctx context.Context, config Config) ([]Item, error) {
 	if f.initErr != nil {
 		return nil, f.initErr
 	}
@@ -71,7 +70,7 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 		return nil, fmt.Errorf("got error fetching reddit posts %w", err)
 	}
 
-	items := make([]reddit.Item, 0, len(posts))
+	items := make([]Item, 0, len(posts))
 	for _, post := range posts {
 		if post == nil {
 			continue
@@ -80,7 +79,7 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 			continue
 		}
 
-		item := reddit.Item{
+		item := Item{
 			ID:        post.ID,
 			Title:     post.Title,
 			URL:       canonicalRedditPostURL(post.Permalink),
@@ -114,7 +113,7 @@ func (f *Fetcher) Fetch(ctx context.Context, config reddit.Config) ([]reddit.Ite
 	return items, nil
 }
 
-func (f *Fetcher) fetchPosts(ctx context.Context, subreddit, sort string, limit int, timeFilter string) ([]*goreddit.Post, error) {
+func (f RedditFetcher) fetchPosts(ctx context.Context, subreddit, sort string, limit int, timeFilter string) ([]*goreddit.Post, error) {
 	var (
 		posts []*goreddit.Post
 		resp  *goreddit.Response
@@ -155,7 +154,7 @@ func (f *Fetcher) fetchPosts(ctx context.Context, subreddit, sort string, limit 
 	return posts, nil
 }
 
-func (f *Fetcher) fetchTopLevelComments(ctx context.Context, postID string, limit int) ([]reddit.Comment, error) {
+func (f *RedditFetcher) fetchTopLevelComments(ctx context.Context, postID string, limit int) ([]Comment, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -183,7 +182,7 @@ func (f *Fetcher) fetchTopLevelComments(ctx context.Context, postID string, limi
 	}
 
 	parentFullID := "t3_" + postID
-	out := make([]reddit.Comment, 0, min(len(pc.Comments), limit))
+	out := make([]Comment, 0, min(len(pc.Comments), limit))
 	for _, c := range pc.Comments {
 		if c == nil || c.ParentID != parentFullID {
 			continue
@@ -192,7 +191,7 @@ func (f *Fetcher) fetchTopLevelComments(ctx context.Context, postID string, limi
 		if body == "" || body == "[deleted]" || body == "[removed]" {
 			continue
 		}
-		out = append(out, reddit.Comment{
+		out = append(out, Comment{
 			ID:        c.ID,
 			Author:    c.Author,
 			Content:   body,
