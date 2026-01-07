@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
+	"github.com/bakkerme/curator-ai/internal/runner/snapshot"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -35,6 +36,83 @@ func logStage(logger *slog.Logger, stage string, processorName string, processor
 type Runner struct {
 	logger                   *slog.Logger
 	allowPartialSourceErrors bool
+}
+
+func snapshotConfig(processor interface{}) *core.SnapshotConfig {
+	if provider, ok := processor.(snapshot.ConfigProvider); ok {
+		return provider.SnapshotConfig()
+	}
+	return nil
+}
+
+func findSourceRestoreIndex(processors []core.SourceProcessor) (int, *core.SnapshotConfig) {
+	for i, processor := range processors {
+		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			return i, cfg
+		}
+	}
+	return -1, nil
+}
+
+func findQualityRestoreIndex(processors []core.QualityProcessor) (int, *core.SnapshotConfig) {
+	for i, processor := range processors {
+		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			return i, cfg
+		}
+	}
+	return -1, nil
+}
+
+func findSummaryRestoreIndex(processors []core.SummaryProcessor) (int, *core.SnapshotConfig) {
+	for i, processor := range processors {
+		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			return i, cfg
+		}
+	}
+	return -1, nil
+}
+
+func findRunSummaryRestoreIndex(processors []core.RunSummaryProcessor) (int, *core.SnapshotConfig) {
+	for i, processor := range processors {
+		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			return i, cfg
+		}
+	}
+	return -1, nil
+}
+
+func findOutputRestoreIndex(processors []core.OutputProcessor) (int, *core.SnapshotConfig) {
+	for i, processor := range processors {
+		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			return i, cfg
+		}
+	}
+	return -1, nil
+}
+
+func processorName(processor interface{}, fallback string) string {
+	if processor == nil {
+		return fallback
+	}
+	if named, ok := processor.(interface{ Name() string }); ok {
+		return named.Name()
+	}
+	return fallback
 }
 
 type Config struct {
@@ -103,8 +181,44 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 	logger.Info("run started")
 
 	blocks := []*core.PostBlock{}
-	for _, source := range flow.Sources {
+	var runSummary *core.RunSummary
+
+	sourceStart := 0
+	if restoreIndex, cfg := findSourceRestoreIndex(flow.Sources); cfg != nil {
+		restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+		if err != nil {
+			run.Status = core.RunStatusFailed
+			logger.Error("snapshot restore failed", "stage", "source", "processor", processorName(flow.Sources[restoreIndex], "source"), "path", cfg.Path, "error", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return run, err
+		}
+		blocks = restoredBlocks
+		if restoredSummary != nil {
+			runSummary = restoredSummary
+		}
+		sourceStart = restoreIndex + 1
+		logger.Info("snapshot restored", "stage", "source", "processor", processorName(flow.Sources[restoreIndex], "source"), "path", cfg.Path, "blocks", len(blocks))
+	}
+	for i := sourceStart; i < len(flow.Sources); i++ {
+		source := flow.Sources[i]
 		if source == nil {
+			continue
+		}
+		if cfg := snapshotConfig(source); cfg != nil && cfg.Restore {
+			restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+			if err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot restore failed", "stage", "source", "processor", source.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			blocks = restoredBlocks
+			if restoredSummary != nil {
+				runSummary = restoredSummary
+			}
+			logger.Info("snapshot restored", "stage", "source", "processor", source.Name(), "path", cfg.Path, "blocks", len(blocks))
 			continue
 		}
 		sourceName := source.Name()
@@ -137,6 +251,16 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		before := len(blocks)
 		blocks = append(blocks, fetched...)
 		logStage(logger, "source", sourceName, fmt.Sprintf("%T", source), before, len(blocks), time.Since(start))
+		if cfg := snapshotConfig(source); cfg != nil && cfg.Snapshot {
+			if err := snapshot.Save(cfg.Path, blocks, runSummary); err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot save failed", "stage", "source", "processor", sourceName, "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			logger.Info("snapshot saved", "stage", "source", "processor", sourceName, "path", cfg.Path, "blocks", len(blocks))
+		}
 	}
 	logger.Info("sources completed", "blocks", len(blocks))
 
@@ -146,8 +270,42 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		return run, nil
 	}
 
-	for _, processor := range flow.Quality {
+	qualityStart := 0
+	if restoreIndex, cfg := findQualityRestoreIndex(flow.Quality); cfg != nil {
+		restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+		if err != nil {
+			run.Status = core.RunStatusFailed
+			logger.Error("snapshot restore failed", "stage", "quality", "processor", processorName(flow.Quality[restoreIndex], "quality"), "path", cfg.Path, "error", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return run, err
+		}
+		blocks = restoredBlocks
+		if restoredSummary != nil {
+			runSummary = restoredSummary
+		}
+		qualityStart = restoreIndex + 1
+		logger.Info("snapshot restored", "stage", "quality", "processor", processorName(flow.Quality[restoreIndex], "quality"), "path", cfg.Path, "blocks", len(blocks))
+	}
+	for i := qualityStart; i < len(flow.Quality); i++ {
+		processor := flow.Quality[i]
 		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+			if err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot restore failed", "stage", "quality", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			blocks = restoredBlocks
+			if restoredSummary != nil {
+				runSummary = restoredSummary
+			}
+			logger.Info("snapshot restored", "stage", "quality", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks))
 			continue
 		}
 		before := len(blocks)
@@ -170,6 +328,16 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		}
 		blocks = next
 		logStage(logger, "quality", processor.Name(), fmt.Sprintf("%T", processor), before, len(blocks), time.Since(start))
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Snapshot {
+			if err := snapshot.Save(cfg.Path, blocks, runSummary); err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot save failed", "stage", "quality", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			logger.Info("snapshot saved", "stage", "quality", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks))
+		}
 	}
 
 	if len(blocks) == 0 {
@@ -178,8 +346,42 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		return run, nil
 	}
 
-	for _, processor := range flow.PostSummary {
+	postSummaryStart := 0
+	if restoreIndex, cfg := findSummaryRestoreIndex(flow.PostSummary); cfg != nil {
+		restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+		if err != nil {
+			run.Status = core.RunStatusFailed
+			logger.Error("snapshot restore failed", "stage", "post_summary", "processor", processorName(flow.PostSummary[restoreIndex], "post_summary"), "path", cfg.Path, "error", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return run, err
+		}
+		blocks = restoredBlocks
+		if restoredSummary != nil {
+			runSummary = restoredSummary
+		}
+		postSummaryStart = restoreIndex + 1
+		logger.Info("snapshot restored", "stage", "post_summary", "processor", processorName(flow.PostSummary[restoreIndex], "post_summary"), "path", cfg.Path, "blocks", len(blocks))
+	}
+	for i := postSummaryStart; i < len(flow.PostSummary); i++ {
+		processor := flow.PostSummary[i]
 		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+			if err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot restore failed", "stage", "post_summary", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			blocks = restoredBlocks
+			if restoredSummary != nil {
+				runSummary = restoredSummary
+			}
+			logger.Info("snapshot restored", "stage", "post_summary", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks))
 			continue
 		}
 		before := len(blocks)
@@ -202,11 +404,54 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		}
 		blocks = next
 		logStage(logger, "post_summary", processor.Name(), fmt.Sprintf("%T", processor), before, len(blocks), time.Since(start))
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Snapshot {
+			if err := snapshot.Save(cfg.Path, blocks, runSummary); err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot save failed", "stage", "post_summary", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			logger.Info("snapshot saved", "stage", "post_summary", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks))
+		}
 	}
 
-	var runSummary *core.RunSummary
-	for _, processor := range flow.RunSummary {
+	runSummaryStart := 0
+	if restoreIndex, cfg := findRunSummaryRestoreIndex(flow.RunSummary); cfg != nil {
+		restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+		if err != nil {
+			run.Status = core.RunStatusFailed
+			logger.Error("snapshot restore failed", "stage", "run_summary", "processor", processorName(flow.RunSummary[restoreIndex], "run_summary"), "path", cfg.Path, "error", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return run, err
+		}
+		if restoredBlocks != nil {
+			blocks = restoredBlocks
+		}
+		runSummary = restoredSummary
+		runSummaryStart = restoreIndex + 1
+		logger.Info("snapshot restored", "stage", "run_summary", "processor", processorName(flow.RunSummary[restoreIndex], "run_summary"), "path", cfg.Path, "blocks", len(blocks), "has_summary", runSummary != nil)
+	}
+	for i := runSummaryStart; i < len(flow.RunSummary); i++ {
+		processor := flow.RunSummary[i]
 		if processor == nil {
+			continue
+		}
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Restore {
+			restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+			if err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot restore failed", "stage", "run_summary", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			if restoredBlocks != nil {
+				blocks = restoredBlocks
+			}
+			runSummary = restoredSummary
+			logger.Info("snapshot restored", "stage", "run_summary", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks), "has_summary", runSummary != nil)
 			continue
 		}
 		start := time.Now()
@@ -236,6 +481,16 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 			"has_summary", runSummary != nil,
 			"duration", time.Since(start),
 		)
+		if cfg := snapshotConfig(processor); cfg != nil && cfg.Snapshot {
+			if err := snapshot.Save(cfg.Path, blocks, runSummary); err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot save failed", "stage", "run_summary", "processor", processor.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			logger.Info("snapshot saved", "stage", "run_summary", "processor", processor.Name(), "path", cfg.Path, "blocks", len(blocks), "has_summary", runSummary != nil)
+		}
 	}
 
 	if len(blocks) == 0 {
@@ -244,8 +499,46 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		return run, nil
 	}
 
-	for _, output := range flow.Outputs {
+	outputStart := 0
+	if restoreIndex, cfg := findOutputRestoreIndex(flow.Outputs); cfg != nil {
+		restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+		if err != nil {
+			run.Status = core.RunStatusFailed
+			logger.Error("snapshot restore failed", "stage", "output", "processor", processorName(flow.Outputs[restoreIndex], "output"), "path", cfg.Path, "error", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return run, err
+		}
+		if restoredBlocks != nil {
+			blocks = restoredBlocks
+		}
+		if restoredSummary != nil {
+			runSummary = restoredSummary
+		}
+		outputStart = restoreIndex + 1
+		logger.Info("snapshot restored", "stage", "output", "processor", processorName(flow.Outputs[restoreIndex], "output"), "path", cfg.Path, "blocks", len(blocks), "has_run_summary", runSummary != nil)
+	}
+	for i := outputStart; i < len(flow.Outputs); i++ {
+		output := flow.Outputs[i]
 		if output == nil {
+			continue
+		}
+		if cfg := snapshotConfig(output); cfg != nil && cfg.Restore {
+			restoredBlocks, restoredSummary, err := snapshot.Load(cfg.Path)
+			if err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot restore failed", "stage", "output", "processor", output.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			if restoredBlocks != nil {
+				blocks = restoredBlocks
+			}
+			if restoredSummary != nil {
+				runSummary = restoredSummary
+			}
+			logger.Info("snapshot restored", "stage", "output", "processor", output.Name(), "path", cfg.Path, "blocks", len(blocks), "has_run_summary", runSummary != nil)
 			continue
 		}
 		start := time.Now()
@@ -272,6 +565,16 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 			"blocks", len(blocks),
 			"duration", time.Since(start),
 		)
+		if cfg := snapshotConfig(output); cfg != nil && cfg.Snapshot {
+			if err := snapshot.Save(cfg.Path, blocks, runSummary); err != nil {
+				run.Status = core.RunStatusFailed
+				logger.Error("snapshot save failed", "stage", "output", "processor", output.Name(), "path", cfg.Path, "error", err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return run, err
+			}
+			logger.Info("snapshot saved", "stage", "output", "processor", output.Name(), "path", cfg.Path, "blocks", len(blocks), "has_run_summary", runSummary != nil)
+		}
 	}
 
 	completedAt := time.Now().UTC()

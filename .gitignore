@@ -2,6 +2,7 @@
 .gocache
 .gomodcache
 .gopath
+.gotmp
 
 # Build artifacts
 /bin/

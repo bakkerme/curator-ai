@@ -54,22 +54,24 @@ type SourceConfig struct {
 
 // RedditSource defines Reddit data source configuration
 type RedditSource struct {
-	Subreddits      []string `yaml:"subreddits"`
-	Limit           int      `yaml:"limit,omitempty"`
-	Sort            string   `yaml:"sort,omitempty"`
-	TimeFilter      string   `yaml:"time_filter,omitempty"`
-	IncludeComments bool     `yaml:"include_comments,omitempty"`
-	IncludeWeb      bool     `yaml:"include_web,omitempty"`
-	IncludeImages   bool     `yaml:"include_images,omitempty"`
-	MinScore        int      `yaml:"min_score,omitempty"`
+	Subreddits      []string             `yaml:"subreddits"`
+	Limit           int                  `yaml:"limit,omitempty"`
+	Sort            string               `yaml:"sort,omitempty"`
+	TimeFilter      string               `yaml:"time_filter,omitempty"`
+	IncludeComments bool                 `yaml:"include_comments,omitempty"`
+	IncludeWeb      bool                 `yaml:"include_web,omitempty"`
+	IncludeImages   bool                 `yaml:"include_images,omitempty"`
+	MinScore        int                  `yaml:"min_score,omitempty"`
+	Snapshot        *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // RSSSource defines RSS/Atom feed configuration
 type RSSSource struct {
-	Feeds          []string `yaml:"feeds"`
-	Limit          int      `yaml:"limit,omitempty"`
-	IncludeContent *bool    `yaml:"include_content,omitempty"`
-	UserAgent      string   `yaml:"user_agent,omitempty"`
+	Feeds          []string             `yaml:"feeds"`
+	Limit          int                  `yaml:"limit,omitempty"`
+	IncludeContent *bool                `yaml:"include_content,omitempty"`
+	UserAgent      string               `yaml:"user_agent,omitempty"`
+	Snapshot       *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // QualityConfig wraps different quality processor types
@@ -80,10 +82,11 @@ type QualityConfig struct {
 
 // QualityRule defines rule-based quality filtering
 type QualityRule struct {
-	Name       string `yaml:"name"`
-	Rule       string `yaml:"rule"`
-	ActionType string `yaml:"actionType"`
-	Result     string `yaml:"result"`
+	Name       string               `yaml:"name"`
+	Rule       string               `yaml:"rule"`
+	ActionType string               `yaml:"actionType"`
+	Result     string               `yaml:"result"`
+	Snapshot   *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // LLMQuality defines AI-powered quality evaluation
@@ -97,7 +100,8 @@ type LLMQuality struct {
 	ActionType     string   `yaml:"action_type"`
 	Threshold      float64  `yaml:"threshold,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
-	InvalidJSONRetries int `yaml:"invalid_json_retries,omitempty"`
+	InvalidJSONRetries int                  `yaml:"invalid_json_retries,omitempty"`
+	Snapshot           *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // SummaryConfig wraps LLM summary processors
@@ -115,13 +119,15 @@ type LLMSummary struct {
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
 }
 
 // MarkdownSummary defines markdown-to-HTML summarization
 type MarkdownSummary struct {
-	Name    string `yaml:"name"`
-	Type    string `yaml:"type"`
-	Context string `yaml:"context"`
+	Name     string               `yaml:"name"`
+	Type     string               `yaml:"type"`
+	Context  string               `yaml:"context"`
+	Snapshot *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 type OutputConfig struct {
@@ -130,15 +136,16 @@ type OutputConfig struct {
 
 // EmailOutput defines email delivery configuration
 type EmailOutput struct {
-	Template     string `yaml:"template"`
-	To           string `yaml:"to"`
-	From         string `yaml:"from"`
-	Subject      string `yaml:"subject"`
-	SMTPHost     string `yaml:"smtp_host,omitempty"`
-	SMTPPort     int    `yaml:"smtp_port,omitempty"`
-	SMTPUser     string `yaml:"smtp_user,omitempty"`
-	SMTPPassword string `yaml:"smtp_password,omitempty"`
-	UseTLS       *bool  `yaml:"use_tls,omitempty"`
+	Template     string               `yaml:"template"`
+	To           string               `yaml:"to"`
+	From         string               `yaml:"from"`
+	Subject      string               `yaml:"subject"`
+	SMTPHost     string               `yaml:"smtp_host,omitempty"`
+	SMTPPort     int                  `yaml:"smtp_port,omitempty"`
+	SMTPUser     string               `yaml:"smtp_user,omitempty"`
+	SMTPPassword string               `yaml:"smtp_password,omitempty"`
+	UseTLS       *bool                `yaml:"use_tls,omitempty"`
+	Snapshot     *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // ProcessorType identifies the type of processor
@@ -237,6 +244,9 @@ func (d *CuratorDocument) Validate() error {
 				return fmt.Errorf("output email: invalid from address")
 			}
 		}
+		if err := validateSnapshotConfig("output email", emailConfig.Snapshot); err != nil {
+			return err
+		}
 	}
 
 	// Validate triggers
@@ -260,6 +270,16 @@ func (d *CuratorDocument) Validate() error {
 		if source.RSS != nil && len(source.RSS.Feeds) == 0 {
 			return fmt.Errorf("source %d: at least one rss feed is required", i)
 		}
+		if source.Reddit != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("source %d reddit", i), source.Reddit.Snapshot); err != nil {
+				return err
+			}
+		}
+		if source.RSS != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("source %d rss", i), source.RSS.Snapshot); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Validate quality processors
@@ -278,11 +298,17 @@ func (d *CuratorDocument) Validate() error {
 			if quality.QualityRule.Result != "pass" && quality.QualityRule.Result != "drop" {
 				return fmt.Errorf("quality %d: result must be 'pass' or 'drop'", i)
 			}
+			if err := validateSnapshotConfig(fmt.Sprintf("quality %d rule", i), quality.QualityRule.Snapshot); err != nil {
+				return err
+			}
 		}
 
 		if quality.LLM != nil {
 			if quality.LLM.Name == "" || quality.LLM.PromptTemplate == "" {
 				return fmt.Errorf("quality %d: LLM name and prompt_template are required", i)
+			}
+			if err := validateSnapshotConfig(fmt.Sprintf("quality %d llm", i), quality.LLM.Snapshot); err != nil {
+				return err
 			}
 		}
 	}
@@ -298,6 +324,16 @@ func (d *CuratorDocument) Validate() error {
 		if summary.Markdown != nil && summary.Markdown.Context != "post" {
 			return fmt.Errorf("post_summary %d: context must be 'post'", i)
 		}
+		if summary.LLM != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Snapshot); err != nil {
+				return err
+			}
+		}
+		if summary.Markdown != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("post_summary %d markdown", i), summary.Markdown.Snapshot); err != nil {
+				return err
+			}
+		}
 	}
 
 	for i, summary := range d.Workflow.RunSummary {
@@ -310,8 +346,31 @@ func (d *CuratorDocument) Validate() error {
 		if summary.Markdown != nil && summary.Markdown.Context != "flow" {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
 		}
+		if summary.LLM != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Snapshot); err != nil {
+				return err
+			}
+		}
+		if summary.Markdown != nil {
+			if err := validateSnapshotConfig(fmt.Sprintf("run_summary %d markdown", i), summary.Markdown.Snapshot); err != nil {
+				return err
+			}
+		}
 	}
 
+	return nil
+}
+
+func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.Snapshot && cfg.Restore {
+		return fmt.Errorf("%s: snapshot and restore cannot both be true", label)
+	}
+	if (cfg.Snapshot || cfg.Restore) && cfg.Path == "" {
+		return fmt.Errorf("%s: snapshot path is required", label)
+	}
 	return nil
 }
 

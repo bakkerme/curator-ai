@@ -17,6 +17,10 @@ workflow:
         sort: "hot"        # optional
         time_filter: "day" # optional
         min_score: 10       # optional
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/reddit.json"
 
   quality:
     - quality_rule:
@@ -24,6 +28,10 @@ workflow:
         rule: "comments.count > 5"
         actionType: pass_drop
         result: drop
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/quality-rule.json"
     - llm:
         name: is_relevant
         prompt_template: isRelevantTemplate
@@ -46,6 +54,10 @@ workflow:
         # model: "gpt-4o-mini" # optional (otherwise env default)
         threshold: 0.5       # optional
         # invalid_json_retries: 1 # optional (retry if LLM returns non-JSON)
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/quality-llm.json"
 
   post_summary:
     - llm:
@@ -58,6 +70,10 @@ workflow:
             - "New LLM models, runners or other infrastructure being released or open sourced"
             - "Big AI lab news (OpenAI, Anthropic, DeepSeek, Qwen etc.)"
             - "Security news"
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/post-summary.json"
 
     - markdown:
         name: markdown_to_html_post_sum
@@ -78,6 +94,10 @@ workflow:
             - "Emerging trends in open-source LLM development"
             - "Notable performance breakthroughs"
             - "Industry impact and adoption patterns"
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/run-summary.json"
     - markdown:
         name: markdown_to_html_sum
         type: markdown

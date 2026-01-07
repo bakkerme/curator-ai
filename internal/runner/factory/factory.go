@@ -14,6 +14,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/processors/source"
 	"github.com/bakkerme/curator-ai/internal/processors/summary"
 	"github.com/bakkerme/curator-ai/internal/processors/trigger"
+	"github.com/bakkerme/curator-ai/internal/runner/snapshot"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 	jinaimpl "github.com/bakkerme/curator-ai/internal/sources/jina/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
@@ -57,35 +58,67 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 }
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	return source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.Logger)
+	processor, err := source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
-	return source.NewRSSProcessor(cfg, f.RSSFetcher)
+	processor, err := source.NewRSSProcessor(cfg, f.RSSFetcher)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor, error) {
-	return quality.NewRuleProcessor(cfg)
+	processor, err := quality.NewRuleProcessor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapQuality(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
-	return quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapQuality(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
-	return summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSummary(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
-	return summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapRunSummary(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewMarkdownSummary(cfg *config.MarkdownSummary) (core.SummaryProcessor, error) {
-	return summary.NewPostMarkdownProcessor(cfg)
+	processor, err := summary.NewPostMarkdownProcessor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSummary(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSummaryProcessor, error) {
-	return summary.NewRunMarkdownProcessor(cfg)
+	processor, err := summary.NewRunMarkdownProcessor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapRunSummary(processor, cfg.Snapshot), nil
 }
 
 func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor, error) {
@@ -98,7 +131,11 @@ func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor,
 		}
 		sender = smtp.NewSender(merged.SMTPHost, merged.SMTPPort, merged.SMTPUser, merged.SMTPPassword, useTLS)
 	}
-	return output.NewEmailProcessor(merged, sender)
+	processor, err := output.NewEmailProcessor(merged, sender)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapOutput(processor, merged.Snapshot), nil
 }
 
 func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput {

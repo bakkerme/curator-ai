@@ -31,6 +31,17 @@ workflow:
 ```
 
 ## Processor Definitions
+### Snapshot/Restore (Per-Processor)
+Any processor can optionally include a `snapshot` block that controls saving its output to disk or restoring inputs from disk before the processor runs.
+
+```yaml
+snapshot:
+  snapshot: boolean             # Optional: write output to disk after this processor
+  restore: boolean              # Optional: load input from disk before this processor runs
+  path: string                  # Required when snapshot or restore is true
+```
+
+When `restore` is enabled, the runner should skip upstream work and use the data loaded from `path` for this processor.
 
 ### Trigger Processors
 

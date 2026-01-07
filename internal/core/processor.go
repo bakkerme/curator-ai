@@ -24,6 +24,12 @@ type Processor interface {
 	Validate() error
 }
 
+type SnapshotConfig struct {
+	Snapshot bool   `json:"snapshot" yaml:"snapshot"`
+	Restore  bool   `json:"restore" yaml:"restore"`
+	Path     string `json:"path" yaml:"path"`
+}
+
 // TriggerEvent represents a trigger firing
 type TriggerEvent struct {
 	FlowID    string
