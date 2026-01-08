@@ -62,6 +62,7 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 				span.SetStatus(codes.Error, err.Error())
 				return llm.ChatResponse{}, err
 			}
+
 			contentParts, err := openAIContentParts(msg.Parts)
 			if err != nil {
 				span.RecordError(err)

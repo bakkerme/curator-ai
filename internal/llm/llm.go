@@ -25,7 +25,10 @@ type MessagePart struct {
 type Message struct {
 	Role    MessageRole
 	Content string
-	Parts   []MessagePart
+
+	// Multi-part message content is only valid for user messages and
+	// takes priority over Content in that case.
+	Parts []MessagePart
 }
 
 type ChatRequest struct {
