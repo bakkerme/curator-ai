@@ -92,16 +92,19 @@ type QualityRule struct {
 
 // LLMQuality defines AI-powered quality evaluation
 type LLMQuality struct {
-	Name           string   `yaml:"name"`
-	Model          string   `yaml:"model,omitempty"`
-	Temperature    *float64 `yaml:"temperature,omitempty"`
-	SystemTemplate string   `yaml:"system_template"`
-	PromptTemplate string   `yaml:"prompt_template"`
-	Evaluations    []string `yaml:"evaluations,omitempty"`
-	Exclusions     []string `yaml:"exclusions,omitempty"`
-	ActionType     string   `yaml:"action_type"`
-	Threshold      float64  `yaml:"threshold,omitempty"`
-	MaxConcurrency int      `yaml:"max_concurrency,omitempty"`
+	Name            string   `yaml:"name"`
+	Model           string   `yaml:"model,omitempty"`
+	Temperature     *float64 `yaml:"temperature,omitempty"`
+	TopP            *float64 `yaml:"top_p,omitempty"`
+	PresencePenalty *float64 `yaml:"presence_penalty,omitempty"`
+	TopK            *int     `yaml:"top_k,omitempty"`
+	SystemTemplate  string   `yaml:"system_template"`
+	PromptTemplate  string   `yaml:"prompt_template"`
+	Evaluations     []string `yaml:"evaluations,omitempty"`
+	Exclusions      []string `yaml:"exclusions,omitempty"`
+	ActionType      string   `yaml:"action_type"`
+	Threshold       float64  `yaml:"threshold,omitempty"`
+	MaxConcurrency  int      `yaml:"max_concurrency,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
 	InvalidJSONRetries int                  `yaml:"invalid_json_retries,omitempty"`
 	Snapshot           *core.SnapshotConfig `yaml:"snapshot,omitempty"`
@@ -115,16 +118,19 @@ type SummaryConfig struct {
 
 // LLMSummary defines LLM-based summarization
 type LLMSummary struct {
-	Name           string                 `yaml:"name"`
-	Type           string                 `yaml:"type"`
-	Context        string                 `yaml:"context"`
-	Model          string                 `yaml:"model,omitempty"`
-	Temperature    *float64               `yaml:"temperature,omitempty"`
-	SystemTemplate string                 `yaml:"system_template"`
-	PromptTemplate string                 `yaml:"prompt_template"`
-	Params         map[string]interface{} `yaml:"params,omitempty"`
-	MaxConcurrency int                    `yaml:"max_concurrency,omitempty"`
-	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
+	Name            string                 `yaml:"name"`
+	Type            string                 `yaml:"type"`
+	Context         string                 `yaml:"context"`
+	Model           string                 `yaml:"model,omitempty"`
+	Temperature     *float64               `yaml:"temperature,omitempty"`
+	TopP            *float64               `yaml:"top_p,omitempty"`
+	PresencePenalty *float64               `yaml:"presence_penalty,omitempty"`
+	TopK            *int                   `yaml:"top_k,omitempty"`
+	SystemTemplate  string                 `yaml:"system_template"`
+	PromptTemplate  string                 `yaml:"prompt_template"`
+	Params          map[string]interface{} `yaml:"params,omitempty"`
+	MaxConcurrency  int                    `yaml:"max_concurrency,omitempty"`
+	Snapshot        *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
 }
 
 // MarkdownSummary defines markdown-to-HTML summarization
@@ -312,7 +318,7 @@ func (d *CuratorDocument) Validate() error {
 			if quality.LLM.Name == "" || quality.LLM.PromptTemplate == "" {
 				return fmt.Errorf("quality %d: LLM name and prompt_template are required", i)
 			}
-			if err := validateLLMTemperature(fmt.Sprintf("quality %d llm", i), quality.LLM.Temperature); err != nil {
+			if err := validateLLMParams(fmt.Sprintf("quality %d llm", i), quality.LLM.Temperature, quality.LLM.TopP, quality.LLM.PresencePenalty, quality.LLM.TopK); err != nil {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("quality %d llm", i), quality.LLM.Snapshot); err != nil {
@@ -333,7 +339,7 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("post_summary %d: context must be 'post'", i)
 		}
 		if summary.LLM != nil {
-			if err := validateLLMTemperature(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature); err != nil {
+			if err := validateLLMParams(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature, summary.LLM.TopP, summary.LLM.PresencePenalty, summary.LLM.TopK); err != nil {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Snapshot); err != nil {
@@ -358,7 +364,7 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
 		}
 		if summary.LLM != nil {
-			if err := validateLLMTemperature(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature); err != nil {
+			if err := validateLLMParams(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature, summary.LLM.TopP, summary.LLM.PresencePenalty, summary.LLM.TopK); err != nil {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Snapshot); err != nil {
@@ -388,12 +394,26 @@ func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
 	return nil
 }
 
-func validateLLMTemperature(label string, temperature *float64) error {
-	if temperature == nil {
-		return nil
+func validateLLMParams(label string, temperature, topP, presencePenalty *float64, topK *int) error {
+	if temperature != nil {
+		if *temperature < 0 || *temperature > 2 {
+			return fmt.Errorf("%s: temperature must be between 0 and 2", label)
+		}
 	}
-	if *temperature < 0 || *temperature > 2 {
-		return fmt.Errorf("%s: temperature must be between 0 and 2", label)
+	if topP != nil {
+		if *topP < 0 || *topP > 1 {
+			return fmt.Errorf("%s: top_p must be between 0 and 1", label)
+		}
+	}
+	if presencePenalty != nil {
+		if *presencePenalty < -2 || *presencePenalty > 2 {
+			return fmt.Errorf("%s: presence_penalty must be between -2 and 2", label)
+		}
+	}
+	if topK != nil {
+		if *topK < 0 {
+			return fmt.Errorf("%s: top_k must be >= 0", label)
+		}
 	}
 	return nil
 }

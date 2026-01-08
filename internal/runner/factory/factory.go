@@ -27,6 +27,9 @@ type Factory struct {
 	LLMClient          llm.Client
 	DefaultModel       string
 	DefaultTemperature *float64
+	DefaultTopP        *float64
+	DefaultPresPenalty *float64
+	DefaultTopK        *int
 	SMTPDefaults       config.SMTPEnvConfig
 	JinaReader         jina.Reader
 	RedditFetcher      reddit.Fetcher
@@ -44,6 +47,9 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 		LLMClient:          llmClient,
 		DefaultModel:       env.OpenAI.Model,
 		DefaultTemperature: env.OpenAI.Temperature,
+		DefaultTopP:        env.OpenAI.TopP,
+		DefaultPresPenalty: env.OpenAI.PresencePenalty,
+		DefaultTopK:        env.OpenAI.TopK,
 		SMTPDefaults:       env.SMTP,
 		JinaReader:         jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
 		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
@@ -84,7 +90,7 @@ func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor
 }
 
 func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
-	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
+	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature, f.DefaultTopP, f.DefaultPresPenalty, f.DefaultTopK)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +98,7 @@ func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, 
 }
 
 func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
-	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
+	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature, f.DefaultTopP, f.DefaultPresPenalty, f.DefaultTopK)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +106,7 @@ func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, 
 }
 
 func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
-	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
+	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature, f.DefaultTopP, f.DefaultPresPenalty, f.DefaultTopK)
 	if err != nil {
 		return nil, err
 	}

@@ -41,36 +41,14 @@ func ModelOrDefault(model, defaultModel string) string {
 	return defaultModel
 }
 
-func ChatSystemUser(ctx context.Context, client llm.Client, model, systemPrompt, userPrompt string, temperature *float64) (llm.ChatResponse, error) {
-	return client.ChatCompletion(ctx, llm.ChatRequest{
-		Model: model,
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: systemPrompt},
-			{Role: llm.RoleUser, Content: userPrompt},
-		},
-		Temperature: temperature,
-	})
-}
-
-func ChatUser(ctx context.Context, client llm.Client, model, userPrompt string, temperature *float64) (llm.ChatResponse, error) {
-	return client.ChatCompletion(ctx, llm.ChatRequest{
-		Model: model,
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: userPrompt},
-		},
-		Temperature: temperature,
-	})
-}
-
-// ChatSystemUserWithRetries retries the request when decode fails. The prompt is not modified between attempts.
-// If decode is nil, this behaves like ChatSystemUser with a single attempt.
-func ChatSystemUserWithRetries(
+// ChatCompletionWithRetries retries the request when decode fails. The request is not modified between attempts.
+// If decode is nil, this behaves like a single ChatCompletion call.
+func ChatCompletionWithRetries(
 	ctx context.Context,
 	client llm.Client,
-	model, systemPrompt, userPrompt string,
+	request llm.ChatRequest,
 	decodeRetries int,
 	decode ResponseDecoder,
-	temperature *float64,
 ) (llm.ChatResponse, error) {
 	attempts := decodeRetries + 1
 	if attempts < 1 {
@@ -80,43 +58,7 @@ func ChatSystemUserWithRetries(
 	var lastResp llm.ChatResponse
 	var lastDecodeErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		resp, err := ChatSystemUser(ctx, client, model, systemPrompt, userPrompt, temperature)
-		if err != nil {
-			return llm.ChatResponse{}, err
-		}
-		lastResp = resp
-		if decode == nil {
-			return resp, nil
-		}
-		if err := decode(resp.Content); err != nil {
-			lastDecodeErr = err
-			continue
-		}
-		return resp, nil
-	}
-
-	return lastResp, fmt.Errorf("decode response after %d attempt(s): %w; content=%q", attempts, lastDecodeErr, lastResp.Content)
-}
-
-// ChatUserWithRetries retries the request when decode fails. The prompt is not modified between attempts.
-// If decode is nil, this behaves like ChatUser with a single attempt.
-func ChatUserWithRetries(
-	ctx context.Context,
-	client llm.Client,
-	model, userPrompt string,
-	decodeRetries int,
-	decode ResponseDecoder,
-	temperature *float64,
-) (llm.ChatResponse, error) {
-	attempts := decodeRetries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
-
-	var lastResp llm.ChatResponse
-	var lastDecodeErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		resp, err := ChatUser(ctx, client, model, userPrompt, temperature)
+		resp, err := client.ChatCompletion(ctx, request)
 		if err != nil {
 			return llm.ChatResponse{}, err
 		}
