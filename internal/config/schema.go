@@ -92,16 +92,17 @@ type QualityRule struct {
 
 // LLMQuality defines AI-powered quality evaluation
 type LLMQuality struct {
-	Name           string   `yaml:"name"`
-	Model          string   `yaml:"model,omitempty"`
-	Temperature    *float64 `yaml:"temperature,omitempty"`
-	SystemTemplate string   `yaml:"system_template"`
-	PromptTemplate string   `yaml:"prompt_template"`
-	Evaluations    []string `yaml:"evaluations,omitempty"`
-	Exclusions     []string `yaml:"exclusions,omitempty"`
-	ActionType     string   `yaml:"action_type"`
-	Threshold      float64  `yaml:"threshold,omitempty"`
-	MaxConcurrency int      `yaml:"max_concurrency,omitempty"`
+	Name           string     `yaml:"name"`
+	Model          string     `yaml:"model,omitempty"`
+	Temperature    *float64   `yaml:"temperature,omitempty"`
+	SystemTemplate string     `yaml:"system_template"`
+	PromptTemplate string     `yaml:"prompt_template"`
+	Evaluations    []string   `yaml:"evaluations,omitempty"`
+	Exclusions     []string   `yaml:"exclusions,omitempty"`
+	ActionType     string     `yaml:"action_type"`
+	Threshold      float64    `yaml:"threshold,omitempty"`
+	MaxConcurrency int        `yaml:"max_concurrency,omitempty"`
+	Images         *LLMImages `yaml:"images,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
 	InvalidJSONRetries int                  `yaml:"invalid_json_retries,omitempty"`
 	Snapshot           *core.SnapshotConfig `yaml:"snapshot,omitempty"`
@@ -124,7 +125,29 @@ type LLMSummary struct {
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
 	MaxConcurrency int                    `yaml:"max_concurrency,omitempty"`
+	Images         *LLMImages             `yaml:"images,omitempty"`
 	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
+}
+
+const (
+	ImageModeMultimodal = "multimodal"
+	ImageModeCaption    = "caption"
+)
+
+type LLMImages struct {
+	Enabled              bool             `yaml:"enabled,omitempty"`
+	Mode                 string           `yaml:"mode,omitempty"`
+	MaxImages            int              `yaml:"max_images,omitempty"`
+	IncludeCommentImages bool             `yaml:"include_comment_images,omitempty"`
+	Caption              *LLMImageCaption `yaml:"caption,omitempty"`
+}
+
+type LLMImageCaption struct {
+	Model          string   `yaml:"model,omitempty"`
+	SystemTemplate string   `yaml:"system_template"`
+	PromptTemplate string   `yaml:"prompt_template"`
+	Temperature    *float64 `yaml:"temperature,omitempty"`
+	MaxConcurrency int      `yaml:"max_concurrency,omitempty"`
 }
 
 // MarkdownSummary defines markdown-to-HTML summarization
@@ -315,6 +338,9 @@ func (d *CuratorDocument) Validate() error {
 			if err := validateLLMTemperature(fmt.Sprintf("quality %d llm", i), quality.LLM.Temperature); err != nil {
 				return err
 			}
+			if err := validateImagesConfig(fmt.Sprintf("quality %d llm", i), quality.LLM.Images); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("quality %d llm", i), quality.LLM.Snapshot); err != nil {
 				return err
 			}
@@ -334,6 +360,9 @@ func (d *CuratorDocument) Validate() error {
 		}
 		if summary.LLM != nil {
 			if err := validateLLMTemperature(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature); err != nil {
+				return err
+			}
+			if err := validateImagesConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Images); err != nil {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Snapshot); err != nil {
@@ -359,6 +388,9 @@ func (d *CuratorDocument) Validate() error {
 		}
 		if summary.LLM != nil {
 			if err := validateLLMTemperature(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature); err != nil {
+				return err
+			}
+			if err := validateImagesConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Images); err != nil {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Snapshot); err != nil {
@@ -398,6 +430,35 @@ func validateLLMTemperature(label string, temperature *float64) error {
 	return nil
 }
 
+func validateImagesConfig(label string, cfg *LLMImages) error {
+	if cfg == nil || !cfg.Enabled {
+		return nil
+	}
+	if cfg.Mode == "" {
+		return fmt.Errorf("%s: images.mode is required when images.enabled is true", label)
+	}
+	switch cfg.Mode {
+	case ImageModeCaption, ImageModeMultimodal:
+	default:
+		return fmt.Errorf("%s: images.mode must be %q or %q", label, ImageModeCaption, ImageModeMultimodal)
+	}
+	if cfg.MaxImages < 0 {
+		return fmt.Errorf("%s: images.max_images must be >= 0", label)
+	}
+	if cfg.Mode == ImageModeCaption {
+		if cfg.Caption == nil {
+			return fmt.Errorf("%s: images.caption is required when images.mode=caption", label)
+		}
+		if cfg.Caption.SystemTemplate == "" || cfg.Caption.PromptTemplate == "" {
+			return fmt.Errorf("%s: images.caption system_template and prompt_template are required", label)
+		}
+		if err := validateLLMTemperature(fmt.Sprintf("%s images.caption", label), cfg.Caption.Temperature); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (d *CuratorDocument) resolveTemplateReferences() error {
 	if len(d.Templates) == 0 {
 		return nil
@@ -430,6 +491,12 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 			q.SystemTemplate = resolved.SystemTemplate
 			q.PromptTemplate = resolved.Template
 		}
+		if q.Images != nil && q.Images.Caption != nil {
+			if resolved, ok := byID[q.Images.Caption.PromptTemplate]; ok {
+				q.Images.Caption.SystemTemplate = resolved.SystemTemplate
+				q.Images.Caption.PromptTemplate = resolved.Template
+			}
+		}
 	}
 
 	// Post summary LLM
@@ -442,6 +509,12 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 			s.SystemTemplate = resolved.SystemTemplate
 			s.PromptTemplate = resolved.Template
 		}
+		if s.Images != nil && s.Images.Caption != nil {
+			if resolved, ok := byID[s.Images.Caption.PromptTemplate]; ok {
+				s.Images.Caption.SystemTemplate = resolved.SystemTemplate
+				s.Images.Caption.PromptTemplate = resolved.Template
+			}
+		}
 	}
 
 	// Run summary LLM
@@ -453,6 +526,12 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 		if resolved, ok := byID[s.PromptTemplate]; ok {
 			s.SystemTemplate = resolved.SystemTemplate
 			s.PromptTemplate = resolved.Template
+		}
+		if s.Images != nil && s.Images.Caption != nil {
+			if resolved, ok := byID[s.Images.Caption.PromptTemplate]; ok {
+				s.Images.Caption.SystemTemplate = resolved.SystemTemplate
+				s.Images.Caption.PromptTemplate = resolved.Template
+			}
 		}
 	}
 

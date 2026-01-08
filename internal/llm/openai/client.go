@@ -55,6 +55,22 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 
 	messages := make([]openai.ChatCompletionMessageParamUnion, 0, len(request.Messages))
 	for _, msg := range request.Messages {
+		if len(msg.Parts) > 0 {
+			if msg.Role != llm.RoleUser {
+				err := fmt.Errorf("openai: only user messages may include multipart content")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return llm.ChatResponse{}, err
+			}
+			contentParts, err := openAIContentParts(msg.Parts)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return llm.ChatResponse{}, err
+			}
+			messages = append(messages, openai.UserMessage(contentParts))
+			continue
+		}
 		switch msg.Role {
 		case llm.RoleSystem:
 			messages = append(messages, openai.SystemMessage(msg.Content))
@@ -89,4 +105,27 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 
 	span.SetStatus(codes.Ok, "")
 	return llm.ChatResponse{Content: response.Choices[0].Message.Content}, nil
+}
+
+func openAIContentParts(parts []llm.MessagePart) ([]openai.ChatCompletionContentPartUnionParam, error) {
+	contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(parts))
+	for _, part := range parts {
+		switch part.Type {
+		case llm.MessagePartText:
+			if part.Text == "" {
+				continue
+			}
+			contentParts = append(contentParts, openai.TextContentPart(part.Text))
+		case llm.MessagePartImageURL:
+			if part.ImageURL == "" {
+				continue
+			}
+			contentParts = append(contentParts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+				URL: part.ImageURL,
+			}))
+		default:
+			return nil, fmt.Errorf("openai: unsupported message part type %q", part.Type)
+		}
+	}
+	return contentParts, nil
 }

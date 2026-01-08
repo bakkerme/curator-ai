@@ -9,9 +9,23 @@ const (
 	RoleUser   MessageRole = "user"
 )
 
+type MessagePartType string
+
+const (
+	MessagePartText     MessagePartType = "text"
+	MessagePartImageURL MessagePartType = "image_url"
+)
+
+type MessagePart struct {
+	Type     MessagePartType
+	Text     string
+	ImageURL string
+}
+
 type Message struct {
 	Role    MessageRole
 	Content string
+	Parts   []MessagePart
 }
 
 type ChatRequest struct {
