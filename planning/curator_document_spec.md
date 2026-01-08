@@ -105,8 +105,7 @@ llm:
     include_comment_images: bool # Optional: include images from comments
     caption:                     # Required when mode is "caption"
       model: string              # Optional: Model override for captioning
-      system_template: string    # Reference to caption system template
-      prompt_template: string    # Reference to caption prompt template
+      template: string           # Reference to caption templates
       temperature: number        # Optional: sampling temperature for captions
       max_concurrency: number    # Optional: concurrency for caption calls
 ```
@@ -133,8 +132,7 @@ llm:
     include_comment_images: bool # Optional: include images from comments
     caption:                     # Required when mode is "caption"
       model: string              # Optional: Model override for captioning
-      system_template: string    # Reference to caption system template
-      prompt_template: string    # Reference to caption prompt template
+      template: string           # Reference to caption templates
       temperature: number        # Optional: sampling temperature for captions
       max_concurrency: number    # Optional: concurrency for caption calls
 ```
