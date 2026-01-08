@@ -23,14 +23,15 @@ import (
 )
 
 type Factory struct {
-	Logger        *slog.Logger
-	LLMClient     llm.Client
-	DefaultModel  string
-	SMTPDefaults  config.SMTPEnvConfig
-	JinaReader    jina.Reader
-	RedditFetcher reddit.Fetcher
-	RSSFetcher    rss.Fetcher
-	EmailSender   email.Sender
+	Logger             *slog.Logger
+	LLMClient          llm.Client
+	DefaultModel       string
+	DefaultTemperature *float64
+	SMTPDefaults       config.SMTPEnvConfig
+	JinaReader         jina.Reader
+	RedditFetcher      reddit.Fetcher
+	RSSFetcher         rss.Fetcher
+	EmailSender        email.Sender
 }
 
 func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
@@ -39,13 +40,14 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 	}
 	llmClient := llmopenai.NewClient(env.OpenAI)
 	return &Factory{
-		Logger:        logger,
-		LLMClient:     llmClient,
-		DefaultModel:  env.OpenAI.Model,
-		SMTPDefaults:  env.SMTP,
-		JinaReader:    jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
-		RedditFetcher: reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
-		RSSFetcher:    rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
+		Logger:             logger,
+		LLMClient:          llmClient,
+		DefaultModel:       env.OpenAI.Model,
+		DefaultTemperature: env.OpenAI.Temperature,
+		SMTPDefaults:       env.SMTP,
+		JinaReader:         jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
+		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
+		RSSFetcher:         rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
 		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
 		// Document to take effect.
@@ -82,7 +84,7 @@ func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor
 }
 
 func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
-	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, 
 }
 
 func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
-	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +100,7 @@ func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, 
 }
 
 func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
-	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger)
+	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
 	}

@@ -18,6 +18,7 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `OPENAI_API_KEY` (required for LLM processors)
 - `OPENAI_BASE_URL` (optional for OpenAI-compatible endpoints)
 - `OPENAI_MODEL` (optional, default: `gpt-4o-mini`)
+- `OPENAI_TEMPERATURE` (optional, default: provider default; overridden by per-processor YAML `temperature`)
 
 ### Email Output (SMTP)
 - `SMTP_HOST` (required unless set in YAML)

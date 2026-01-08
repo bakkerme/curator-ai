@@ -20,16 +20,17 @@ type RunLLMProcessor struct {
 	config         config.LLMSummary
 	client         llm.Client
 	defaultModel   string
+	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
 }
 
 func NewRunLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*RunLLMProcessor, error) {
-	return NewRunLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+	return NewRunLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger) (*RunLLMProcessor, error) {
+func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*RunLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("run summary config is required")
 	}
@@ -48,6 +49,7 @@ func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, def
 		config:         *cfg,
 		client:         client,
 		defaultModel:   defaultModel,
+		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -108,7 +110,15 @@ func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostB
 	}
 
 	model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
-	logger.Info("llm run summary summarizing", "blocks", len(blocks), "model", model, "has_current_summary", current != nil)
+	temperature := p.config.Temperature
+	if temperature == nil {
+		temperature = p.defaultTemp
+	}
+	var temperatureLog any
+	if temperature != nil {
+		temperatureLog = *temperature
+	}
+	logger.Info("llm run summary summarizing", "blocks", len(blocks), "model", model, "temperature", temperatureLog, "has_current_summary", current != nil)
 
 	var summary string
 	_, err = llmutil.ChatSystemUserWithRetries(
@@ -122,6 +132,7 @@ func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostB
 			summary = content
 			return nil
 		},
+		temperature,
 	)
 	if err != nil {
 		return nil, err

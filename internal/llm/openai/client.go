@@ -37,17 +37,20 @@ func NewClient(cfg config.OpenAIEnvConfig, opts ...option.RequestOption) *Client
 func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
 	tracer := otel.Tracer("curator-ai/llm/openai")
 	ctx, span := tracer.Start(ctx, "llm.openai.chat.completions")
-	span.SetAttributes(
+	attrs := []attribute.KeyValue{
 		attribute.String("openinference.span.kind", "LLM"),
 		attribute.String("llm.provider", "openai"),
 		attribute.String("llm.model", request.Model),
-		attribute.Float64("llm.temperature", request.Temperature),
 		attribute.Int("llm.max_tokens", request.MaxTokens),
 		attribute.Int("llm.input_messages", len(request.Messages)),
 		attribute.String("flow.id", core.FlowIDFromContext(ctx)),
 		attribute.String("run.id", core.RunIDFromContext(ctx)),
 		attribute.String("session.id", core.RunIDFromContext(ctx)),
-	)
+	}
+	if request.Temperature != nil {
+		attrs = append(attrs, attribute.Float64("llm.temperature", *request.Temperature))
+	}
+	span.SetAttributes(attrs...)
 	defer span.End()
 
 	messages := make([]openai.ChatCompletionMessageParamUnion, 0, len(request.Messages))
@@ -64,8 +67,8 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 		Model:    openai.ChatModel(request.Model),
 		Messages: messages,
 	}
-	if request.Temperature > 0 {
-		params.Temperature = openai.Float(request.Temperature)
+	if request.Temperature != nil {
+		params.Temperature = openai.Float(*request.Temperature)
 	}
 	if request.MaxTokens > 0 {
 		params.MaxTokens = openai.Int(int64(request.MaxTokens))

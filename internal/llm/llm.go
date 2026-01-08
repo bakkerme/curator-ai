@@ -17,7 +17,7 @@ type Message struct {
 type ChatRequest struct {
 	Model       string
 	Messages    []Message
-	Temperature float64
+	Temperature *float64
 	MaxTokens   int
 }
 

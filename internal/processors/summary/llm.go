@@ -21,16 +21,17 @@ type PostLLMProcessor struct {
 	config         config.LLMSummary
 	client         llm.Client
 	defaultModel   string
+	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
 }
 
 func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*PostLLMProcessor, error) {
-	return NewPostLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+	return NewPostLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger) (*PostLLMProcessor, error) {
+func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*PostLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("summary config is required")
 	}
@@ -49,6 +50,7 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 		config:         *cfg,
 		client:         client,
 		defaultModel:   defaultModel,
+		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -103,9 +105,17 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
-		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model)
+		temperature := p.config.Temperature
+		if temperature == nil {
+			temperature = p.defaultTemp
+		}
+		var temperatureLog any
+		if temperature != nil {
+			temperatureLog = *temperature
+		}
+		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
-		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil)
+		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
 		if err != nil {
 			return err
 		}

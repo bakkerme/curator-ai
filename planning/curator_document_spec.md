@@ -92,6 +92,7 @@ AI-powered content evaluation for relevance and quality. By default, this is int
 llm:
   name: string                   # Unique identifier
   model: string                  # Optional: Model override (default: system default)
+  temperature: number            # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
   prompt_template: string        # Reference to prompt template
   evaluations: [string]          # Positive criteria - content should match these
   exclusions: [string]           # Negative criteria - content matching these is dropped
@@ -110,6 +111,7 @@ llm:
   type: string                   # "llm" - processor type
   context: string                # "post" - operates on individual posts
   model: string                  # Optional: Model override
+  temperature: number            # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
   prompt_template: string        # Reference to prompt template
   params:                        # Optional: Additional parameters for the prompt
     my_additional_param: [string]          # An additional example param
@@ -134,6 +136,7 @@ llm:
   type: string                    # "llm" - processor type
   context: string                 # "flow" - operates on entire flow results
   model: string                   # Optional: Model override
+  temperature: number             # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
   prompt_template: string         # Reference to prompt template
   params:                         # Optional: Additional parameters
     my_additional_param: [string] # An additional example param

@@ -94,6 +94,7 @@ type QualityRule struct {
 type LLMQuality struct {
 	Name           string   `yaml:"name"`
 	Model          string   `yaml:"model,omitempty"`
+	Temperature    *float64 `yaml:"temperature,omitempty"`
 	SystemTemplate string   `yaml:"system_template"`
 	PromptTemplate string   `yaml:"prompt_template"`
 	Evaluations    []string `yaml:"evaluations,omitempty"`
@@ -118,6 +119,7 @@ type LLMSummary struct {
 	Type           string                 `yaml:"type"`
 	Context        string                 `yaml:"context"`
 	Model          string                 `yaml:"model,omitempty"`
+	Temperature    *float64               `yaml:"temperature,omitempty"`
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
@@ -310,6 +312,9 @@ func (d *CuratorDocument) Validate() error {
 			if quality.LLM.Name == "" || quality.LLM.PromptTemplate == "" {
 				return fmt.Errorf("quality %d: LLM name and prompt_template are required", i)
 			}
+			if err := validateLLMTemperature(fmt.Sprintf("quality %d llm", i), quality.LLM.Temperature); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("quality %d llm", i), quality.LLM.Snapshot); err != nil {
 				return err
 			}
@@ -328,6 +333,9 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("post_summary %d: context must be 'post'", i)
 		}
 		if summary.LLM != nil {
+			if err := validateLLMTemperature(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Snapshot); err != nil {
 				return err
 			}
@@ -350,6 +358,9 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
 		}
 		if summary.LLM != nil {
+			if err := validateLLMTemperature(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Snapshot); err != nil {
 				return err
 			}
@@ -373,6 +384,16 @@ func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
 	}
 	if (cfg.Snapshot || cfg.Restore) && cfg.Path == "" {
 		return fmt.Errorf("%s: snapshot path is required", label)
+	}
+	return nil
+}
+
+func validateLLMTemperature(label string, temperature *float64) error {
+	if temperature == nil {
+		return nil
+	}
+	if *temperature < 0 || *temperature > 2 {
+		return fmt.Errorf("%s: temperature must be between 0 and 2", label)
 	}
 	return nil
 }

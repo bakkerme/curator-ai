@@ -22,6 +22,7 @@ type LLMProcessor struct {
 	config         config.LLMQuality
 	client         llm.Client
 	defaultModel   string
+	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
@@ -33,10 +34,10 @@ type qualityResponse struct {
 }
 
 func NewLLMProcessor(cfg *config.LLMQuality, client llm.Client, defaultModel string) (*LLMProcessor, error) {
-	return NewLLMProcessorWithLogger(cfg, client, defaultModel, nil)
+	return NewLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaultModel string, logger *slog.Logger) (*LLMProcessor, error) {
+func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*LLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("llm quality config is required")
 	}
@@ -55,6 +56,7 @@ func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaul
 		config:         *cfg,
 		client:         client,
 		defaultModel:   defaultModel,
+		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -125,7 +127,15 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
-		logger.Info("llm quality evaluating block", "block_id", block.ID, "model", model)
+		temperature := p.config.Temperature
+		if temperature == nil {
+			temperature = p.defaultTemp
+		}
+		var temperatureLog any
+		if temperature != nil {
+			temperatureLog = *temperature
+		}
+		logger.Info("llm quality evaluating block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
 		var parsed qualityResponse
 		_, err = llmutil.ChatSystemUserWithRetries(
@@ -138,6 +148,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 			func(content string) error {
 				return json.Unmarshal([]byte(content), &parsed)
 			},
+			temperature,
 		)
 		if err != nil {
 			return false, fmt.Errorf("parse llm quality response: %w", err)

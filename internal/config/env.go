@@ -23,10 +23,11 @@ type EnvConfig struct {
 }
 
 type OpenAIEnvConfig struct {
-	APIKey  string
-	BaseURL string
-	Model   string
-	OTel    OpenAIOTelEnvConfig
+	APIKey      string
+	BaseURL     string
+	Model       string
+	Temperature *float64
+	OTel        OpenAIOTelEnvConfig
 }
 
 type OpenAIOTelEnvConfig struct {
@@ -92,9 +93,10 @@ func LoadEnv() EnvConfig {
 		AllowPartialSourceErrors: envBool("ALLOW_PARTIAL_SOURCE_ERRORS", false),
 		SessionID:                strings.TrimSpace(envString("SESSION_ID", "")),
 		OpenAI: OpenAIEnvConfig{
-			APIKey:  strings.TrimSpace(envString("OPENAI_API_KEY", "")),
-			BaseURL: strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
-			Model:   openAIModel,
+			APIKey:      strings.TrimSpace(envString("OPENAI_API_KEY", "")),
+			BaseURL:     strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
+			Model:       openAIModel,
+			Temperature: envFloatPtr("OPENAI_TEMPERATURE"),
 			OTel: OpenAIOTelEnvConfig{
 				Enabled:       envBool("OTEL_OPENAI_ENABLED", true),
 				CaptureBodies: envBool("OTEL_CAPTURE_OPENAI_BODIES", false),
@@ -180,6 +182,18 @@ func envFloat(key string, fallback float64) float64 {
 		return fallback
 	}
 	return f
+}
+
+func envFloatPtr(key string) *float64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return nil
+	}
+	return &f
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {
