@@ -496,7 +496,7 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 			q.PromptTemplate = resolved.Template
 		}
 		if q.Images != nil && q.Images.Caption != nil {
-			if resolved, ok := byID[q.Images.Caption.PromptTemplate]; ok {
+			if resolved, ok := byID[q.Images.Caption.Template]; ok {
 				q.Images.Caption.SystemTemplate = resolved.SystemTemplate
 				q.Images.Caption.PromptTemplate = resolved.Template
 			}
@@ -514,7 +514,7 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 			s.PromptTemplate = resolved.Template
 		}
 		if s.Images != nil && s.Images.Caption != nil {
-			if resolved, ok := byID[s.Images.Caption.PromptTemplate]; ok {
+			if resolved, ok := byID[s.Images.Caption.Template]; ok {
 				s.Images.Caption.SystemTemplate = resolved.SystemTemplate
 				s.Images.Caption.PromptTemplate = resolved.Template
 			}
@@ -532,7 +532,7 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 			s.PromptTemplate = resolved.Template
 		}
 		if s.Images != nil && s.Images.Caption != nil {
-			if resolved, ok := byID[s.Images.Caption.PromptTemplate]; ok {
+			if resolved, ok := byID[s.Images.Caption.Template]; ok {
 				s.Images.Caption.SystemTemplate = resolved.SystemTemplate
 				s.Images.Caption.PromptTemplate = resolved.Template
 			}
