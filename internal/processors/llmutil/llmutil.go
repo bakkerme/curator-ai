@@ -62,12 +62,11 @@ func ChatUser(ctx context.Context, client llm.Client, model, userPrompt string, 
 	})
 }
 
-// ChatSystemUserWithRetries retries the request when decode fails. The prompt is not modified between attempts.
-// If decode is nil, this behaves like ChatSystemUser with a single attempt.
-func ChatSystemUserWithRetries(
+func ChatCompletionWithRetries(
 	ctx context.Context,
 	client llm.Client,
-	model, systemPrompt, userPrompt string,
+	model string,
+	messages []llm.Message,
 	decodeRetries int,
 	decode ResponseDecoder,
 	temperature *float64,
@@ -80,7 +79,11 @@ func ChatSystemUserWithRetries(
 	var lastResp llm.ChatResponse
 	var lastDecodeErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		resp, err := ChatSystemUser(ctx, client, model, systemPrompt, userPrompt, temperature)
+		resp, err := client.ChatCompletion(ctx, llm.ChatRequest{
+			Model:       model,
+			Messages:    messages,
+			Temperature: temperature,
+		})
 		if err != nil {
 			return llm.ChatResponse{}, err
 		}
@@ -98,6 +101,22 @@ func ChatSystemUserWithRetries(
 	return lastResp, fmt.Errorf("decode response after %d attempt(s): %w; content=%q", attempts, lastDecodeErr, lastResp.Content)
 }
 
+// ChatSystemUserWithRetries retries the request when decode fails. The prompt is not modified between attempts.
+// If decode is nil, this behaves like ChatSystemUser with a single attempt.
+func ChatSystemUserWithRetries(
+	ctx context.Context,
+	client llm.Client,
+	model, systemPrompt, userPrompt string,
+	decodeRetries int,
+	decode ResponseDecoder,
+	temperature *float64,
+) (llm.ChatResponse, error) {
+	return ChatCompletionWithRetries(ctx, client, model, []llm.Message{
+		{Role: llm.RoleSystem, Content: systemPrompt},
+		{Role: llm.RoleUser, Content: userPrompt},
+	}, decodeRetries, decode, temperature)
+}
+
 // ChatUserWithRetries retries the request when decode fails. The prompt is not modified between attempts.
 // If decode is nil, this behaves like ChatUser with a single attempt.
 func ChatUserWithRetries(
@@ -108,28 +127,7 @@ func ChatUserWithRetries(
 	decode ResponseDecoder,
 	temperature *float64,
 ) (llm.ChatResponse, error) {
-	attempts := decodeRetries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
-
-	var lastResp llm.ChatResponse
-	var lastDecodeErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		resp, err := ChatUser(ctx, client, model, userPrompt, temperature)
-		if err != nil {
-			return llm.ChatResponse{}, err
-		}
-		lastResp = resp
-		if decode == nil {
-			return resp, nil
-		}
-		if err := decode(resp.Content); err != nil {
-			lastDecodeErr = err
-			continue
-		}
-		return resp, nil
-	}
-
-	return lastResp, fmt.Errorf("decode response after %d attempt(s): %w; content=%q", attempts, lastDecodeErr, lastResp.Content)
+	return ChatCompletionWithRetries(ctx, client, model, []llm.Message{
+		{Role: llm.RoleUser, Content: userPrompt},
+	}, decodeRetries, decode, temperature)
 }

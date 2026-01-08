@@ -10,6 +10,9 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 )
 
+// validateTemplateTypes checks all templates in the CuratorDocument for type correctness
+// by attempting to parse and execute them with sample data. It returns an error if any
+// template fails to parse or execute.
 func (d *CuratorDocument) validateTemplateTypes() error {
 	post := samplePostBlockForTemplateValidation()
 	run := sampleRunSummaryForTemplateValidation()
@@ -40,6 +43,25 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 				return fmt.Errorf("quality %d (%s): prompt_template type check failed: %w", i, q.Name, err)
 			}
 		}
+		if q.Images != nil && q.Images.Caption != nil {
+			captionData := struct {
+				Post  *core.PostBlock
+				Image *core.ImageBlock
+			}{
+				Post:  post,
+				Image: &post.ImageBlocks[0],
+			}
+			if q.Images.Caption.SystemTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("quality[%d].images.caption.system_template", i), q.Images.Caption.SystemTemplate, captionData); err != nil {
+					return fmt.Errorf("quality %d (%s): images.caption.system_template type check failed: %w", i, q.Name, err)
+				}
+			}
+			if q.Images.Caption.PromptTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("quality[%d].images.caption.prompt_template", i), q.Images.Caption.PromptTemplate, captionData); err != nil {
+					return fmt.Errorf("quality %d (%s): images.caption.prompt_template type check failed: %w", i, q.Name, err)
+				}
+			}
+		}
 	}
 
 	// Post summary LLM templates.
@@ -65,6 +87,25 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 				return fmt.Errorf("post_summary %d (%s): prompt_template type check failed: %w", i, s.Name, err)
 			}
 		}
+		if s.Images != nil && s.Images.Caption != nil {
+			captionData := struct {
+				Post  *core.PostBlock
+				Image *core.ImageBlock
+			}{
+				Post:  post,
+				Image: &post.ImageBlocks[0],
+			}
+			if s.Images.Caption.SystemTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].images.caption.system_template", i), s.Images.Caption.SystemTemplate, captionData); err != nil {
+					return fmt.Errorf("post_summary %d (%s): images.caption.system_template type check failed: %w", i, s.Name, err)
+				}
+			}
+			if s.Images.Caption.PromptTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].images.caption.prompt_template", i), s.Images.Caption.PromptTemplate, captionData); err != nil {
+					return fmt.Errorf("post_summary %d (%s): images.caption.prompt_template type check failed: %w", i, s.Name, err)
+				}
+			}
+		}
 	}
 
 	// Run summary LLM templates.
@@ -88,6 +129,25 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 		if s.PromptTemplate != "" {
 			if err := typeCheckTextTemplate(fmt.Sprintf("run_summary[%d].prompt_template", i), s.PromptTemplate, data); err != nil {
 				return fmt.Errorf("run_summary %d (%s): prompt_template type check failed: %w", i, s.Name, err)
+			}
+		}
+		if s.Images != nil && s.Images.Caption != nil {
+			captionData := struct {
+				Post  *core.PostBlock
+				Image *core.ImageBlock
+			}{
+				Post:  post,
+				Image: &post.ImageBlocks[0],
+			}
+			if s.Images.Caption.SystemTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("run_summary[%d].images.caption.system_template", i), s.Images.Caption.SystemTemplate, captionData); err != nil {
+					return fmt.Errorf("run_summary %d (%s): images.caption.system_template type check failed: %w", i, s.Name, err)
+				}
+			}
+			if s.Images.Caption.PromptTemplate != "" {
+				if err := typeCheckTextTemplate(fmt.Sprintf("run_summary[%d].images.caption.prompt_template", i), s.Images.Caption.PromptTemplate, captionData); err != nil {
+					return fmt.Errorf("run_summary %d (%s): images.caption.prompt_template type check failed: %w", i, s.Name, err)
+				}
 			}
 		}
 	}
@@ -134,6 +194,7 @@ func typeCheckHTMLTemplate(name, templateText string, data any) error {
 	return tmpl.Execute(&buf, data)
 }
 
+// The sample block needs to contain a fully formed PostBlock with all possible fields populated
 func samplePostBlockForTemplateValidation() *core.PostBlock {
 	now := time.Unix(0, 0).UTC()
 	return &core.PostBlock{
@@ -180,4 +241,3 @@ func sampleRunSummaryForTemplateValidation() *core.RunSummary {
 		ProcessedAt:   now,
 	}
 }
-

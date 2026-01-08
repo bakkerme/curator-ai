@@ -24,6 +24,8 @@ type PostLLMProcessor struct {
 	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
+	imageSystem    *template.Template
+	imageTemplate  *template.Template
 	logger         *slog.Logger
 }
 
@@ -40,6 +42,17 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 	if err != nil {
 		return nil, err
 	}
+	var imageSystemTmpl *template.Template
+	var imagePromptTmpl *template.Template
+	if cfg.Images != nil && cfg.Images.Enabled && cfg.Images.Mode == config.ImageModeCaption {
+		if cfg.Images.Caption == nil {
+			return nil, fmt.Errorf("image caption config is required when images.mode=caption")
+		}
+		imageSystemTmpl, imagePromptTmpl, err = llmutil.ParseSystemAndPromptTemplates(cfg.Name+"-image-caption", cfg.Images.Caption.SystemTemplate, cfg.Images.Caption.PromptTemplate)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if logger == nil {
 		logger = slog.Default()
@@ -53,6 +66,8 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		imageSystem:    imageSystemTmpl,
+		imageTemplate:  imagePromptTmpl,
 		logger:         logger,
 	}, nil
 }
@@ -86,6 +101,19 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
 
 	summarizeOne := func(ctx context.Context, block *core.PostBlock) error {
+		if err := llmutil.EnsureImageCaptions(
+			ctx,
+			p.client,
+			block,
+			p.config.Images,
+			llmutil.CaptionTemplates{System: p.imageSystem, Prompt: p.imageTemplate},
+			p.defaultModel,
+			p.defaultTemp,
+			logger,
+		); err != nil {
+			return err
+		}
+
 		data := struct {
 			*core.PostBlock
 			Params map[string]interface{}
@@ -115,7 +143,17 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		}
 		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
-		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+		var response llm.ChatResponse
+		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
+			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
+			userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
+			response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+				{Role: llm.RoleSystem, Content: systemPrompt},
+				userMessage,
+			}, RETRIES, nil, temperature)
+		} else {
+			response, err = llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+		}
 		if err != nil {
 			return err
 		}

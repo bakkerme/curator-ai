@@ -25,6 +25,8 @@ type LLMProcessor struct {
 	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
+	imageSystem    *template.Template
+	imageTemplate  *template.Template
 	logger         *slog.Logger
 }
 
@@ -46,6 +48,17 @@ func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaul
 	if err != nil {
 		return nil, err
 	}
+	var imageSystemTmpl *template.Template
+	var imagePromptTmpl *template.Template
+	if cfg.Images != nil && cfg.Images.Enabled && cfg.Images.Mode == config.ImageModeCaption {
+		if cfg.Images.Caption == nil {
+			return nil, fmt.Errorf("image caption config is required when images.mode=caption")
+		}
+		imageSystemTmpl, imagePromptTmpl, err = llmutil.ParseSystemAndPromptTemplates(cfg.Name+"-image-caption", cfg.Images.Caption.SystemTemplate, cfg.Images.Caption.PromptTemplate)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if logger == nil {
 		logger = slog.Default()
@@ -59,6 +72,8 @@ func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaul
 		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		imageSystem:    imageSystemTmpl,
+		imageTemplate:  imagePromptTmpl,
 		logger:         logger,
 	}, nil
 }
@@ -106,6 +121,19 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 	}
 
 	evaluateOne := func(ctx context.Context, block *core.PostBlock) (bool, error) {
+		if err := llmutil.EnsureImageCaptions(
+			ctx,
+			p.client,
+			block,
+			p.config.Images,
+			llmutil.CaptionTemplates{System: p.imageSystem, Prompt: p.imageTemplate},
+			p.defaultModel,
+			p.defaultTemp,
+			logger,
+		); err != nil {
+			return false, err
+		}
+
 		data := struct {
 			*core.PostBlock
 			Evaluations []string
@@ -138,18 +166,29 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		logger.Info("llm quality evaluating block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
 		var parsed qualityResponse
-		_, err = llmutil.ChatSystemUserWithRetries(
-			ctx,
-			p.client,
-			model,
-			system_prompt,
-			user_prompt,
-			decodeRetries,
-			func(content string) error {
+		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
+			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
+			userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
+			_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+				{Role: llm.RoleSystem, Content: system_prompt},
+				userMessage,
+			}, decodeRetries, func(content string) error {
 				return json.Unmarshal([]byte(content), &parsed)
-			},
-			temperature,
-		)
+			}, temperature)
+		} else {
+			_, err = llmutil.ChatSystemUserWithRetries(
+				ctx,
+				p.client,
+				model,
+				system_prompt,
+				user_prompt,
+				decodeRetries,
+				func(content string) error {
+					return json.Unmarshal([]byte(content), &parsed)
+				},
+				temperature,
+			)
+		}
 		if err != nil {
 			return false, fmt.Errorf("parse llm quality response: %w", err)
 		}

@@ -98,6 +98,16 @@ llm:
   exclusions: [string]           # Negative criteria - content matching these is dropped
   action_type: string            # "pass_drop" - binary decision
   threshold: number              # Optional: Score threshold (0-1) for pass/drop decision
+  images:
+    enabled: boolean             # Optional: attach images for LLM stages
+    mode: string                 # "multimodal" | "caption"
+    max_images: number           # Optional: cap images per post (0 = unlimited)
+    include_comment_images: bool # Optional: include images from comments
+    caption:                     # Required when mode is "caption"
+      model: string              # Optional: Model override for captioning
+      template: string           # Reference to caption templates
+      temperature: number        # Optional: sampling temperature for captions
+      max_concurrency: number    # Optional: concurrency for caption calls
 ```
 
 ### Summary Processors
@@ -115,6 +125,16 @@ llm:
   prompt_template: string        # Reference to prompt template
   params:                        # Optional: Additional parameters for the prompt
     my_additional_param: [string]          # An additional example param
+  images:
+    enabled: boolean             # Optional: attach images for LLM stages
+    mode: string                 # "multimodal" | "caption"
+    max_images: number           # Optional: cap images per post (0 = unlimited)
+    include_comment_images: bool # Optional: include images from comments
+    caption:                     # Required when mode is "caption"
+      model: string              # Optional: Model override for captioning
+      template: string           # Reference to caption templates
+      temperature: number        # Optional: sampling temperature for captions
+      max_concurrency: number    # Optional: concurrency for caption calls
 ```
 
 #### Markdown Summary (Post-level)

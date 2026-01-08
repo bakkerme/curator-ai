@@ -353,6 +353,59 @@ func TestValidation(t *testing.T) {
 			errorMsg:    "output configuration is required",
 		},
 		{
+			name: "Images enabled without mode",
+			doc: CuratorDocument{
+				Workflow: Workflow{
+					Name:    "Test",
+					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Quality: []QualityConfig{{LLM: &LLMQuality{
+						Name:           "quality_check",
+						PromptTemplate: "quality_template",
+						ActionType:     "pass_drop",
+						Images:         &LLMImages{Enabled: true},
+					}}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
+				},
+			},
+			expectError: true,
+			errorMsg:    "images.mode is required",
+		},
+		{
+			name: "Caption mode missing templates",
+			doc: CuratorDocument{
+				Workflow: Workflow{
+					Name:    "Test",
+					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					PostSummary: []SummaryConfig{{LLM: &LLMSummary{
+						Name:           "post_sum",
+						Type:           "llm",
+						Context:        "post",
+						PromptTemplate: "summary_template",
+						Images: &LLMImages{
+							Enabled: true,
+							Mode:    ImageModeCaption,
+							Caption: &LLMImageCaption{},
+						},
+					}}},
+					Output: []OutputConfig{{Email: &EmailOutput{
+						Template: "test",
+						To:       "test@test.com",
+						From:     "noreply@test.com",
+						Subject:  "Test Subject",
+					}}},
+				},
+			},
+			expectError: true,
+			errorMsg:    "images.caption system_template and prompt_template are required",
+		},
+		{
 			name: "RSS source missing feeds",
 			doc: CuratorDocument{
 				Workflow: Workflow{
