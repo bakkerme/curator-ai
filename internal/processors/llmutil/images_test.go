@@ -124,7 +124,7 @@ func TestEnsureImageCaptions_GuardsAndBasicBehavior(t *testing.T) {
 
 	t.Run("disabled does nothing", func(t *testing.T) {
 		cfg := &config.LLMImages{Enabled: false, Mode: config.ImageModeCaption, Caption: &config.LLMImageCaption{}}
-		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{}, "m", nil, nil, nil)
+		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{}, "m", nil, nil)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
@@ -132,7 +132,7 @@ func TestEnsureImageCaptions_GuardsAndBasicBehavior(t *testing.T) {
 
 	t.Run("missing caption config errors", func(t *testing.T) {
 		cfg := &config.LLMImages{Enabled: true, Mode: config.ImageModeCaption}
-		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{System: template.Must(template.New("s").Parse("s")), Prompt: template.Must(template.New("p").Parse("p"))}, "m", nil, nil, nil)
+		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{System: template.Must(template.New("s").Parse("s")), Prompt: template.Must(template.New("p").Parse("p"))}, "m", nil, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -140,7 +140,7 @@ func TestEnsureImageCaptions_GuardsAndBasicBehavior(t *testing.T) {
 
 	t.Run("missing templates errors", func(t *testing.T) {
 		cfg := &config.LLMImages{Enabled: true, Mode: config.ImageModeCaption, Caption: &config.LLMImageCaption{}}
-		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{}, "m", nil, nil, nil)
+		err := EnsureImageCaptions(ctx, client, block, cfg, CaptionTemplates{}, "m", nil, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -152,7 +152,7 @@ func TestEnsureImageCaptions_GuardsAndBasicBehavior(t *testing.T) {
 			System: template.Must(template.New("s").Parse("system")),
 			Prompt: template.Must(template.New("p").Parse("prompt")),
 		}
-		err := EnsureImageCaptions(ctx, client, &core.PostBlock{}, cfg, tmpls, "m", nil, nil, nil)
+		err := EnsureImageCaptions(ctx, client, &core.PostBlock{}, cfg, tmpls, "m", nil, nil)
 		if err != nil {
 			t.Fatalf("expected nil, got %v", err)
 		}
@@ -186,7 +186,7 @@ func TestEnsureImageCaptions_CaptionsAndRespectsIncludeAndMaxImages(t *testing.T
 		Prompt: template.Must(template.New("p").Parse("{{.Image.URL}}")),
 	}
 
-	err := EnsureImageCaptions(ctx, client, block, cfg, tmpls, "m", nil, nil, nil)
+	err := EnsureImageCaptions(ctx, client, block, cfg, tmpls, "m", nil, nil)
 	if err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
@@ -267,7 +267,7 @@ func TestEnsureImageCaptions_ConcurrentCaptioningRespectsMaxConcurrency(t *testi
 		close(unblock)
 	}()
 
-	err := EnsureImageCaptions(ctx, client, block, cfg, tmpls, "m", nil, nil, nil)
+	err := EnsureImageCaptions(ctx, client, block, cfg, tmpls, "m", nil, nil)
 	if err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
