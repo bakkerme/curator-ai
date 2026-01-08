@@ -10,6 +10,9 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 )
 
+// validateTemplateTypes checks all templates in the CuratorDocument for type correctness
+// by attempting to parse and execute them with sample data. It returns an error if any
+// template fails to parse or execute.
 func (d *CuratorDocument) validateTemplateTypes() error {
 	post := samplePostBlockForTemplateValidation()
 	run := sampleRunSummaryForTemplateValidation()
@@ -191,6 +194,7 @@ func typeCheckHTMLTemplate(name, templateText string, data any) error {
 	return tmpl.Execute(&buf, data)
 }
 
+// The sample block needs to contain a fully formed PostBlock with all possible fields populated
 func samplePostBlockForTemplateValidation() *core.PostBlock {
 	now := time.Unix(0, 0).UTC()
 	return &core.PostBlock{

@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/expr-lang/expr v1.17.7
+	github.com/gabriel-vasile/mimetype v1.4.6
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1

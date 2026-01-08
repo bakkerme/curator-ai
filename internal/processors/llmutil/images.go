@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 	"sync"
 	"text/template"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/llm"
+	"github.com/gabriel-vasile/mimetype"
 )
 
 type CaptionTemplates struct {
@@ -140,12 +143,13 @@ func EnsureImageCaptions(
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
 
+captionLoop:
 	for _, image := range images {
 		image := image
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			break
+			break captionLoop
 		}
 
 		wg.Add(1)
@@ -181,6 +185,14 @@ func imageURLForMessage(image *core.ImageBlock) (string, bool) {
 	if len(image.ImageData) == 0 {
 		return "", false
 	}
+
+	contentType := mimetype.Detect(image.ImageData).String()
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(image.ImageData)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return "", false
+	}
 	encoded := base64.StdEncoding.EncodeToString(image.ImageData)
-	return fmt.Sprintf("data:image/png;base64,%s", encoded), true
+	return fmt.Sprintf("data:%s;base64,%s", contentType, encoded), true
 }
