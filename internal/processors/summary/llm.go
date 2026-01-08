@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"text/template"
 	"time"
 
@@ -82,7 +83,7 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	}
 	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
 
-	for _, block := range blocks {
+	summarizeOne := func(ctx context.Context, block *core.PostBlock) error {
 		data := struct {
 			*core.PostBlock
 			Params map[string]interface{}
@@ -93,12 +94,12 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 
 		systemPrompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		userPrompt, err := llmutil.ExecuteTemplate(p.template, data)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
@@ -106,13 +107,61 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 
 		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		block.Summary = &core.SummaryResult{
 			ProcessorName: p.name,
 			Summary:       response.Content,
 			ProcessedAt:   time.Now().UTC(),
 		}
+		return nil
 	}
-	return blocks, nil
+
+	maxConcurrency := p.config.MaxConcurrency
+	if maxConcurrency <= 1 || len(blocks) <= 1 {
+		for _, block := range blocks {
+			if err := summarizeOne(ctx, block); err != nil {
+				return nil, err
+			}
+		}
+		return blocks, nil
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
+
+loop:
+	for _, block := range blocks {
+		block := block
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			break loop
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := summarizeOne(ctx, block); err != nil {
+				select {
+				case errCh <- err:
+				default:
+				}
+				cancel()
+			}
+		}()
+	}
+
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return nil, err
+	default:
+		return blocks, nil
+	}
 }

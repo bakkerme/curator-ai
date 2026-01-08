@@ -10,6 +10,7 @@ The Curator Document is a YAML file that declaratively defines a curation workfl
 workflow:
   name: string                    # Human-readable workflow name
   version: string                 # Optional: Document schema version (default: "1.0")
+  max_concurrency: number         # Optional: max in-flight LLM calls for per-block processors
   
   trigger:                        # When to execute the workflow
     - <trigger_processor>         # Array of trigger configurations

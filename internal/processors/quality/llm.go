@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"text/template"
 	"time"
 
@@ -97,7 +98,12 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		threshold = 0.5
 	}
 
-	for _, block := range blocks {
+	decodeRetries := p.config.InvalidJSONRetries
+	if decodeRetries == 0 {
+		decodeRetries = RETRIES
+	}
+
+	evaluateOne := func(ctx context.Context, block *core.PostBlock) (bool, error) {
 		data := struct {
 			*core.PostBlock
 			Evaluations []string
@@ -110,12 +116,12 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 
 		system_prompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 
 		user_prompt, err := llmutil.ExecuteTemplate(p.template, data)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 
 		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
@@ -128,13 +134,13 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 			model,
 			system_prompt,
 			user_prompt,
-			RETRIES,
+			decodeRetries,
 			func(content string) error {
 				return json.Unmarshal([]byte(content), &parsed)
 			},
 		)
 		if err != nil {
-			return nil, fmt.Errorf("parse llm quality response: %w", err)
+			return false, fmt.Errorf("parse llm quality response: %w", err)
 		}
 
 		result := "drop"
@@ -148,9 +154,68 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 			Reason:        parsed.Reason,
 			ProcessedAt:   time.Now().UTC(),
 		}
-		if result == "pass" {
-			filtered = append(filtered, block)
+		return result == "pass", nil
+	}
+
+	maxConcurrency := p.config.MaxConcurrency
+	if maxConcurrency <= 1 || len(blocks) <= 1 {
+		for _, block := range blocks {
+			pass, err := evaluateOne(ctx, block)
+			if err != nil {
+				return nil, err
+			}
+			if pass {
+				filtered = append(filtered, block)
+			}
 		}
+		return filtered, nil
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
+	passResults := make([]bool, len(blocks))
+
+loop:
+	for i, block := range blocks {
+		i, block := i, block
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			break loop
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			pass, err := evaluateOne(ctx, block)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+				}
+				cancel()
+				return
+			}
+			passResults[i] = pass
+		}()
+	}
+
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return nil, err
+	default:
+		for i, block := range blocks {
+			if passResults[i] {
+				filtered = append(filtered, block)
+			}
+		}
+		return filtered, nil
 	}
 
 	return filtered, nil

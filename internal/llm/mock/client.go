@@ -2,11 +2,13 @@ package mock
 
 import (
 	"context"
+	"sync"
 
 	"github.com/bakkerme/curator-ai/internal/llm"
 )
 
 type Client struct {
+	mu        sync.Mutex
 	Responses []llm.ChatResponse
 	Err       error
 	Calls     []llm.ChatRequest
@@ -14,6 +16,8 @@ type Client struct {
 
 func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
 	_ = ctx
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Calls = append(c.Calls, request)
 	if c.Err != nil {
 		return llm.ChatResponse{}, c.Err

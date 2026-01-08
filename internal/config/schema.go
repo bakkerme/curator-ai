@@ -25,14 +25,15 @@ type TemplateDefinition struct {
 
 // Workflow contains the complete workflow configuration
 type Workflow struct {
-	Name        string          `yaml:"name"`
-	Version     string          `yaml:"version,omitempty"`
-	Trigger     []TriggerConfig `yaml:"trigger"`
-	Sources     []SourceConfig  `yaml:"sources"`
-	Quality     []QualityConfig `yaml:"quality,omitempty"`
-	PostSummary []SummaryConfig `yaml:"post_summary,omitempty"`
-	RunSummary  []SummaryConfig `yaml:"run_summary,omitempty"`
-	Output      []OutputConfig  `yaml:"output"`
+	Name           string          `yaml:"name"`
+	Version        string          `yaml:"version,omitempty"`
+	MaxConcurrency int             `yaml:"max_concurrency,omitempty"`
+	Trigger        []TriggerConfig `yaml:"trigger"`
+	Sources        []SourceConfig  `yaml:"sources"`
+	Quality        []QualityConfig `yaml:"quality,omitempty"`
+	PostSummary    []SummaryConfig `yaml:"post_summary,omitempty"`
+	RunSummary     []SummaryConfig `yaml:"run_summary,omitempty"`
+	Output         []OutputConfig  `yaml:"output"`
 }
 
 // TriggerConfig wraps different trigger types
@@ -99,6 +100,7 @@ type LLMQuality struct {
 	Exclusions     []string `yaml:"exclusions,omitempty"`
 	ActionType     string   `yaml:"action_type"`
 	Threshold      float64  `yaml:"threshold,omitempty"`
+	MaxConcurrency int      `yaml:"max_concurrency,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
 	InvalidJSONRetries int                  `yaml:"invalid_json_retries,omitempty"`
 	Snapshot           *core.SnapshotConfig `yaml:"snapshot,omitempty"`
@@ -119,6 +121,7 @@ type LLMSummary struct {
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+	MaxConcurrency int                    `yaml:"max_concurrency,omitempty"`
 	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
 }
 
@@ -665,6 +668,8 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 			}
 			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
 		} else if quality.LLM != nil {
+			quality.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
+
 			var qualityProcessor core.QualityProcessor
 			if factory != nil {
 				var err error
@@ -687,6 +692,8 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 	// 4. Post Summary processors
 	for _, summary := range d.Workflow.PostSummary {
 		if summary.LLM != nil {
+			summary.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
+
 			var summaryProcessor core.SummaryProcessor
 			if factory != nil {
 				var err error
@@ -726,6 +733,8 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 	// 5. Run Summary processors
 	for _, summary := range d.Workflow.RunSummary {
 		if summary.LLM != nil {
+			summary.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
+
 			var runSummaryProcessor core.RunSummaryProcessor
 			if factory != nil {
 				var err error
