@@ -22,26 +22,16 @@ type PostLLMProcessor struct {
 	client         llm.Client
 	defaultModel   string
 	defaultTemp    *float64
-	defaultTopP    *float64
-	defaultPresPen *float64
-	defaultTopK    *int
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
 }
 
 func NewPostLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*PostLLMProcessor, error) {
-	return NewPostLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil, nil, nil, nil)
+	return NewPostLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewPostLLMProcessorWithLogger(
-	cfg *config.LLMSummary,
-	client llm.Client,
-	defaultModel string,
-	logger *slog.Logger,
-	defaultTemp, defaultTopP, defaultPresencePenalty *float64,
-	defaultTopK *int,
-) (*PostLLMProcessor, error) {
+func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*PostLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("summary config is required")
 	}
@@ -61,9 +51,6 @@ func NewPostLLMProcessorWithLogger(
 		client:         client,
 		defaultModel:   defaultModel,
 		defaultTemp:    defaultTemp,
-		defaultTopP:    defaultTopP,
-		defaultPresPen: defaultPresencePenalty,
-		defaultTopK:    defaultTopK,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -122,51 +109,13 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		if temperature == nil {
 			temperature = p.defaultTemp
 		}
-		topP := p.config.TopP
-		if topP == nil {
-			topP = p.defaultTopP
-		}
-		presencePenalty := p.config.PresencePenalty
-		if presencePenalty == nil {
-			presencePenalty = p.defaultPresPen
-		}
-		topK := p.config.TopK
-		if topK == nil {
-			topK = p.defaultTopK
-		}
-
-		attrs := []any{"block_id", block.ID, "model", model}
+		var temperatureLog any
 		if temperature != nil {
-			attrs = append(attrs, "temperature", *temperature)
+			temperatureLog = *temperature
 		}
-		if topP != nil {
-			attrs = append(attrs, "top_p", *topP)
-		}
-		if presencePenalty != nil {
-			attrs = append(attrs, "presence_penalty", *presencePenalty)
-		}
-		if topK != nil {
-			attrs = append(attrs, "top_k", *topK)
-		}
-		logger.Info("llm post summary summarizing block", attrs...)
+		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
-		response, err := llmutil.ChatCompletionWithRetries(
-			ctx,
-			p.client,
-			llm.ChatRequest{
-				Model: model,
-				Messages: []llm.Message{
-					{Role: llm.RoleSystem, Content: systemPrompt},
-					{Role: llm.RoleUser, Content: userPrompt},
-				},
-				Temperature:     temperature,
-				TopP:            topP,
-				PresencePenalty: presencePenalty,
-				TopK:            topK,
-			},
-			RETRIES,
-			nil,
-		)
+		response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
 		if err != nil {
 			return err
 		}

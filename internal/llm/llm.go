@@ -15,13 +15,10 @@ type Message struct {
 }
 
 type ChatRequest struct {
-	Model           string
-	Messages        []Message
-	Temperature     *float64
-	TopP            *float64
-	PresencePenalty *float64
-	TopK            *int
-	MaxTokens       int
+	Model       string
+	Messages    []Message
+	Temperature *float64
+	MaxTokens   int
 }
 
 type ChatResponse struct {

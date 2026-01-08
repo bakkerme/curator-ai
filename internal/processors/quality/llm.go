@@ -23,9 +23,6 @@ type LLMProcessor struct {
 	client         llm.Client
 	defaultModel   string
 	defaultTemp    *float64
-	defaultTopP    *float64
-	defaultPresPen *float64
-	defaultTopK    *int
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
@@ -37,17 +34,10 @@ type qualityResponse struct {
 }
 
 func NewLLMProcessor(cfg *config.LLMQuality, client llm.Client, defaultModel string) (*LLMProcessor, error) {
-	return NewLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil, nil, nil, nil)
+	return NewLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewLLMProcessorWithLogger(
-	cfg *config.LLMQuality,
-	client llm.Client,
-	defaultModel string,
-	logger *slog.Logger,
-	defaultTemp, defaultTopP, defaultPresencePenalty *float64,
-	defaultTopK *int,
-) (*LLMProcessor, error) {
+func NewLLMProcessorWithLogger(cfg *config.LLMQuality, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*LLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("llm quality config is required")
 	}
@@ -67,9 +57,6 @@ func NewLLMProcessorWithLogger(
 		client:         client,
 		defaultModel:   defaultModel,
 		defaultTemp:    defaultTemp,
-		defaultTopP:    defaultTopP,
-		defaultPresPen: defaultPresencePenalty,
-		defaultTopK:    defaultTopK,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -144,53 +131,24 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		if temperature == nil {
 			temperature = p.defaultTemp
 		}
-		topP := p.config.TopP
-		if topP == nil {
-			topP = p.defaultTopP
-		}
-		presencePenalty := p.config.PresencePenalty
-		if presencePenalty == nil {
-			presencePenalty = p.defaultPresPen
-		}
-		topK := p.config.TopK
-		if topK == nil {
-			topK = p.defaultTopK
-		}
-
-		attrs := []any{"block_id", block.ID, "model", model}
+		var temperatureLog any
 		if temperature != nil {
-			attrs = append(attrs, "temperature", *temperature)
+			temperatureLog = *temperature
 		}
-		if topP != nil {
-			attrs = append(attrs, "top_p", *topP)
-		}
-		if presencePenalty != nil {
-			attrs = append(attrs, "presence_penalty", *presencePenalty)
-		}
-		if topK != nil {
-			attrs = append(attrs, "top_k", *topK)
-		}
-		logger.Info("llm quality evaluating block", attrs...)
+		logger.Info("llm quality evaluating block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
 
 		var parsed qualityResponse
-		_, err = llmutil.ChatCompletionWithRetries(
+		_, err = llmutil.ChatSystemUserWithRetries(
 			ctx,
 			p.client,
-			llm.ChatRequest{
-				Model: model,
-				Messages: []llm.Message{
-					{Role: llm.RoleSystem, Content: system_prompt},
-					{Role: llm.RoleUser, Content: user_prompt},
-				},
-				Temperature:     temperature,
-				TopP:            topP,
-				PresencePenalty: presencePenalty,
-				TopK:            topK,
-			},
+			model,
+			system_prompt,
+			user_prompt,
 			decodeRetries,
 			func(content string) error {
 				return json.Unmarshal([]byte(content), &parsed)
 			},
+			temperature,
 		)
 		if err != nil {
 			return false, fmt.Errorf("parse llm quality response: %w", err)

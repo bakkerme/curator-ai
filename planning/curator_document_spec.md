@@ -93,9 +93,6 @@ llm:
   name: string                   # Unique identifier
   model: string                  # Optional: Model override (default: system default)
   temperature: number            # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
-  top_p: number                  # Optional: Nucleus sampling (uses OPENAI_TOP_P when omitted)
-  presence_penalty: number       # Optional: Penalize new tokens (uses OPENAI_PRESENCE_PENALTY when omitted)
-  top_k: number                  # Optional: Top-k sampling (uses OPENAI_TOP_K when omitted)
   prompt_template: string        # Reference to prompt template
   evaluations: [string]          # Positive criteria - content should match these
   exclusions: [string]           # Negative criteria - content matching these is dropped
@@ -115,9 +112,6 @@ llm:
   context: string                # "post" - operates on individual posts
   model: string                  # Optional: Model override
   temperature: number            # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
-  top_p: number                  # Optional: Nucleus sampling (uses OPENAI_TOP_P when omitted)
-  presence_penalty: number       # Optional: Penalize new tokens (uses OPENAI_PRESENCE_PENALTY when omitted)
-  top_k: number                  # Optional: Top-k sampling (uses OPENAI_TOP_K when omitted)
   prompt_template: string        # Reference to prompt template
   params:                        # Optional: Additional parameters for the prompt
     my_additional_param: [string]          # An additional example param
@@ -143,9 +137,6 @@ llm:
   context: string                 # "flow" - operates on entire flow results
   model: string                   # Optional: Model override
   temperature: number             # Optional: Sampling temperature (uses OPENAI_TEMPERATURE when omitted)
-  top_p: number                   # Optional: Nucleus sampling (uses OPENAI_TOP_P when omitted)
-  presence_penalty: number        # Optional: Penalize new tokens (uses OPENAI_PRESENCE_PENALTY when omitted)
-  top_k: number                   # Optional: Top-k sampling (uses OPENAI_TOP_K when omitted)
   prompt_template: string         # Reference to prompt template
   params:                         # Optional: Additional parameters
     my_additional_param: [string] # An additional example param

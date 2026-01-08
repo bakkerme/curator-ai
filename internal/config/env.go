@@ -23,14 +23,11 @@ type EnvConfig struct {
 }
 
 type OpenAIEnvConfig struct {
-	APIKey          string
-	BaseURL         string
-	Model           string
-	Temperature     *float64
-	TopP            *float64
-	PresencePenalty *float64
-	TopK            *int
-	OTel            OpenAIOTelEnvConfig
+	APIKey      string
+	BaseURL     string
+	Model       string
+	Temperature *float64
+	OTel        OpenAIOTelEnvConfig
 }
 
 type OpenAIOTelEnvConfig struct {
@@ -96,13 +93,10 @@ func LoadEnv() EnvConfig {
 		AllowPartialSourceErrors: envBool("ALLOW_PARTIAL_SOURCE_ERRORS", false),
 		SessionID:                strings.TrimSpace(envString("SESSION_ID", "")),
 		OpenAI: OpenAIEnvConfig{
-			APIKey:          strings.TrimSpace(envString("OPENAI_API_KEY", "")),
-			BaseURL:         strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
-			Model:           openAIModel,
-			Temperature:     envFloatPtr("OPENAI_TEMPERATURE"),
-			TopP:            envFloatPtr("OPENAI_TOP_P"),
-			PresencePenalty: envFloatPtr("OPENAI_PRESENCE_PENALTY"),
-			TopK:            envIntPtr("OPENAI_TOP_K"),
+			APIKey:      strings.TrimSpace(envString("OPENAI_API_KEY", "")),
+			BaseURL:     strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
+			Model:       openAIModel,
+			Temperature: envFloatPtr("OPENAI_TEMPERATURE"),
 			OTel: OpenAIOTelEnvConfig{
 				Enabled:       envBool("OTEL_OPENAI_ENABLED", true),
 				CaptureBodies: envBool("OTEL_CAPTURE_OPENAI_BODIES", false),
@@ -200,18 +194,6 @@ func envFloatPtr(key string) *float64 {
 		return nil
 	}
 	return &f
-}
-
-func envIntPtr(key string) *int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return nil
-	}
-	i, err := strconv.Atoi(v)
-	if err != nil {
-		return nil
-	}
-	return &i
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {

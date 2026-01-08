@@ -21,26 +21,16 @@ type RunLLMProcessor struct {
 	client         llm.Client
 	defaultModel   string
 	defaultTemp    *float64
-	defaultTopP    *float64
-	defaultPresPen *float64
-	defaultTopK    *int
 	systemTemplate *template.Template
 	template       *template.Template
 	logger         *slog.Logger
 }
 
 func NewRunLLMProcessor(cfg *config.LLMSummary, client llm.Client, defaultModel string) (*RunLLMProcessor, error) {
-	return NewRunLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil, nil, nil, nil)
+	return NewRunLLMProcessorWithLogger(cfg, client, defaultModel, nil, nil)
 }
 
-func NewRunLLMProcessorWithLogger(
-	cfg *config.LLMSummary,
-	client llm.Client,
-	defaultModel string,
-	logger *slog.Logger,
-	defaultTemp, defaultTopP, defaultPresencePenalty *float64,
-	defaultTopK *int,
-) (*RunLLMProcessor, error) {
+func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, defaultModel string, logger *slog.Logger, defaultTemp *float64) (*RunLLMProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("run summary config is required")
 	}
@@ -60,9 +50,6 @@ func NewRunLLMProcessorWithLogger(
 		client:         client,
 		defaultModel:   defaultModel,
 		defaultTemp:    defaultTemp,
-		defaultTopP:    defaultTopP,
-		defaultPresPen: defaultPresencePenalty,
-		defaultTopK:    defaultTopK,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
 		logger:         logger,
@@ -127,54 +114,25 @@ func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostB
 	if temperature == nil {
 		temperature = p.defaultTemp
 	}
-	topP := p.config.TopP
-	if topP == nil {
-		topP = p.defaultTopP
-	}
-	presencePenalty := p.config.PresencePenalty
-	if presencePenalty == nil {
-		presencePenalty = p.defaultPresPen
-	}
-	topK := p.config.TopK
-	if topK == nil {
-		topK = p.defaultTopK
-	}
-
-	attrs := []any{"blocks", len(blocks), "model", model, "has_current_summary", current != nil}
+	var temperatureLog any
 	if temperature != nil {
-		attrs = append(attrs, "temperature", *temperature)
+		temperatureLog = *temperature
 	}
-	if topP != nil {
-		attrs = append(attrs, "top_p", *topP)
-	}
-	if presencePenalty != nil {
-		attrs = append(attrs, "presence_penalty", *presencePenalty)
-	}
-	if topK != nil {
-		attrs = append(attrs, "top_k", *topK)
-	}
-	logger.Info("llm run summary summarizing", attrs...)
+	logger.Info("llm run summary summarizing", "blocks", len(blocks), "model", model, "temperature", temperatureLog, "has_current_summary", current != nil)
 
 	var summary string
-	_, err = llmutil.ChatCompletionWithRetries(
+	_, err = llmutil.ChatSystemUserWithRetries(
 		ctx,
 		p.client,
-		llm.ChatRequest{
-			Model: model,
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: system_prompt},
-				{Role: llm.RoleUser, Content: user_prompt},
-			},
-			Temperature:     temperature,
-			TopP:            topP,
-			PresencePenalty: presencePenalty,
-			TopK:            topK,
-		},
+		model,
+		system_prompt,
+		user_prompt,
 		RUN_RETRIES,
 		func(content string) error {
 			summary = content
 			return nil
 		},
+		temperature,
 	)
 	if err != nil {
 		return nil, err

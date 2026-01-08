@@ -50,15 +50,6 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 	if request.Temperature != nil {
 		attrs = append(attrs, attribute.Float64("llm.temperature", *request.Temperature))
 	}
-	if request.TopP != nil {
-		attrs = append(attrs, attribute.Float64("llm.top_p", *request.TopP))
-	}
-	if request.PresencePenalty != nil {
-		attrs = append(attrs, attribute.Float64("llm.presence_penalty", *request.PresencePenalty))
-	}
-	if request.TopK != nil {
-		attrs = append(attrs, attribute.Int("llm.top_k", *request.TopK))
-	}
 	span.SetAttributes(attrs...)
 	defer span.End()
 
@@ -79,22 +70,11 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 	if request.Temperature != nil {
 		params.Temperature = openai.Float(*request.Temperature)
 	}
-	if request.TopP != nil {
-		params.TopP = openai.Float(*request.TopP)
-	}
-	if request.PresencePenalty != nil {
-		params.PresencePenalty = openai.Float(*request.PresencePenalty)
-	}
 	if request.MaxTokens > 0 {
 		params.MaxTokens = openai.Int(int64(request.MaxTokens))
 	}
 
-	opts := []option.RequestOption{}
-	if request.TopK != nil {
-		opts = append(opts, option.WithJSONSet("top_k", *request.TopK))
-	}
-
-	response, err := c.client.Chat.Completions.New(ctx, params, opts...)
+	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
