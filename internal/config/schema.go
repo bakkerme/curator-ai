@@ -143,9 +143,13 @@ type LLMImages struct {
 }
 
 type LLMImageCaption struct {
-	Model          string   `yaml:"model,omitempty"`
-	SystemTemplate string   `yaml:"system_template"`
-	PromptTemplate string   `yaml:"prompt_template"`
+	Model string `yaml:"model,omitempty"`
+	// This is the reference to the template that's actually used in the doc
+	Template string `yaml:"template,omitempty"`
+	// These two are for the resolved templates
+	SystemTemplate string `yaml:"system_template"`
+	PromptTemplate string `yaml:"prompt_template"`
+
 	Temperature    *float64 `yaml:"temperature,omitempty"`
 	MaxConcurrency int      `yaml:"max_concurrency,omitempty"`
 }
