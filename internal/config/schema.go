@@ -92,20 +92,20 @@ type QualityRule struct {
 
 // LLMQuality defines AI-powered quality evaluation
 type LLMQuality struct {
-	Name           string     `yaml:"name"`
-	Model          string     `yaml:"model,omitempty"`
-	Temperature    *float64   `yaml:"temperature,omitempty"`
-	SystemTemplate string     `yaml:"system_template"`
-	PromptTemplate string     `yaml:"prompt_template"`
-	Evaluations    []string   `yaml:"evaluations,omitempty"`
-	Exclusions     []string   `yaml:"exclusions,omitempty"`
-	ActionType     string     `yaml:"action_type"`
-	Threshold      float64    `yaml:"threshold,omitempty"`
+	Name           string   `yaml:"name"`
+	Model          string   `yaml:"model,omitempty"`
+	Temperature    *float64 `yaml:"temperature,omitempty"`
+	SystemTemplate string   `yaml:"system_template"`
+	PromptTemplate string   `yaml:"prompt_template"`
+	Evaluations    []string `yaml:"evaluations,omitempty"`
+	Exclusions     []string `yaml:"exclusions,omitempty"`
+	ActionType     string   `yaml:"action_type"`
+	Threshold      float64  `yaml:"threshold,omitempty"`
 	// BlockErrorPolicy controls behavior when processing a single PostBlock fails.
 	// Allowed values: "fail" (default) or "drop".
 	BlockErrorPolicy string     `yaml:"block_error_policy,omitempty"`
-	MaxConcurrency int        `yaml:"max_concurrency,omitempty"`
-	Images         *LLMImages `yaml:"images,omitempty"`
+	MaxConcurrency   int        `yaml:"max_concurrency,omitempty"`
+	Images           *LLMImages `yaml:"images,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
 	InvalidJSONRetries int                  `yaml:"invalid_json_retries,omitempty"`
 	Snapshot           *core.SnapshotConfig `yaml:"snapshot,omitempty"`
@@ -130,10 +130,10 @@ type LLMSummary struct {
 	// BlockErrorPolicy controls behavior when processing a single PostBlock fails.
 	// Allowed values: "fail" (default) or "drop".
 	// Only applies to context=post processors.
-	BlockErrorPolicy string                 `yaml:"block_error_policy,omitempty"`
-	MaxConcurrency int                    `yaml:"max_concurrency,omitempty"`
-	Images         *LLMImages             `yaml:"images,omitempty"`
-	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
+	BlockErrorPolicy string               `yaml:"block_error_policy,omitempty"`
+	MaxConcurrency   int                  `yaml:"max_concurrency,omitempty"`
+	Images           *LLMImages           `yaml:"images,omitempty"`
+	Snapshot         *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 const (
