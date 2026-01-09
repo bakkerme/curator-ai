@@ -46,6 +46,9 @@ func newCELRuleProcessor(cfg *config.QualityRule) (*RuleProcessor, error) {
 	if iss != nil && iss.Err() != nil {
 		return nil, fmt.Errorf("compile CEL rule: %w", iss.Err())
 	}
+	if ast.OutputType() != cel.BoolType {
+		return nil, fmt.Errorf("rule must return boolean, got %v", ast.OutputType())
+	}
 	prg, err := env.Program(ast)
 	if err != nil {
 		return nil, fmt.Errorf("create CEL program: %w", err)
