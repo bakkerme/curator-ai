@@ -8,7 +8,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 )
 
-func TestRuleProcessorCompilesWithCapitalizedFields(t *testing.T) {
+func TestRuleProcessorCompilesCommentCount(t *testing.T) {
 	cfg := &config.QualityRule{
 		Name:       "comments_rule",
 		Rule:       "comment_count > 1",
