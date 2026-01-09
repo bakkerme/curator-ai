@@ -211,7 +211,7 @@ The Curation Flow Creator is an AI-powered tool, designed to take a URL for a We
 - Output: Boolean result (pass/drop decision).
 
 **Implementation Notes:**
-- Uses [expr](https://expr-lang.org) library for Go-native expression evaluation.
+- Uses CEL (Common Expression Language) for rule expression evaluation.
 - Supports CEL syntax (examples): `comment_count > 5`, `author != "[deleted]"`, `title_length < 200`.
 - Compile-time type checking against PostBlock struct definitions.
 - Sandboxed execution with no side effects for security.
