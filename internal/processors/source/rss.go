@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
@@ -55,6 +56,8 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 		includeContent = *p.config.IncludeContent
 	}
 
+	convertSourceToMarkdown := p.config.ConvertSourceToMarkdown
+
 	blocks := []*core.PostBlock{}
 	seen := map[string]bool{}
 
@@ -86,6 +89,25 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				content = item.Description
 			}
 
+			// Extract embedded data: images into ImageBlocks and replace the <img> src
+			// with a small placeholder URL so the base64 doesn't burn tokens downstream.
+			placeholderBase := "curator-image://post/" + url.PathEscape(id)
+			scrubbed, images, err := rss.ExtractDataURIImagesFromHTML(content, placeholderBase)
+			if err == nil {
+				content = scrubbed
+			}
+			if err != nil {
+				fmt.Printf("warning: failed to extract data URI images for post %s: %v\n", id, err)
+			}
+
+			// Convert to markdown if needed
+			if convertSourceToMarkdown {
+				mdContent, err := rss.ConvertHTMLToMarkdown(content)
+				if err == nil && mdContent != "" {
+					content = mdContent
+				}
+			}
+
 			block := &core.PostBlock{
 				ID:        id,
 				URL:       item.Link,
@@ -93,6 +115,9 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				Content:   content,
 				Author:    item.Author,
 				CreatedAt: item.PublishedAt,
+			}
+			if len(images) > 0 {
+				block.ImageBlocks = append(block.ImageBlocks, images...)
 			}
 			block.ProcessedAt = time.Now().UTC()
 			blocks = append(blocks, block)

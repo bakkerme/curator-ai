@@ -1,29 +1,96 @@
 workflow:
-  name: "Cybersecurity Research"
-  # version: "1.0" # optional
+  name: "Bot Defence and Cybersecurity Research"
+  version: "1.0" # optional
+  max_concurrency: 20
 
   trigger:
     - cron:
         schedule: "0 0 * * *" # midnight UTC
-        # timezone: "UTC"     # optional
+        timezone: "UTC"       # explicit
 
   sources:
     - rss:
         include_content: true
         user_agent: "curator-ai/0.1"
+        limit: 5
+        convert_source_to_markdown: true
         feeds:
-          - https://www.scrapingbee.com/index.xml
-          - https://scrapfly.io/blog/feed.xml
-          - https://blog.castle.io/rss/
-          - https://fingerprint.com/rss.xml
+          # General Security
           - https://unit42.paloaltonetworks.com/feed/
           - https://googleprojectzero.blogspot.com/feeds/posts/default?alt=rss
-          - https://openai.com/news/rss.xml
-          - https://deepmind.google/blog/rss.xml
+          - https://developers.cloudflare.com/changelog/rss/application-security.xml
+          - https://portswigger.net/research/rss
+          - https://www.cisa.gov/news.xml
+          - https://www.cisa.gov/cybersecurity-advisories/all.xml
           - https://www.silobreaker.com/feed/
+          
+          # CDN
+          - https://feeds.feedburner.com/akamai/blog
+          - https://www.fastly.com/blog_rss.xml
+          - https://docs-cybersec-be.thalesgroup.com/bundle/cloud-application-security/page/release-notes.rss
+
+          # AI
+          - https://deepmind.google/blog/rss.xml
+          - https://openai.com/news/rss.xml
+
+          # Bot Defence
+          - https://datadome.co/feed/
+          - https://blog.castle.io/rss/
+          - https://fingerprint.com/rss.xml
+
+          # Scraping
+          - https://www.scrapingbee.com/index.xml
+          - https://scrapfly.io/blog/feed.xml
+          - https://www.imperva.com/blog/feed/
+
+          # Defence
+          - https://blog.palantir.com/feed
+
+          # -- For scraping later --
           # - https://kameleo.io/blog
+          # - https://www.humansecurity.com/learn/blog/
+          # - https://www.arkoselabs.com/blog/
+        snapshot:
+            # snapshot: true
+            restore: true
+            path: "snapshots/rss.json"
+
+
 
   quality:
+    - llm:
+        name: is_relevant
+        prompt_template: isRelevantTemplate
+        evaluations:
+          - "Bot/abuse automation: scraping, credential stuffing, ATO, promo abuse, inventory hoarding, scalping, spam, fake account creation"
+          - "Attacker tooling details: Playwright/Puppeteer/Selenium, headless stealth, mobile emulation, anti-fingerprinting, scriptable browsers"
+          - "Evasion techniques: proxy rotation (residential/mobile), TLS/JA3/JA4, HTTP/2 fingerprinting, header ordering, sensor bypass, token replay"
+          - "Defense techniques with implementation detail: rate limiting, WAF rules, risk scoring, device/browser fingerprinting, behavioral signals, anomaly features"
+          - "Detection engineering: logging guidance, metrics, dashboards, rules (WAF/SIEM), false-positive considerations"
+          - "New vulnerabilities or bypasses relevant to web/app security, identity, edge/CDN/WAF, or anti-automation controls"
+          - "Threat landscape updates: active exploitation, phishing kits, malware campaigns, credential dumps, DDoS extortion, initial access techniques"
+          - "Concrete indicators: domains, ASNs, IP ranges, tooling fingerprints, payload patterns, user-agent strings, SDK/library identifiers"
+          - "Marketing posts are allowed if they are focused on new bot defence products"
+          - "Jumping off points for further investigation into cybersecurity topics"
+          - "News on agentic browsing or related technologies"
+        exclusions:
+          - "Webinars, events, hiring posts, partner press releases"
+          - "Generic 'top 10' / beginner security tips with no new information"
+          - "Unverifiable hot takes or speculation with no evidence"
+          - "Content unrelated to bot defense or the security threat landscape (e.g., general AI/company news)"
+        action_type: pass_drop
+        threshold: 0.5 # optional
+        images:
+          enabled: true
+          mode: multimodal
+          max_images: 4
+          include_comment_images: false
+        # block_error_policy: drop
+        block_error_policy: fail
+        # snapshot:
+        #   snapshot: true
+        #   # restore: true
+        #   path: "snapshots/quality-llm.json"
 
   post_summary:
     - llm:
@@ -31,12 +98,15 @@ workflow:
         type: llm
         context: post
         prompt_template: postSummaryTemplate
-        # Enable prompt-level batching (requires batch templates that can render `.Blocks`):
-        # batch_size: 5
-        # batch_prompt_template: postSummaryTemplateBatch
         params:
           interests:
-            - "Threat actor profiles"
+            - "Bot/abuse goal (scraping, ATO, carding, promo abuse, scalping, spam) and who it targets"
+            - "Attacker stack: tooling, frameworks, hosting, proxy providers, orchestration"
+            - "Evasion tactics: fingerprint spoofing, headless stealth, TLS/HTTP2 fingerprinting, session/token replay, CAPTCHA bypass"
+            - "Signals and detections: what to log, what features are useful, what breaks under NAT/proxies"
+            - "Mitigations: rate limits, challenges, device attestation/passkeys/WebAuthn, WAF/edge rules, UX tradeoffs"
+            - "Operational details: volumes, impact, timelines, affected surfaces (login/checkout/signup/API)"
+            - "Concrete indicators: domains/IPs/ASNs, UA strings, request patterns, SDK identifiers"
         # snapshot:
         #   snapshot: true
         #   restore: true
@@ -57,10 +127,12 @@ workflow:
         prompt_template: fullSummaryTemplate
         params:
           focus:
-            - "Active exploitation / emerging campaigns"
-            - "High-impact vulnerabilities and exploit techniques"
-            - "Actionable defense guidance"
-            - "Notable research writeups (root cause + fix)"
+            - "Bot/abuse trends: what changed this week in attacker tooling, cost, and scale"
+            - "New bypasses/evasions impacting bot detection, WAFs, and edge controls"
+            - "High-impact web/app/identity vulnerabilities and real-world exploitation"
+            - "Threat landscape: phishing kits, malware campaigns, initial access and credential theft"
+            - "Actionable defense guidance: detections, mitigations, instrumentation, and measurement"
+            - "Ecosystem changes that affect bot defense: browser/platform changes, CDN/edge behavior, fingerprinting developments"
         # snapshot:
         #   # snapshot: true
         #   restore: true
@@ -75,7 +147,7 @@ workflow:
     - email:
         template: emailTemplate
         to: brandon@bdmd.com.au
-        subject: "Daily Security Research"
+        subject: "Daily Bot Defence + Security Digest"
 
 templates:
   - id: isRelevantTemplate
@@ -245,7 +317,7 @@ templates:
       <html>
         <body style="margin:0;padding:0;background:#ffffff;">
           <div style="max-width:720px;margin:0 auto;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
-            <h1 style="margin:0 0 12px 0;font-size:22px;">Daily AI Research Digest</h1>
+            <h1 style="margin:0 0 12px 0;font-size:22px;">Daily Bot Defence + Security Digest</h1>
 
             {{- if .RunSummary }}
             {{- .RunSummary.HTML }}
@@ -255,12 +327,18 @@ templates:
 
             {{- range .Blocks }}
             <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+              {{- if gt (len .ImageBlocks) 0 }}
+              <img src="{{ (index .ImageBlocks 0).URL }}" style="max-width:100%;height:auto;display:block;margin:0 0 8px 0;" />
+              {{- end }}
+
               <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
                 <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
               </div>
+
               <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
                 <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
               </div>
+
               <div style="font-size:13px;margin:0;">
                 {{- if .Summary }}
                 {{ .Summary.HTML }}

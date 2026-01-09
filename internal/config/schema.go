@@ -68,11 +68,12 @@ type RedditSource struct {
 
 // RSSSource defines RSS/Atom feed configuration
 type RSSSource struct {
-	Feeds          []string             `yaml:"feeds"`
-	Limit          int                  `yaml:"limit,omitempty"`
-	IncludeContent *bool                `yaml:"include_content,omitempty"`
-	UserAgent      string               `yaml:"user_agent,omitempty"`
-	Snapshot       *core.SnapshotConfig `yaml:"snapshot,omitempty"`
+	Feeds                   []string             `yaml:"feeds"`
+	Limit                   int                  `yaml:"limit,omitempty"`
+	IncludeContent          *bool                `yaml:"include_content,omitempty"`
+	ConvertSourceToMarkdown bool                 `yaml:"convert_source_to_markdown,omitempty"`
+	UserAgent               string               `yaml:"user_agent,omitempty"`
+	Snapshot                *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // QualityConfig wraps different quality processor types
@@ -85,7 +86,7 @@ type QualityConfig struct {
 type QualityRule struct {
 	Name       string               `yaml:"name"`
 	Rule       string               `yaml:"rule"`
-	ActionType string               `yaml:"actionType"`
+	ActionType string               `yaml:"action_type"`
 	Result     string               `yaml:"result"`
 	Snapshot   *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
