@@ -282,6 +282,45 @@ templates:
 	}
 }
 
+func TestValidateRejectsInvalidBlockErrorPolicy(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        system_template: "SYSTEM"
+        prompt_template: "POST {{ .Title }}"
+        block_error_policy: nope
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	err := doc.Validate()
+	if err == nil {
+		t.Fatalf("Expected validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "block_error_policy") {
+		t.Fatalf("Expected error to mention block_error_policy, got: %v", err)
+	}
+}
+
 func TestValidation(t *testing.T) {
 	testCases := []struct {
 		name        string

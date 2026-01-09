@@ -1,7 +1,7 @@
 workflow:
   name: "AI Research Intelligence (Multimodal Example)"
   # version: "1.0" # optional
-  max_concurrency: 20
+  max_concurrency: 5
 
   trigger:
     - cron:
@@ -14,13 +14,13 @@ workflow:
         include_comments: true
         include_web: true
         include_images: true
-        limit: 25          # optional
+        limit: 50          # optional
         sort: "hot"        # optional
         time_filter: "day" # optional
         min_score: 10      # optional
         snapshot:
-          # snapshot: true
-          restore: true
+          snapshot: true
+          # restore: true
           path: "snapshots/reddit.json"
 
   quality:
@@ -29,10 +29,6 @@ workflow:
         rule: "comments.count > 5"
         actionType: pass_drop
         result: drop
-        snapshot:
-          # snapshot: true
-          restore: true
-          path: "snapshots/quality-rule.json"
     - llm:
         name: is_relevant
         prompt_template: isRelevantTemplateMultimodal
@@ -58,6 +54,7 @@ workflow:
           mode: multimodal
           max_images: 4
           include_comment_images: false
+        block_error_policy: drop
 
   post_summary:
     - llm:
@@ -93,6 +90,7 @@ workflow:
             - "Emerging trends in open-source LLM development"
             - "Notable performance breakthroughs"
             - "Industry impact and adoption patterns"
+        block_error_policy: fail
     - markdown:
         name: markdown_to_html_sum
         type: markdown

@@ -101,6 +101,9 @@ type LLMQuality struct {
 	Exclusions     []string   `yaml:"exclusions,omitempty"`
 	ActionType     string     `yaml:"action_type"`
 	Threshold      float64    `yaml:"threshold,omitempty"`
+	// BlockErrorPolicy controls behavior when processing a single PostBlock fails.
+	// Allowed values: "fail" (default) or "drop".
+	BlockErrorPolicy string     `yaml:"block_error_policy,omitempty"`
 	MaxConcurrency int        `yaml:"max_concurrency,omitempty"`
 	Images         *LLMImages `yaml:"images,omitempty"`
 	// InvalidJSONRetries retries the LLM call when the response can't be parsed as JSON.
@@ -124,10 +127,19 @@ type LLMSummary struct {
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
+	// BlockErrorPolicy controls behavior when processing a single PostBlock fails.
+	// Allowed values: "fail" (default) or "drop".
+	// Only applies to context=post processors.
+	BlockErrorPolicy string                 `yaml:"block_error_policy,omitempty"`
 	MaxConcurrency int                    `yaml:"max_concurrency,omitempty"`
 	Images         *LLMImages             `yaml:"images,omitempty"`
 	Snapshot       *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
 }
+
+const (
+	BlockErrorPolicyFail = "fail"
+	BlockErrorPolicyDrop = "drop"
+)
 
 const (
 	ImageModeMultimodal = "multimodal"
@@ -339,6 +351,9 @@ func (d *CuratorDocument) Validate() error {
 			if quality.LLM.Name == "" || quality.LLM.PromptTemplate == "" {
 				return fmt.Errorf("quality %d: LLM name and prompt_template are required", i)
 			}
+			if err := validateBlockErrorPolicy(fmt.Sprintf("quality %d llm", i), quality.LLM.BlockErrorPolicy); err != nil {
+				return err
+			}
 			if err := validateLLMTemperature(fmt.Sprintf("quality %d llm", i), quality.LLM.Temperature); err != nil {
 				return err
 			}
@@ -363,6 +378,9 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("post_summary %d: context must be 'post'", i)
 		}
 		if summary.LLM != nil {
+			if err := validateBlockErrorPolicy(fmt.Sprintf("post_summary %d llm", i), summary.LLM.BlockErrorPolicy); err != nil {
+				return err
+			}
 			if err := validateLLMTemperature(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature); err != nil {
 				return err
 			}
@@ -391,6 +409,9 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("run_summary %d: context must be 'flow'", i)
 		}
 		if summary.LLM != nil {
+			if err := validateBlockErrorPolicy(fmt.Sprintf("run_summary %d llm", i), summary.LLM.BlockErrorPolicy); err != nil {
+				return err
+			}
 			if err := validateLLMTemperature(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature); err != nil {
 				return err
 			}
@@ -432,6 +453,18 @@ func validateLLMTemperature(label string, temperature *float64) error {
 		return fmt.Errorf("%s: temperature must be between 0 and 2", label)
 	}
 	return nil
+}
+
+func validateBlockErrorPolicy(label string, policy string) error {
+	if policy == "" {
+		return nil
+	}
+	switch policy {
+	case BlockErrorPolicyFail, BlockErrorPolicyDrop:
+		return nil
+	default:
+		return fmt.Errorf("%s: block_error_policy must be %q or %q", label, BlockErrorPolicyFail, BlockErrorPolicyDrop)
+	}
 }
 
 func validateImagesConfig(label string, cfg *LLMImages) error {

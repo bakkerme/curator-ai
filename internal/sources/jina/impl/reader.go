@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -44,13 +45,22 @@ func NewReader(timeout time.Duration, userAgent, baseURL, apiKey string) *Reader
 	}
 }
 
-func (r *Reader) Read(ctx context.Context, url string, options jina.ReadOptions) (string, error) {
-	url = strings.TrimSpace(url)
-	if url == "" {
+func (r *Reader) Read(ctx context.Context, urlStr string, options jina.ReadOptions) (string, error) {
+	urlStr = strings.TrimSpace(urlStr)
+	if urlStr == "" {
 		return "", fmt.Errorf("jina: url is required")
 	}
 	if r.apiKey == "" {
 		return "", fmt.Errorf("jina: missing api key (set JINA_API_KEY)")
+	}
+
+	// Return error if the URL is blocklisted
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("jina: invalid url: %w", err)
+	}
+	if isBlocklistedURL(parsedURL) {
+		return "", fmt.Errorf("jina: url is blocklisted")
 	}
 
 	retainImages := strings.TrimSpace(options.RetainImages)
@@ -62,8 +72,8 @@ func (r *Reader) Read(ctx context.Context, url string, options jina.ReadOptions)
 		lastStatus int
 		respBody   []byte
 	)
-	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
-		payload, err := json.Marshal(map[string]string{"url": url})
+	err = retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+		payload, err := json.Marshal(map[string]string{"url": urlStr})
 		if err != nil {
 			return err
 		}
@@ -115,4 +125,21 @@ func (r *Reader) Read(ctx context.Context, url string, options jina.ReadOptions)
 	}
 
 	return strings.TrimSpace(string(respBody)), nil
+}
+
+func isBlocklistedURL(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.ToLower(u.Host)
+	blocklist := []string{
+		"localhost",
+	}
+	for _, b := range blocklist {
+		if host == b {
+			return true
+		}
+	}
+
+	return false
 }

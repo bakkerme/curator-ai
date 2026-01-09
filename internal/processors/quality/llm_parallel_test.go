@@ -2,6 +2,9 @@ package quality
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +13,24 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/llm"
 )
+
+type conditionalClient struct {
+	mu      sync.Mutex
+	errWhen string
+	resp    llm.ChatResponse
+}
+
+func (c *conditionalClient) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
+	_ = ctx
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, m := range request.Messages {
+		if strings.Contains(m.Content, c.errWhen) {
+			return llm.ChatResponse{}, errors.New("boom")
+		}
+	}
+	return c.resp, nil
+}
 
 type blockingClient struct {
 	started chan struct{}
@@ -102,5 +123,79 @@ func TestLLMProcessor_Evaluate_Parallel(t *testing.T) {
 		if block.Quality == nil || block.Quality.Result != "pass" {
 			t.Fatalf("expected pass for block %d, got %#v", i, block.Quality)
 		}
+	}
+}
+
+func TestLLMProcessor_Evaluate_BlockErrorPolicyDrop_Parallel(t *testing.T) {
+	t.Parallel()
+
+	client := &conditionalClient{
+		errWhen: "title=b",
+		resp:    llm.ChatResponse{Content: `{"score":0.9,"reason":"ok"}`},
+	}
+	cfg := &config.LLMQuality{
+		Name:             "q",
+		Model:            "test-model",
+		SystemTemplate:   "system",
+		PromptTemplate:   "title={{.Title}}",
+		Threshold:        0.5,
+		MaxConcurrency:   3,
+		BlockErrorPolicy: config.BlockErrorPolicyDrop,
+	}
+	processor, err := NewLLMProcessor(cfg, client, "default-model")
+	if err != nil {
+		t.Fatalf("NewLLMProcessor error: %v", err)
+	}
+
+	blocks := []*core.PostBlock{{ID: "1", Title: "a"}, {ID: "2", Title: "b"}, {ID: "3", Title: "c"}}
+	filtered, err := processor.Evaluate(context.Background(), blocks)
+	if err != nil {
+		t.Fatalf("Evaluate error: %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered blocks, got %d", len(filtered))
+	}
+	if filtered[0].ID != "1" || filtered[1].ID != "3" {
+		t.Fatalf("expected IDs [1 3], got [%s %s]", filtered[0].ID, filtered[1].ID)
+	}
+	if blocks[0].Quality == nil || blocks[0].Quality.Result != "pass" {
+		t.Fatalf("expected pass for block 1, got %#v", blocks[0].Quality)
+	}
+	if blocks[2].Quality == nil || blocks[2].Quality.Result != "pass" {
+		t.Fatalf("expected pass for block 3, got %#v", blocks[2].Quality)
+	}
+}
+
+func TestLLMProcessor_Evaluate_BlockErrorPolicyDrop_Serial(t *testing.T) {
+	t.Parallel()
+
+	client := &conditionalClient{
+		errWhen: "title=b",
+		resp:    llm.ChatResponse{Content: `{"score":0.9,"reason":"ok"}`},
+	}
+	cfg := &config.LLMQuality{
+		Name:             "q",
+		Model:            "test-model",
+		SystemTemplate:   "system",
+		PromptTemplate:   "title={{.Title}}",
+		Threshold:        0.5,
+		MaxConcurrency:   1,
+		BlockErrorPolicy: config.BlockErrorPolicyDrop,
+	}
+	processor, err := NewLLMProcessor(cfg, client, "default-model")
+	if err != nil {
+		t.Fatalf("NewLLMProcessor error: %v", err)
+	}
+
+	blocks := []*core.PostBlock{{ID: "1", Title: "a"}, {ID: "2", Title: "b"}, {ID: "3", Title: "c"}}
+	filtered, err := processor.Evaluate(context.Background(), blocks)
+	if err != nil {
+		t.Fatalf("Evaluate error: %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered blocks, got %d", len(filtered))
+	}
+	if filtered[0].ID != "1" || filtered[1].ID != "3" {
+		t.Fatalf("expected IDs [1 3], got [%s %s]", filtered[0].ID, filtered[1].ID)
 	}
 }

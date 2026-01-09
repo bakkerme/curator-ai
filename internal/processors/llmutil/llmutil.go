@@ -85,7 +85,7 @@ func ChatCompletionWithRetries(
 			Temperature: temperature,
 		})
 		if err != nil {
-			return llm.ChatResponse{}, err
+			return llm.ChatResponse{}, fmt.Errorf("chat completion failed: %w", err)
 		}
 		lastResp = resp
 		if decode == nil {

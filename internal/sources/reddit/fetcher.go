@@ -241,6 +241,11 @@ func extractPostURLs(post *goreddit.Post) (urls []string, images []string) {
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 			return
 		}
+
+		if isIgnoreURL(parsed) {
+			return
+		}
+
 		normalized := parsed.String()
 		if isImageURL(parsed) {
 			if !seenImage[normalized] {
@@ -279,7 +284,7 @@ func isImageURL(u *url.URL) bool {
 	}
 	host := strings.ToLower(u.Host)
 	switch host {
-	case "i.redd.it", "preview.redd.it", "i.imgur.com":
+	case "i.redd.it", "i.imgur.com":
 		return true
 	}
 	path := strings.ToLower(u.Path)
@@ -291,9 +296,15 @@ func isImageURL(u *url.URL) bool {
 	return false
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func isIgnoreURL(u *url.URL) bool {
+	if u == nil {
+		return false
 	}
-	return b
+	host := strings.ToLower(u.Host)
+
+	switch host {
+	case "preview.redd.it", "localhost", "discord.gg":
+		return true
+	}
+	return false
 }

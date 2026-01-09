@@ -99,6 +99,10 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		logger = ctxLogger
 	}
 	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+	policy := p.config.BlockErrorPolicy
+	if policy == "" {
+		policy = config.BlockErrorPolicyFail
+	}
 
 	summarizeOne := func(ctx context.Context, block *core.PostBlock) error {
 		if err := llmutil.EnsureImageCaptions(
@@ -167,6 +171,17 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 
 	maxConcurrency := p.config.MaxConcurrency
 	if maxConcurrency <= 1 || len(blocks) <= 1 {
+		if policy == config.BlockErrorPolicyDrop {
+			filtered := make([]*core.PostBlock, 0, len(blocks))
+			for _, block := range blocks {
+				if err := summarizeOne(ctx, block); err != nil {
+					logger.Warn("llm post summary failed for block (dropping)", "block_id", block.ID, "error", err)
+					continue
+				}
+				filtered = append(filtered, block)
+			}
+			return filtered, nil
+		}
 		for _, block := range blocks {
 			if err := summarizeOne(ctx, block); err != nil {
 				return nil, err
@@ -181,10 +196,11 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	sem := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
+	keep := make([]bool, len(blocks))
 
 loop:
-	for _, block := range blocks {
-		block := block
+	for i, block := range blocks {
+		i, block := i, block
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
@@ -196,12 +212,19 @@ loop:
 			defer wg.Done()
 			defer func() { <-sem }()
 			if err := summarizeOne(ctx, block); err != nil {
+				if policy == config.BlockErrorPolicyDrop {
+					logger.Warn("llm post summary failed for block (dropping)", "block_id", block.ID, "error", err)
+					keep[i] = false
+					return
+				}
 				select {
 				case errCh <- err:
 				default:
 				}
 				cancel()
+				return
 			}
+			keep[i] = true
 		}()
 	}
 
@@ -210,6 +233,15 @@ loop:
 	case err := <-errCh:
 		return nil, err
 	default:
+		if policy == config.BlockErrorPolicyDrop {
+			filtered := make([]*core.PostBlock, 0, len(blocks))
+			for i, block := range blocks {
+				if keep[i] {
+					filtered = append(filtered, block)
+				}
+			}
+			return filtered, nil
+		}
 		return blocks, nil
 	}
 }

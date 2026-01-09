@@ -110,6 +110,10 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
 
 	filtered := make([]*core.PostBlock, 0, len(blocks))
+	policy := p.config.BlockErrorPolicy
+	if policy == "" {
+		policy = config.BlockErrorPolicyFail
+	}
 	threshold := p.config.Threshold
 	if threshold == 0 {
 		threshold = 0.5
@@ -169,6 +173,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
 			userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
+
 			_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
 				{Role: llm.RoleSystem, Content: system_prompt},
 				userMessage,
@@ -190,7 +195,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 			)
 		}
 		if err != nil {
-			return false, fmt.Errorf("parse llm quality response: %w", err)
+			return false, fmt.Errorf("could not parse llm quality response: %w", err)
 		}
 
 		result := "drop"
@@ -212,6 +217,10 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		for _, block := range blocks {
 			pass, err := evaluateOne(ctx, block)
 			if err != nil {
+				if policy == config.BlockErrorPolicyDrop {
+					logger.Warn("llm quality failed for block (dropping)", "block_id", block.ID, "error", err)
+					continue
+				}
 				return nil, err
 			}
 			if pass {
@@ -244,6 +253,11 @@ loop:
 			defer func() { <-sem }()
 			pass, err := evaluateOne(ctx, block)
 			if err != nil {
+				if policy == config.BlockErrorPolicyDrop {
+					logger.Warn("llm quality failed for block (dropping)", "block_id", block.ID, "error", err)
+					passResults[i] = false
+					return
+				}
 				select {
 				case errCh <- err:
 				default:
