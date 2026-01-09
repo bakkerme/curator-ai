@@ -75,12 +75,12 @@ reddit:
 ### Quality Processors
 
 #### Quality Rule
-Rule-based filtering using expressions evaluated against post data.
+Rule-based filtering using CEL (Common Expression Language) evaluated against post data.
 
 ```yaml
 quality_rule:
   name: string                   # Unique identifier for the rule
-  rule: string                   # Expression to evaluate (e.g., "comments.count > 5")
+  rule: string                   # CEL expression to evaluate (must return boolean)
   actionType: string             # "pass_drop" - determines what happens on rule match
   result: string                 # "drop" or "pass" - action when rule evaluates to true
 ```
@@ -199,19 +199,39 @@ email:
 5. **Run Summary** processors create aggregate summaries
 6. **Output** delivers results
 
-## Expression Language for Rules
-Uses [expr](https://expr-lang.org) library to evaluate rule expressions against PostBlock data.
+## Rule Language (CEL)
 
-Quality rules use a simple expression language:
-- Field access: `field.subfield`
-- Comparisons: `>`, `<`, `>=`, `<=`, `==`, `!=`
-- Logical operators: `&&`, `||`, `!`
-- Array access: `field[0]`, `field.length`
+Curator uses CEL (Common Expression Language) for `quality_rule.rule`.
 
-Examples:
-- `comments.count > 5`
-- `score >= 100 && author != "[deleted]"`
-- `title.length < 200`
+Rules must evaluate to a boolean. When a rule evaluates to `true`, Curator applies the configured `result` (`drop` or `pass`).
+
+### Available variables
+
+All variables are scalars (no nested objects):
+
+- `title` (string)
+- `content` (string)
+- `author` (string)
+- `url` (string)
+- `created_at` (timestamp)
+- `comment_count` (int)
+- `title_length` (int)
+- `content_length` (int)
+
+### Common patterns
+
+- Drop low-comment posts:
+  - `comment_count < 5`
+- Drop very long titles:
+  - `title_length > 180`
+- Require a keyword:
+  - `title.contains("benchmark") || content.contains("benchmark")`
+- Drop deleted authors:
+  - `author == "[deleted]"`
+
+Notes:
+- `comment_count` is the number of comments, not the sum of comment text lengths.
+- If you need additional fields, add them explicitly to the rule environment; keep it small and predictable.
 
 ## Template References
 
