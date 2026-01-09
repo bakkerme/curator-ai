@@ -14,7 +14,6 @@ import (
 type RuleProcessor struct {
 	name   string
 	config config.QualityRule
-	env    *cel.Env
 	prg    cel.Program
 }
 
@@ -54,7 +53,6 @@ func newCELRuleProcessor(cfg *config.QualityRule) (*RuleProcessor, error) {
 	return &RuleProcessor{
 		name:   cfg.Name,
 		config: *cfg,
-		env:    env,
 		prg:    prg,
 	}, nil
 }
