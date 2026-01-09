@@ -5,31 +5,58 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/expr-lang/expr"
-	"github.com/expr-lang/expr/vm"
+	"github.com/google/cel-go/cel"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 )
 
 type RuleProcessor struct {
-	name    string
-	config  config.QualityRule
-	program *vm.Program
+	name   string
+	config config.QualityRule
+	prg    cel.Program
 }
 
-func NewRuleProcessor(cfg *config.QualityRule) (*RuleProcessor, error) {
+func NewRuleProcessor(cfg *config.QualityRule) (core.QualityProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("quality rule config is required")
 	}
-	program, err := expr.Compile(cfg.Rule, expr.Env(sampleRuleEnv()))
+	processor, err := newCELRuleProcessor(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("compile quality rule: %w", err)
+		return nil, err
+	}
+	return processor, nil
+}
+
+func newCELRuleProcessor(cfg *config.QualityRule) (*RuleProcessor, error) {
+	env, err := cel.NewEnv(
+		cel.Variable("title", cel.StringType),
+		cel.Variable("content", cel.StringType),
+		cel.Variable("author", cel.StringType),
+		cel.Variable("url", cel.StringType),
+		cel.Variable("created_at", cel.TimestampType),
+		cel.Variable("comment_count", cel.IntType),
+		cel.Variable("title_length", cel.IntType),
+		cel.Variable("content_length", cel.IntType),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create CEL env: %w", err)
+	}
+	ast, iss := env.Compile(cfg.Rule)
+	if iss != nil && iss.Err() != nil {
+		return nil, fmt.Errorf("compile CEL rule: %w", iss.Err())
+	}
+	if ast.OutputType() != cel.BoolType {
+		return nil, fmt.Errorf("rule must return boolean, got %v", ast.OutputType())
+	}
+	prg, err := env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("create CEL program: %w", err)
 	}
 	return &RuleProcessor{
-		name:    cfg.Name,
-		config:  *cfg,
-		program: program,
+		name:   cfg.Name,
+		config: *cfg,
+		prg:    prg,
 	}, nil
 }
 
@@ -56,8 +83,18 @@ func (p *RuleProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) 
 	filtered := make([]*core.PostBlock, 0, len(blocks))
 
 	for _, block := range blocks {
-		env := qualityEnv(block)
-		result, err := expr.Run(p.program, env)
+		activation := map[string]interface{}{
+			"title":          block.Title,
+			"content":        block.Content,
+			"author":         block.Author,
+			"url":            block.URL,
+			"created_at":     block.CreatedAt,
+			"comment_count":  int64(len(block.Comments)),
+			"title_length":   int64(len(block.Title)),
+			"content_length": int64(len(block.Content)),
+		}
+
+		out, _, err := p.prg.Eval(activation)
 		if err != nil {
 			block.Errors = append(block.Errors, core.ProcessError{
 				ProcessorName: p.name,
@@ -68,7 +105,7 @@ func (p *RuleProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) 
 			filtered = append(filtered, block)
 			continue
 		}
-		matched, ok := result.(bool)
+		matched, ok := out.Value().(bool)
 		if !ok {
 			return nil, fmt.Errorf("quality rule did not return bool")
 		}
@@ -87,86 +124,4 @@ func (p *RuleProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) 
 	}
 
 	return filtered, nil
-}
-
-func qualityEnv(block *core.PostBlock) map[string]interface{} {
-	comments := map[string]interface{}{
-		"count": len(block.Comments),
-		"Count": len(block.Comments),
-	}
-	return map[string]interface{}{
-		"title": map[string]interface{}{
-			"value":  block.Title,
-			"length": len(block.Title),
-			"Value":  block.Title,
-			"Length": len(block.Title),
-		},
-		"Title": map[string]interface{}{
-			"value":  block.Title,
-			"length": len(block.Title),
-			"Value":  block.Title,
-			"Length": len(block.Title),
-		},
-		"content": map[string]interface{}{
-			"value":  block.Content,
-			"length": len(block.Content),
-			"Value":  block.Content,
-			"Length": len(block.Content),
-		},
-		"Content": map[string]interface{}{
-			"value":  block.Content,
-			"length": len(block.Content),
-			"Value":  block.Content,
-			"Length": len(block.Content),
-		},
-		"author":     block.Author,
-		"Author":     block.Author,
-		"url":        block.URL,
-		"URL":        block.URL,
-		"comments":   comments,
-		"Comments":   comments,
-		"created_at": block.CreatedAt,
-		"CreatedAt":  block.CreatedAt,
-	}
-}
-
-func sampleRuleEnv() map[string]interface{} {
-	comments := map[string]interface{}{
-		"count": 0,
-		"Count": 0,
-	}
-	return map[string]interface{}{
-		"title": map[string]interface{}{
-			"value":  "",
-			"length": 0,
-			"Value":  "",
-			"Length": 0,
-		},
-		"Title": map[string]interface{}{
-			"value":  "",
-			"length": 0,
-			"Value":  "",
-			"Length": 0,
-		},
-		"content": map[string]interface{}{
-			"value":  "",
-			"length": 0,
-			"Value":  "",
-			"Length": 0,
-		},
-		"Content": map[string]interface{}{
-			"value":  "",
-			"length": 0,
-			"Value":  "",
-			"Length": 0,
-		},
-		"author":     "",
-		"Author":     "",
-		"url":        "",
-		"URL":        "",
-		"comments":   comments,
-		"Comments":   comments,
-		"created_at": time.Time{},
-		"CreatedAt":  time.Time{},
-	}
 }

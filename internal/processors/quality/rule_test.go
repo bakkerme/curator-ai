@@ -8,10 +8,10 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 )
 
-func TestRuleProcessorCompilesWithCapitalizedFields(t *testing.T) {
+func TestRuleProcessorCompilesCommentCount(t *testing.T) {
 	cfg := &config.QualityRule{
 		Name:       "comments_rule",
-		Rule:       "Comments.count > 1",
+		Rule:       "comment_count > 1",
 		ActionType: "pass_drop",
 		Result:     "drop",
 	}
@@ -41,7 +41,7 @@ func TestRuleProcessorCompilesWithCapitalizedFields(t *testing.T) {
 func TestRuleProcessorEvaluatesTitleLength(t *testing.T) {
 	cfg := &config.QualityRule{
 		Name:       "title_length",
-		Rule:       "title.length > 5",
+		Rule:       "title_length > 5",
 		ActionType: "pass_drop",
 		Result:     "drop",
 	}

@@ -1,7 +1,7 @@
 workflow:
   name: "AI Research Intelligence (Multimodal Example)"
   # version: "1.0" # optional
-  max_concurrency: 5
+  max_concurrency: 20
 
   trigger:
     - cron:
@@ -19,14 +19,14 @@ workflow:
         time_filter: "day" # optional
         min_score: 10      # optional
         snapshot:
-          snapshot: true
-          # restore: true
+          # snapshot: true
+          restore: true
           path: "snapshots/reddit.json"
 
   quality:
     - quality_rule:
         name: min_comments
-        rule: "comments.count > 5"
+        rule: "comment_count < 5"
         actionType: pass_drop
         result: drop
     - llm:
@@ -40,6 +40,7 @@ workflow:
           - "Valuable insights into commercial applications of AI technology"
           - "New model releases or updates from major AI labs"
           - "Innovative use cases or applications of LLMs"
+          - "News and discussion on the financing of AI (but not on the 'AI Crash')"
         exclusions:
           - "Content entirely unrelated to AI/ML technology"
           - "Questions that would be better suited for tech support"
@@ -54,7 +55,12 @@ workflow:
           mode: multimodal
           max_images: 4
           include_comment_images: false
-        block_error_policy: drop
+        # block_error_policy: drop
+        block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/quality-llm.json"
 
   post_summary:
     - llm:
@@ -72,6 +78,12 @@ workflow:
           mode: multimodal
           max_images: 4
           include_comment_images: false
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/post-summary.json"
+
+
 
     - markdown:
         name: markdown_to_html_post_sum
@@ -91,6 +103,10 @@ workflow:
             - "Notable performance breakthroughs"
             - "Industry impact and adoption patterns"
         block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/run-summary.json"
     - markdown:
         name: markdown_to_html_sum
         type: markdown
@@ -248,12 +264,18 @@ templates:
 
             {{- range .Blocks }}
             <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+              {{- if gt (len .ImageBlocks) 0 }}
+              <img src="{{ (index .ImageBlocks 0).URL }}" style="max-width:100%;height:auto;display:block;margin:0 0 8px 0;" />
+              {{- end }}
+
               <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
                 <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
               </div>
+
               <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
                 <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
               </div>
+
               <div style="font-size:13px;margin:0;">
                 {{- if .Summary }}
                 {{ .Summary.HTML }}

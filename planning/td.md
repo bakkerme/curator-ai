@@ -211,8 +211,8 @@ The Curation Flow Creator is an AI-powered tool, designed to take a URL for a We
 - Output: Boolean result (pass/drop decision).
 
 **Implementation Notes:**
-- Uses [expr](https://expr-lang.org) library for Go-native expression evaluation.
-- Supports syntax: `comments.count > 5`, `score >= 100 && author != "[deleted]"`, `len(title.text) < 200`.
+- Uses CEL (Common Expression Language) for rule expression evaluation.
+- Supports CEL syntax (examples): `comment_count > 5`, `author != "[deleted]"`, `title_length < 200`.
 - Compile-time type checking against PostBlock struct definitions.
 - Sandboxed execution with no side effects for security.
 
@@ -292,7 +292,7 @@ This example flow reproduces @./planning/example_flow.yml.
 
 #### 4. Quality stage
 - Rule based processor (“min_comments”) runs first.
-  - Reads comments.count; if it fails, the PostBlock is tagged Quality.result = drop and short-circuited.
+  - Evaluates `quality_rule.rule` (CEL); if it fails, the PostBlock is tagged with an error and continues.
 - LLM quality processor (“is_relevant”) runs next on surviving blocks.
   - Sends the post text to an LLM, receives a relevance score / pass-drop decision.
   - Writes the structured result back into PostBlock.Quality.
