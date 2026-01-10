@@ -1,97 +1,66 @@
 # Curator AI — Agent Notes
 
-This repository is a Go-based MVP “flow runner” for Curator AI. It loads a Curator Document (YAML), builds a processor pipeline (trigger → sources → quality → summaries → output), and executes runs on a schedule or once.
+This file is intentionally a short index. The authoritative behavior and design notes live in the docs in this repo.
 
 ## Start Here
 
-- Project overview and env vars: `README.md`
-- Go version/toolchain: `go.mod` (currently `go 1.25.5`)
-- Curator Document YAML reference: `planning/curator_document_spec.md`
-- Example Curator Document: `planning/example_flow.yml` (treat as a starting point; it may need required fields like `output.email.from`)
-- Runner execution model: `planning/runner_logic.md`
-- Block model notes: `planning/block_design.md` and `internal/core/blocks.go`
+- Product + setup overview (env vars, examples): [README.md](README.md)
+- Curator Document (YAML) spec: [docs/curator_document_spec.md](docs/curator_document_spec.md)
+- MVP/architecture notes: [docs/mvp.md](docs/mvp.md)
+- Runner execution model (stage ordering): [docs/runner_logic.md](docs/runner_logic.md)
+- Block model / terminology: [docs/block_design.md](docs/block_design.md)
+- Additional design notes / drafts:
+  - [docs/curator_pd_v2.md](docs/curator_pd_v2.md)
+  - [docs/td.md](docs/td.md)
 
-## Repository Structure
+## How To Run
 
-- Entrypoint (CLI):
-  - `cmd/curator/main.go`: loads YAML (`-config` / `CURATOR_CONFIG`), builds a `core.Flow`, and runs (`-run-once` / cron trigger).
-- Core domain types:
-  - `internal/core/processor.go`: processor interfaces (Trigger/Source/Quality/Summary/RunSummary/Output).
-  - `internal/core/flow.go`: `Flow` and `Run` models.
-  - `internal/core/blocks.go`: `PostBlock`, `RunSummary`, and related structs.
-- Curator Document parsing and validation:
-  - `internal/config/schema.go`: YAML schema structs, template reference resolution, and validation.
-- Orchestration:
-  - `internal/runner/runner.go`: executes sources → quality → post summaries → run summaries → outputs; logs stage timing and block counts.
-  - `internal/runner/factory/factory.go`: wires concrete processors from env (LLM client, fetchers, SMTP sender).
-- Concrete implementations:
-  - `internal/processors/trigger`: cron trigger processor.
-  - `internal/processors/source`: Reddit + RSS processors (wrap fetchers).
-  - `internal/processors/quality`: rule-based quality (`expr`) + LLM quality.
-  - `internal/processors/summary`: LLM + markdown-to-HTML processors (post + run).
-  - `internal/processors/output`: email output processor.
-  - `internal/sources/*`: fetcher implementations + mocks (Reddit, RSS).
-  - `internal/llm/*`: LLM client abstraction and OpenAI-compatible implementation.
-  - `internal/outputs/email/*`: email templating/sending plumbing (SMTP).
-- Observability:
-  - `internal/observability/otelx/otelx.go`: OpenTelemetry setup (OTLP exporter).
-
-## Common Commands
-
-- Run once:
+- Go toolchain version is defined in: [go.mod](go.mod)
+- Run once (single execution of the flow):
   - `go run ./cmd/curator -config curator.yaml -run-once`
 - Run continuously (cron trigger keeps it alive):
   - `go run ./cmd/curator -config curator.yaml`
-- Tests:
+- Run tests:
   - `go test ./...`
 
-## Configuration Notes
+## Where Key Behavior Lives (Code Map)
 
-### CLI Flags / Envars
+- CLI entrypoint / flags / env fallbacks: [cmd/curator/main.go](cmd/curator/main.go)
+- Curator Document parsing + validation + template resolution: [internal/config/schema.go](internal/config/schema.go)
+- Environment variable helpers (prefer this over `os.Getenv`): [internal/config/env.go](internal/config/env.go)
+- Core domain types:
+  - Processor interfaces: [internal/core/processor.go](internal/core/processor.go)
+  - Flow/run models: [internal/core/flow.go](internal/core/flow.go)
+  - Block types (posts, summaries): [internal/core/blocks.go](internal/core/blocks.go)
+- Orchestration (the actual stage pipeline execution): [internal/runner/runner.go](internal/runner/runner.go)
+- Wiring concrete processors from config + env: [internal/runner/factory/factory.go](internal/runner/factory/factory.go)
 
-`cmd/curator/main.go` supports both flags and env fallbacks:
-- `-config` / `CURATOR_CONFIG` (default `curator.yaml`)
-- `-flow-id` / `FLOW_ID` (default `flow-1`)
-- `-run-once` / `RUN_ONCE` (default `false`)
-- `-allow-partial` / `ALLOW_PARTIAL_SOURCE_ERRORS` (default `false`)
+## Processors (Where To Implement Things)
 
-### Runtime Dependencies (Env)
+- Triggers (cron): [internal/processors/trigger](internal/processors/trigger)
+- Sources (Reddit, RSS): [internal/processors/source](internal/processors/source)
+- Quality gates (rule/expr + LLM): [internal/processors/quality](internal/processors/quality)
+- Summaries (post + run, including markdown → HTML): [internal/processors/summary](internal/processors/summary)
+- Outputs (email): [internal/processors/output](internal/processors/output)
 
-Factory wiring lives in `internal/runner/factory/factory.go`:
-- LLM:
-  - `OPENAI_API_KEY` (required when using LLM processors)
-  - `OPENAI_BASE_URL` (optional; OpenAI-compatible endpoint)
-  - `OPENAI_MODEL` (optional; default `gpt-4o-mini`)
-- Reddit:
-  - `REDDIT_HTTP_TIMEOUT` (duration; default `10s`)
-  - `REDDIT_USER_AGENT` (default `curator-ai/0.1`)
-  - Optional API creds (enables API mode vs public `.json`):
-    - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`
-    - `REDDIT_USERNAME`, `REDDIT_PASSWORD` (optional password grant)
-- RSS:
-  - `RSS_HTTP_TIMEOUT` (duration; default `10s`)
-  - `RSS_USER_AGENT` (default `curator-ai/0.1`)
-- Email (SMTP):
-  - `SMTP_HOST` (required unless set in YAML)
-  - `SMTP_PORT` (default `587`), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` (default `true`)
+## Integrations
 
-### Templates
+- LLM abstraction + OpenAI-compatible client: [internal/llm](internal/llm)
+- Source fetchers + mocks:
+  - Reddit: [internal/sources/reddit](internal/sources/reddit)
+  - RSS: [internal/sources/rss](internal/sources/rss)
+- Email plumbing (templating + SMTP sender): [internal/outputs/email](internal/outputs/email)
 
-Curator Documents can define reusable templates and reference them by ID.
-- Template definitions live under `templates:` in the YAML.
-- Processors can reference templates by ID (e.g. `prompt_template: myTemplate`).
-- Resolution and validation lives in `internal/config/schema.go`.
+## Observability
 
-## Observability (Optional)
+- OpenTelemetry setup: [internal/observability/otelx/otelx.go](internal/observability/otelx/otelx.go)
+- Notes: enable via env (see [README.md](README.md) and standard OTEL env vars).
 
-`internal/observability/otelx/otelx.go` enables OTEL tracing when:
-- `CURATOR_OTEL_ENABLED=true` (or `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
-- Configure exporter via standard OTEL env vars like `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_HEADERS`.
+## Coding Standards (Project-Specific)
 
-## Contribution Tips for Agents
-
-- Prefer adding/adjusting processors by following the existing pattern:
-  - define config in `internal/config/schema.go` → implement processor in `internal/processors/...` → wire in `internal/runner/factory/factory.go`.
-- Keep secrets out of the repo; prefer env vars or an ignored `.env`/`.envrc`.
-- Avoid touching workspace caches like `.gocache/`, `.gomodcache/`, `.gopath/` (they are ignored by `.gitignore`).
-- Don't scatter os.Getenv around the codebase. Use a 
+- Keep configuration/env access centralized in [internal/config/env.go](internal/config/env.go) (avoid sprinkling `os.Getenv`).
+- Prefer the existing processor pattern:
+  - add schema config in [internal/config/schema.go](internal/config/schema.go)
+  - implement processor under [internal/processors](internal/processors)
+  - wire it in [internal/runner/factory/factory.go](internal/runner/factory/factory.go)
+- Keep secrets out of the repo; use env vars / local `.env` / `.envrc` (gitignored).
