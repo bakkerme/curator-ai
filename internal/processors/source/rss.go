@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
@@ -50,10 +51,14 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 		return nil, err
 	}
 
+	logger := core.LoggerFromContext(ctx).With("stage", "source", "processor", p.name)
+
 	includeContent := true
 	if p.config.IncludeContent != nil {
 		includeContent = *p.config.IncludeContent
 	}
+
+	convertSourceToMarkdown := p.config.ConvertSourceToMarkdown
 
 	blocks := []*core.PostBlock{}
 	seen := map[string]bool{}
@@ -69,6 +74,8 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			return nil, err
 		}
 		for _, item := range items {
+			postLogger := logger.With("feed_url", feedURL)
+
 			id := item.ID
 			if id == "" {
 				id = item.Link
@@ -86,6 +93,52 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				content = item.Description
 			}
 
+			var procErrors []core.ProcessError
+
+			// Extract embedded data: images into ImageBlocks and replace the <img> src
+			// with a small placeholder URL so the base64 doesn't burn tokens downstream.
+			placeholderBase := "curator-image://post/" + url.PathEscape(id)
+			scrubbed, images, err := rss.ExtractDataURIImagesFromHTML(content, placeholderBase)
+			if err == nil {
+				content = scrubbed
+			}
+			if err != nil {
+				postLogger.Warn(
+					"failed to extract data URI images from HTML",
+					"post_id", id,
+					"post_url", item.Link,
+					"error", err,
+				)
+				procErrors = append(procErrors, core.ProcessError{
+					ProcessorName: p.name,
+					Stage:         "source",
+					Error:         err.Error(),
+					OccurredAt:    time.Now().UTC(),
+				})
+			}
+
+			// Convert to markdown if needed
+			if convertSourceToMarkdown {
+				mdContent, err := rss.ConvertHTMLToMarkdown(content)
+				if err == nil && mdContent != "" {
+					content = mdContent
+				}
+				if err != nil {
+					postLogger.Warn(
+						"failed to convert HTML to Markdown",
+						"post_id", id,
+						"post_url", item.Link,
+						"error", err,
+					)
+					procErrors = append(procErrors, core.ProcessError{
+						ProcessorName: p.name,
+						Stage:         "source",
+						Error:         err.Error(),
+						OccurredAt:    time.Now().UTC(),
+					})
+				}
+			}
+
 			block := &core.PostBlock{
 				ID:        id,
 				URL:       item.Link,
@@ -93,6 +146,12 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				Content:   content,
 				Author:    item.Author,
 				CreatedAt: item.PublishedAt,
+			}
+			if len(images) > 0 {
+				block.ImageBlocks = append(block.ImageBlocks, images...)
+			}
+			if len(procErrors) > 0 {
+				block.Errors = append(block.Errors, procErrors...)
 			}
 			block.ProcessedAt = time.Now().UTC()
 			blocks = append(blocks, block)
