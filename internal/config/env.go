@@ -201,7 +201,7 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	if v == "" {
 		return fallback
 	}
-	d, err := time.ParseDuration(v)
+	d, err := parseDurationExtended(v)
 	if err != nil {
 		return fallback
 	}

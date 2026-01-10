@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
 	"gopkg.in/yaml.v3"
@@ -312,6 +313,76 @@ workflow:
 	}
 	if !strings.Contains(err.Error(), "dedupe_store driver") {
 		t.Fatalf("Expected error to mention dedupe_store driver, got: %v", err)
+	}
+}
+
+func TestDedupeStoreTTLAcceptsDaysAndWeeks(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  dedupe_store:
+    driver: "sqlite"
+    dsn: ":memory:"
+    ttl: "1w2d3h"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if doc.Workflow.DedupeStore == nil {
+		t.Fatalf("Expected dedupe_store to be set")
+	}
+	expected := (7*24 + 2*24 + 3) * time.Hour
+	if doc.Workflow.DedupeStore.TTL != expected {
+		t.Fatalf("Expected ttl %v, got %v", expected, doc.Workflow.DedupeStore.TTL)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+}
+
+func TestDedupeStoreTTLRejectsInvalidUnit(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  dedupe_store:
+    driver: "sqlite"
+    dsn: ":memory:"
+    ttl: "3x"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	err := yaml.Unmarshal(data, &doc)
+	if err == nil {
+		t.Fatalf("Expected unmarshal error, got nil")
+	}
+	if !strings.Contains(err.Error(), "dedupe_store ttl") {
+		t.Fatalf("Expected error to mention dedupe_store ttl, got: %v", err)
 	}
 }
 

@@ -188,6 +188,43 @@ type DedupeStoreConfig struct {
 	TTL    time.Duration `yaml:"ttl,omitempty"`
 }
 
+func (c *DedupeStoreConfig) UnmarshalYAML(value *yaml.Node) error {
+	type temp struct {
+		Driver string      `yaml:"driver,omitempty"`
+		DSN    string      `yaml:"dsn,omitempty"`
+		Table  string      `yaml:"table,omitempty"`
+		TTL    interface{} `yaml:"ttl,omitempty"`
+	}
+	var t temp
+	if err := value.Decode(&t); err != nil {
+		return err
+	}
+
+	c.Driver = t.Driver
+	c.DSN = t.DSN
+	c.Table = t.Table
+
+	if t.TTL == nil {
+		c.TTL = 0
+		return nil
+	}
+
+	s, ok := t.TTL.(string)
+	if !ok {
+		return fmt.Errorf("dedupe_store ttl must be a duration string")
+	}
+	if strings.TrimSpace(s) == "" {
+		c.TTL = 0
+		return nil
+	}
+	d, err := parseDurationExtended(s)
+	if err != nil {
+		return fmt.Errorf("dedupe_store ttl: %w", err)
+	}
+	c.TTL = d
+	return nil
+}
+
 // EmailOutput defines email delivery configuration
 type EmailOutput struct {
 	Template     string               `yaml:"template"`
