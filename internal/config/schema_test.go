@@ -282,6 +282,39 @@ templates:
 	}
 }
 
+func TestDedupeStoreValidationRejectsUnknownDriver(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  dedupe_store:
+    driver: "memory"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	err := doc.Validate()
+	if err == nil {
+		t.Fatalf("Expected validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "dedupe_store driver") {
+		t.Fatalf("Expected error to mention dedupe_store driver, got: %v", err)
+	}
+}
+
 func TestValidateRejectsInvalidBlockErrorPolicy(t *testing.T) {
 	data := []byte(`
 workflow:

@@ -8,6 +8,7 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
+	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 )
@@ -17,10 +18,11 @@ type RedditProcessor struct {
 	config  config.RedditSource
 	fetcher reddit.Fetcher
 	reader  jina.Reader
+	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
-func NewRedditProcessor(cfg *config.RedditSource, fetcher reddit.Fetcher, reader jina.Reader, logger *slog.Logger) (*RedditProcessor, error) {
+func NewRedditProcessor(cfg *config.RedditSource, fetcher reddit.Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*RedditProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("reddit config is required")
 	}
@@ -32,6 +34,7 @@ func NewRedditProcessor(cfg *config.RedditSource, fetcher reddit.Fetcher, reader
 		config:  *cfg,
 		fetcher: fetcher,
 		reader:  reader,
+		store:   store,
 		logger:  logger,
 	}, nil
 }
@@ -76,6 +79,16 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 
 	blocks := make([]*core.PostBlock, 0, len(items))
 	for _, item := range items {
+		if p.store != nil {
+			seen, err := p.store.HasSeen(ctx, item.ID)
+			if err != nil {
+				p.logger.Warn("Failed to check dedupe store", slog.String("post_id", item.ID), slog.String("error", err.Error()))
+			} else if seen {
+				p.logger.Info("Skipping already seen post", slog.String("post_id", item.ID))
+				continue
+			}
+		}
+
 		block := &core.PostBlock{
 			ID:        item.ID,
 			URL:       item.URL,
@@ -134,6 +147,12 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 		}
 		block.ProcessedAt = time.Now().UTC()
 		blocks = append(blocks, block)
+
+		if p.store != nil {
+			if err := p.store.MarkSeen(ctx, item.ID); err != nil {
+				p.logger.Warn("Failed to mark post as seen", slog.String("post_id", item.ID), slog.String("error", err.Error()))
+			}
+		}
 	}
 	return blocks, nil
 }

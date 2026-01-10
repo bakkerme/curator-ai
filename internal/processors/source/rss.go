@@ -8,6 +8,7 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
+	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 )
 
@@ -15,9 +16,10 @@ type RSSProcessor struct {
 	name    string
 	config  config.RSSSource
 	fetcher rss.Fetcher
+	store   dedupe.SeenStore
 }
 
-func NewRSSProcessor(cfg *config.RSSSource, fetcher rss.Fetcher) (*RSSProcessor, error) {
+func NewRSSProcessor(cfg *config.RSSSource, fetcher rss.Fetcher, store dedupe.SeenStore) (*RSSProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("rss config is required")
 	}
@@ -25,6 +27,7 @@ func NewRSSProcessor(cfg *config.RSSSource, fetcher rss.Fetcher) (*RSSProcessor,
 		name:    "rss",
 		config:  *cfg,
 		fetcher: fetcher,
+		store:   store,
 	}, nil
 }
 
@@ -82,6 +85,15 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			}
 			if id == "" || seen[id] {
 				continue
+			}
+			if p.store != nil {
+				alreadySeen, err := p.store.HasSeen(ctx, id)
+				if err != nil {
+					postLogger.Warn("failed to check dedupe store", "post_id", id, "error", err)
+				} else if alreadySeen {
+					postLogger.Info("skipping already seen post", "post_id", id)
+					continue
+				}
 			}
 			seen[id] = true
 
@@ -155,6 +167,12 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			}
 			block.ProcessedAt = time.Now().UTC()
 			blocks = append(blocks, block)
+
+			if p.store != nil {
+				if err := p.store.MarkSeen(ctx, id); err != nil {
+					postLogger.Warn("failed to mark post as seen", "post_id", id, "error", err)
+				}
+			}
 		}
 	}
 

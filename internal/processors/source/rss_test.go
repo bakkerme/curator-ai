@@ -36,7 +36,7 @@ func TestRSSProcessorPrefersContentByDefault(t *testing.T) {
 		},
 	}
 
-	processor, err := NewRSSProcessor(cfg, fetcher)
+	processor, err := NewRSSProcessor(cfg, fetcher, nil)
 	if err != nil {
 		t.Fatalf("failed to create processor: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestRSSProcessorConvertsHTMLToMarkdownWhenEnabled(t *testing.T) {
 		},
 	}
 
-	processor, err := NewRSSProcessor(cfg, fetcher)
+	processor, err := NewRSSProcessor(cfg, fetcher, nil)
 	if err != nil {
 		t.Fatalf("failed to create processor: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestRSSProcessorExtractsDataURIImagesIntoImageBlocks(t *testing.T) {
 		Description: "<p>hello<img alt=\"x\" src=\"data:image/png;base64," + imgB64 + "\" /></p>",
 	}}}
 
-	processor, err := NewRSSProcessor(cfg, fetcher)
+	processor, err := NewRSSProcessor(cfg, fetcher, nil)
 	if err != nil {
 		t.Fatalf("failed to create processor: %v", err)
 	}
