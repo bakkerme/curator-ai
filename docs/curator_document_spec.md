@@ -16,7 +16,7 @@ workflow:
     driver: string                # Optional: "sqlite" (default: "sqlite")
     dsn: string                   # Optional: SQLite file path/DSN (default: "./curator-seen.db")
     table: string                 # Optional: table name (default: "seen_posts")
-    ttl: string                   # Optional: duration like "168h" or "7d" (days) for expiry
+    ttl: string                   # Optional: duration like "168h", "7d" (days), or "1w" (weeks) for expiry
   
   trigger:                        # When to execute the workflow
     - <trigger_processor>         # Array of trigger configurations
