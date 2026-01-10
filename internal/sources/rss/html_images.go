@@ -120,18 +120,34 @@ func decodeDataURI(s string) (mediaType string, data []byte, ok bool, err error)
 		payload = strings.TrimSpace(payload)
 		payload = strings.ReplaceAll(payload, "\n", "")
 		payload = strings.ReplaceAll(payload, "\r", "")
-		decoded, derr := base64.StdEncoding.DecodeString(payload)
-		if derr != nil {
-			// Some producers use URL-safe base64.
-			decoded, derr = base64.RawStdEncoding.DecodeString(payload)
-			if derr != nil {
-				decoded, derr = base64.RawURLEncoding.DecodeString(payload)
-				if derr != nil {
-					return mediaType, nil, false, derr
-				}
-			}
+
+		var (
+			decoded     []byte
+			derrStd     error
+			derrRawStd  error
+			derrRawURL  error
+		)
+
+		// Try standard base64 encoding first.
+		decoded, derrStd = base64.StdEncoding.DecodeString(payload)
+		if derrStd == nil {
+			return mediaType, decoded, true, nil
 		}
-		return mediaType, decoded, true, nil
+
+		// Some producers omit padding.
+		decoded, derrRawStd = base64.RawStdEncoding.DecodeString(payload)
+		if derrRawStd == nil {
+			return mediaType, decoded, true, nil
+		}
+
+		// Some producers use URL-safe base64.
+		decoded, derrRawURL = base64.RawURLEncoding.DecodeString(payload)
+		if derrRawURL == nil {
+			return mediaType, decoded, true, nil
+		}
+
+		// All decoding strategies failed: return an error that summarizes all attempts.
+		return mediaType, nil, false, fmt.Errorf("base64 decode failed; StdEncoding: %v; RawStdEncoding: %v; RawURLEncoding: %v", derrStd, derrRawStd, derrRawURL)
 	}
 
 	unescaped, uerr := url.PathUnescape(payload)
