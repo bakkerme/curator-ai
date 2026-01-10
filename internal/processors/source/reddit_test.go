@@ -9,8 +9,8 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
-	redditmock "github.com/bakkerme/curator-ai/internal/sources/reddit/mock"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
+	redditmock "github.com/bakkerme/curator-ai/internal/sources/reddit/mock"
 )
 
 type jinaReaderMock struct {
@@ -49,7 +49,7 @@ func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
 		pages: map[string]string{"https://example.com/page": "# md"},
 	}
 
-	processor, err := NewRedditProcessor(cfg, fetcher, reader, nil)
+	processor, err := NewRedditProcessor(cfg, fetcher, reader, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create processor: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRedditProcessor_IncludeWeb_JinaErrorRecordedOnPost(t *testing.T) {
 	}
 	reader := &jinaReaderMock{err: fmt.Errorf("boom")}
 
-	processor, err := NewRedditProcessor(cfg, fetcher, reader, nil)
+	processor, err := NewRedditProcessor(cfg, fetcher, reader, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create processor: %v", err)
 	}

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -25,15 +26,16 @@ type TemplateDefinition struct {
 
 // Workflow contains the complete workflow configuration
 type Workflow struct {
-	Name           string          `yaml:"name"`
-	Version        string          `yaml:"version,omitempty"`
-	MaxConcurrency int             `yaml:"max_concurrency,omitempty"`
-	Trigger        []TriggerConfig `yaml:"trigger"`
-	Sources        []SourceConfig  `yaml:"sources"`
-	Quality        []QualityConfig `yaml:"quality,omitempty"`
-	PostSummary    []SummaryConfig `yaml:"post_summary,omitempty"`
-	RunSummary     []SummaryConfig `yaml:"run_summary,omitempty"`
-	Output         []OutputConfig  `yaml:"output"`
+	Name           string             `yaml:"name"`
+	Version        string             `yaml:"version,omitempty"`
+	MaxConcurrency int                `yaml:"max_concurrency,omitempty"`
+	DedupeStore    *DedupeStoreConfig `yaml:"dedupe_store,omitempty"`
+	Trigger        []TriggerConfig    `yaml:"trigger"`
+	Sources        []SourceConfig     `yaml:"sources"`
+	Quality        []QualityConfig    `yaml:"quality,omitempty"`
+	PostSummary    []SummaryConfig    `yaml:"post_summary,omitempty"`
+	RunSummary     []SummaryConfig    `yaml:"run_summary,omitempty"`
+	Output         []OutputConfig     `yaml:"output"`
 }
 
 // TriggerConfig wraps different trigger types
@@ -179,6 +181,13 @@ type OutputConfig struct {
 	Email *EmailOutput `yaml:"email,omitempty"`
 }
 
+type DedupeStoreConfig struct {
+	Driver string        `yaml:"driver,omitempty"`
+	DSN    string        `yaml:"dsn,omitempty"`
+	Table  string        `yaml:"table,omitempty"`
+	TTL    time.Duration `yaml:"ttl,omitempty"`
+}
+
 // EmailOutput defines email delivery configuration
 type EmailOutput struct {
 	Template     string               `yaml:"template"`
@@ -240,6 +249,11 @@ type ProcessorFactory interface {
 	NewEmailOutput(config *EmailOutput) (core.OutputProcessor, error)
 }
 
+// DedupeStoreConfigurer supports configuring a shared dedupe store for processors.
+type DedupeStoreConfigurer interface {
+	ConfigureDedupeStore(config *DedupeStoreConfig) error
+}
+
 // Validate performs validation on the curator document
 func (d *CuratorDocument) Validate() error {
 	if err := d.resolveTemplateReferences(); err != nil {
@@ -263,6 +277,10 @@ func (d *CuratorDocument) Validate() error {
 
 	if len(d.Workflow.Output) == 0 {
 		return fmt.Errorf("output configuration is required")
+	}
+
+	if err := validateDedupeStoreConfig(d.Workflow.DedupeStore); err != nil {
+		return err
 	}
 
 	for _, output := range d.Workflow.Output {
@@ -431,6 +449,21 @@ func (d *CuratorDocument) Validate() error {
 	}
 
 	return nil
+}
+
+func validateDedupeStoreConfig(cfg *DedupeStoreConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.TTL < 0 {
+		return fmt.Errorf("dedupe_store ttl must be >= 0")
+	}
+	switch strings.ToLower(cfg.Driver) {
+	case "", "sqlite":
+		return nil
+	default:
+		return fmt.Errorf("dedupe_store driver must be \"sqlite\"")
+	}
 }
 
 func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
@@ -706,6 +739,14 @@ func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
 func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*core.Flow, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
+	}
+
+	if factory != nil {
+		if dedupeFactory, ok := factory.(DedupeStoreConfigurer); ok {
+			if err := dedupeFactory.ConfigureDedupeStore(d.Workflow.DedupeStore); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	now := time.Now()

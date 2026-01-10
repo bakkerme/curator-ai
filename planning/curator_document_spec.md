@@ -11,6 +11,12 @@ workflow:
   name: string                    # Human-readable workflow name
   version: string                 # Optional: Document schema version (default: "1.0")
   max_concurrency: number         # Optional: max in-flight LLM calls for per-block processors
+
+  dedupe_store:
+    driver: string                # Optional: "sqlite" (default: "sqlite")
+    dsn: string                   # Optional: SQLite file path/DSN (default: "./curator-seen.db")
+    table: string                 # Optional: table name (default: "seen_posts")
+    ttl: string                   # Optional: duration like "168h" for expiry
   
   trigger:                        # When to execute the workflow
     - <trigger_processor>         # Array of trigger configurations
@@ -56,6 +62,17 @@ cron:
 ```
 
 ### Source Processors
+
+#### Dedupe Store (Optional)
+Stores identifiers for emitted posts so sources can skip previously seen items.
+
+```yaml
+dedupe_store:
+  driver: sqlite
+  dsn: "./curator-seen.db"
+  table: "seen_posts"
+  ttl: "168h"
+```
 
 #### Reddit Source
 Fetches posts from specified subreddits with optional enrichment.

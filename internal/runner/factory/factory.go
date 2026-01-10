@@ -1,10 +1,13 @@
 package factory
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
+	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/llm"
 	llmopenai "github.com/bakkerme/curator-ai/internal/llm/openai"
 	"github.com/bakkerme/curator-ai/internal/outputs/email"
@@ -32,6 +35,7 @@ type Factory struct {
 	RedditFetcher      reddit.Fetcher
 	RSSFetcher         rss.Fetcher
 	EmailSender        email.Sender
+	SeenStore          dedupe.SeenStore
 }
 
 func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
@@ -60,7 +64,7 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 }
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	processor, err := source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.Logger)
+	processor, err := source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +72,7 @@ func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcesso
 }
 
 func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
-	processor, err := source.NewRSSProcessor(cfg, f.RSSFetcher)
+	processor, err := source.NewRSSProcessor(cfg, f.RSSFetcher, f.SeenStore)
 	if err != nil {
 		return nil, err
 	}
@@ -162,4 +166,37 @@ func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput 
 		merged.UseTLS = &useTLS
 	}
 	return &merged
+}
+
+func (f *Factory) ConfigureDedupeStore(cfg *config.DedupeStoreConfig) error {
+	if f.SeenStore != nil {
+		_ = f.SeenStore.Close()
+		f.SeenStore = nil
+	}
+
+	if cfg == nil {
+		return nil
+	}
+
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	if driver == "" {
+		driver = "sqlite"
+	}
+
+	switch driver {
+	case "sqlite":
+		dsn := strings.TrimSpace(cfg.DSN)
+		if dsn == "" {
+			dsn = "curator-seen.db"
+		}
+		table := strings.TrimSpace(cfg.Table)
+		store, err := dedupe.NewSQLiteStore(dsn, table, cfg.TTL)
+		if err != nil {
+			return err
+		}
+		f.SeenStore = store
+		return nil
+	default:
+		return fmt.Errorf("unsupported dedupe store driver %q", driver)
+	}
 }
