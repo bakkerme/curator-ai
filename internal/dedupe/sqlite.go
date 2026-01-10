@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,9 +18,10 @@ const (
 )
 
 type SQLiteStore struct {
-	db    *sql.DB
-	table string
-	ttl   time.Duration
+	db         *sql.DB
+	table      string
+	tableIdent string
+	ttl        time.Duration
 }
 
 func NewSQLiteStore(dsn string, table string, ttl time.Duration) (*SQLiteStore, error) {
@@ -33,6 +35,10 @@ func NewSQLiteStore(dsn string, table string, ttl time.Duration) (*SQLiteStore, 
 	if table == "" {
 		table = defaultSQLiteTable
 	}
+	tableIdent, err := quoteSQLiteIdentifier(table)
+	if err != nil {
+		return nil, err
+	}
 	if err := ensureSQLiteDir(dsn); err != nil {
 		return nil, err
 	}
@@ -42,9 +48,10 @@ func NewSQLiteStore(dsn string, table string, ttl time.Duration) (*SQLiteStore, 
 	}
 	db.SetMaxOpenConns(1)
 	store := &SQLiteStore{
-		db:    db,
-		table: table,
-		ttl:   ttl,
+		db:         db,
+		table:      table,
+		tableIdent: tableIdent,
+		ttl:        ttl,
 	}
 	if err := store.ensureSchema(context.Background()); err != nil {
 		_ = db.Close()
@@ -58,7 +65,7 @@ func (s *SQLiteStore) HasSeen(ctx context.Context, id string) (bool, error) {
 		return false, nil
 	}
 	var seenAt time.Time
-	query := fmt.Sprintf("SELECT seen_at FROM %s WHERE id = ?", s.table)
+	query := fmt.Sprintf("SELECT seen_at FROM %s WHERE id = ?", s.tableIdent)
 	err := s.db.QueryRowContext(ctx, query, id).Scan(&seenAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -85,7 +92,7 @@ func (s *SQLiteStore) MarkSeen(ctx context.Context, id string) error {
 	}
 	_, err := s.db.ExecContext(
 		ctx,
-		fmt.Sprintf("INSERT INTO %s (id, seen_at) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at", s.table),
+		fmt.Sprintf("INSERT INTO %s (id, seen_at) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at", s.tableIdent),
 		id,
 		time.Now().UTC(),
 	)
@@ -102,7 +109,7 @@ func (s *SQLiteStore) MarkSeenBatch(ctx context.Context, ids []string) error {
 	}
 	stmt, err := tx.PrepareContext(
 		ctx,
-		fmt.Sprintf("INSERT INTO %s (id, seen_at) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at", s.table),
+		fmt.Sprintf("INSERT INTO %s (id, seen_at) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at", s.tableIdent),
 	)
 	if err != nil {
 		_ = tx.Rollback()
@@ -136,11 +143,11 @@ func (s *SQLiteStore) ensureSchema(ctx context.Context) error {
 	ddl := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id TEXT PRIMARY KEY,
 		seen_at TIMESTAMP NOT NULL
-	)`, s.table)
+	)`, s.tableIdent)
 	if _, err := s.db.ExecContext(ctx, ddl); err != nil {
 		return fmt.Errorf("create sqlite table: %w", err)
 	}
-	index := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s_seen_at_idx ON %s (seen_at)", s.table, s.table)
+	index := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s_seen_at_idx ON %s (seen_at)", s.table, s.tableIdent)
 	if _, err := s.db.ExecContext(ctx, index); err != nil {
 		return fmt.Errorf("create sqlite index: %w", err)
 	}
@@ -148,7 +155,7 @@ func (s *SQLiteStore) ensureSchema(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) deleteID(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", s.table), id)
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", s.tableIdent), id)
 	return err
 }
 
@@ -167,4 +174,16 @@ func ensureSQLiteDir(dsn string) error {
 		return nil
 	}
 	return os.MkdirAll(dir, 0o755)
+}
+
+var sqliteIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func quoteSQLiteIdentifier(identifier string) (string, error) {
+	if identifier == "" {
+		return "", fmt.Errorf("sqlite table name is required")
+	}
+	if !sqliteIdentifierPattern.MatchString(identifier) {
+		return "", fmt.Errorf("sqlite table name %q must match %s", identifier, sqliteIdentifierPattern.String())
+	}
+	return `"` + identifier + `"`, nil
 }

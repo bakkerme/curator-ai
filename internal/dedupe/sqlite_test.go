@@ -82,3 +82,11 @@ func TestSQLiteStoreMarkSeenBatch(t *testing.T) {
 		}
 	}
 }
+
+func TestSQLiteStoreRejectsInvalidTableName(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "seen.db")
+	_, err := NewSQLiteStore(dbPath, "bad-name;", 0)
+	if err == nil {
+		t.Fatalf("expected invalid table name error")
+	}
+}
