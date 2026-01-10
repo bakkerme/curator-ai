@@ -2,12 +2,11 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"strconv"
 )
 
 // parseDurationExtended parses Go-style duration strings and adds support for:
