@@ -18,16 +18,20 @@ func ConvertHTMLToMarkdown(html string) (string, error) {
 		return html, nil
 	}
 
-	conv := converter.NewConverter(
+	conv := newHTMLToMarkdownConverter()
+	md, err := conv.ConvertString(html)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(md), nil
+}
+
+var newHTMLToMarkdownConverter = func() *converter.Converter {
+	return converter.NewConverter(
 		converter.WithEscapeMode("smart"),
 		converter.WithPlugins(
 			base.NewBasePlugin(),
 			commonmark.NewCommonmarkPlugin(),
 		),
 	)
-	md, err := conv.ConvertString(html)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(md), nil
 }

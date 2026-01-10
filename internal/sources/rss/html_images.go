@@ -54,8 +54,12 @@ func ExtractDataURIImagesFromHTML(htmlText string, placeholderBase string) (stri
 				_, data, ok, derr := decodeDataURI(src)
 				if derr == nil && ok && len(data) > 0 {
 					idx := len(images)
-					images = append(images, core.ImageBlock{ImageData: data, WasFetched: true})
 					placeholder := fmt.Sprintf("%s/%d", strings.TrimRight(placeholderBase, "/"), idx)
+					images = append(images, core.ImageBlock{
+						URL:        placeholder,
+						ImageData:  data,
+						WasFetched: true,
+					})
 
 					// Replace the data URI with a small placeholder.
 					setAttr(n, "src", placeholder)
@@ -122,10 +126,10 @@ func decodeDataURI(s string) (mediaType string, data []byte, ok bool, err error)
 		payload = strings.ReplaceAll(payload, "\r", "")
 
 		var (
-			decoded     []byte
-			derrStd     error
-			derrRawStd  error
-			derrRawURL  error
+			decoded    []byte
+			derrStd    error
+			derrRawStd error
+			derrRawURL error
 		)
 
 		// Try standard base64 encoding first.
