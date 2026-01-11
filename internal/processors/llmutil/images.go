@@ -196,3 +196,44 @@ func imageURLForMessage(image *core.ImageBlock) (string, bool) {
 	encoded := base64.StdEncoding.EncodeToString(image.ImageData)
 	return fmt.Sprintf("data:%s;base64,%s", contentType, encoded), true
 }
+
+const missingImageMarker = "Received 404 status code when fetching image from URL:"
+
+func MissingImageURL(err error) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+	message := err.Error()
+	idx := strings.Index(message, missingImageMarker)
+	if idx == -1 {
+		return "", false
+	}
+	urlPart := strings.TrimSpace(message[idx+len(missingImageMarker):])
+	if urlPart == "" {
+		return "", true
+	}
+	if quote := strings.Index(urlPart, "\""); quote >= 0 {
+		urlPart = urlPart[:quote]
+	}
+	if space := strings.IndexAny(urlPart, " \n\t"); space >= 0 {
+		urlPart = urlPart[:space]
+	}
+	return strings.TrimSpace(urlPart), true
+}
+
+func DropImageByURL(images []*core.ImageBlock, url string) ([]*core.ImageBlock, *core.ImageBlock) {
+	if len(images) == 0 {
+		return images, nil
+	}
+	if url != "" {
+		for i, image := range images {
+			if image != nil && image.URL == url {
+				remaining := append([]*core.ImageBlock{}, images[:i]...)
+				remaining = append(remaining, images[i+1:]...)
+				return remaining, image
+			}
+		}
+	}
+	removed := images[len(images)-1]
+	return images[:len(images)-1], removed
+}

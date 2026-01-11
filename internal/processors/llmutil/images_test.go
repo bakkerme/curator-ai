@@ -2,6 +2,7 @@ package llmutil
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -331,5 +332,53 @@ func TestImageURLForMessage_UsesURLWhenPresent(t *testing.T) {
 	}
 	if url != img.URL {
 		t.Fatalf("expected %q, got %q", img.URL, url)
+	}
+}
+
+func TestMissingImageURL(t *testing.T) {
+	err := errors.New(`chat completion failed: POST "https://openrouter.ai/api/v1/chat/completions": 400 Bad Request {"message":"Received 404 status code when fetching image from URL: https://i.redd.it/6ocf1gbxj6cg1.png","code":400}`)
+	url, ok := MissingImageURL(err)
+	if !ok {
+		t.Fatalf("expected ok=true")
+	}
+	if url != "https://i.redd.it/6ocf1gbxj6cg1.png" {
+		t.Fatalf("expected url parsed, got %q", url)
+	}
+
+	_, ok = MissingImageURL(errors.New("other error"))
+	if ok {
+		t.Fatalf("expected ok=false for unrelated error")
+	}
+}
+
+func TestDropImageByURL(t *testing.T) {
+	images := []*core.ImageBlock{
+		{URL: "a"},
+		{URL: "b"},
+		{URL: "c"},
+	}
+
+	remaining, removed := DropImageByURL(images, "b")
+	if removed == nil || removed.URL != "b" {
+		t.Fatalf("expected to remove b, got %v", removed)
+	}
+	if len(remaining) != 2 || remaining[0].URL != "a" || remaining[1].URL != "c" {
+		t.Fatalf("unexpected remaining order: %#v", remaining)
+	}
+
+	remaining, removed = DropImageByURL(remaining, "missing")
+	if removed == nil || removed.URL != "c" {
+		t.Fatalf("expected to remove last image, got %v", removed)
+	}
+	if len(remaining) != 1 || remaining[0].URL != "a" {
+		t.Fatalf("unexpected remaining: %#v", remaining)
+	}
+
+	remaining, removed = DropImageByURL(remaining[:0], "a")
+	if removed != nil {
+		t.Fatalf("expected no removal, got %v", removed)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("expected empty remaining slice")
 	}
 }
