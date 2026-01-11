@@ -14,6 +14,34 @@ import (
 	"github.com/bakkerme/curator-ai/internal/llm"
 )
 
+type missingImageThenOKClient struct {
+	calls atomic.Int32
+}
+
+func (c *missingImageThenOKClient) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
+	_ = ctx
+	c.calls.Add(1)
+
+	hasImage := false
+	for _, m := range request.Messages {
+		if m.Role != llm.RoleUser {
+			continue
+		}
+		for _, p := range m.Parts {
+			if p.Type == llm.MessagePartImageURL {
+				hasImage = true
+				break
+			}
+		}
+	}
+
+	if hasImage {
+		// Mimic the provider error marker but with an empty/malformed URL.
+		return llm.ChatResponse{}, errors.New(`400 Bad Request {"message":"Received 404 status code when fetching image from URL: ","code":400}`)
+	}
+	return llm.ChatResponse{Content: "ok"}, nil
+}
+
 type conditionalClient struct {
 	mu      sync.Mutex
 	errWhen string
@@ -192,5 +220,43 @@ func TestPostLLMProcessor_Summarize_BlockErrorPolicyDrop_Serial(t *testing.T) {
 	}
 	if filtered[0].ID != "1" || filtered[1].ID != "3" {
 		t.Fatalf("expected IDs [1 3], got [%s %s]", filtered[0].ID, filtered[1].ID)
+	}
+}
+
+func TestPostLLMProcessor_Summarize_MultimodalMissingImage_EmptyURL_NoInfiniteRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client := &missingImageThenOKClient{}
+	cfg := &config.LLMSummary{
+		Name:           "s",
+		Type:           "summary_llm",
+		Context:        "post",
+		SystemTemplate: "system",
+		PromptTemplate: "prompt",
+		MaxConcurrency: 1,
+		Images: &config.LLMImages{
+			Enabled: true,
+			Mode:    config.ImageModeMultimodal,
+		},
+	}
+	processor, err := NewPostLLMProcessor(cfg, client, "default-model")
+	if err != nil {
+		t.Fatalf("NewPostLLMProcessor error: %v", err)
+	}
+
+	blocks := []*core.PostBlock{{ID: "1", Title: "a", ImageBlocks: []core.ImageBlock{{URL: "https://example.com/a.png"}, {URL: "https://example.com/b.png"}}}}
+	_, err = processor.Summarize(ctx, blocks)
+	if err != nil {
+		t.Fatalf("Summarize error: %v", err)
+	}
+	if blocks[0].Summary == nil || blocks[0].Summary.Summary != "ok" {
+		t.Fatalf("expected summary to be set, got %#v", blocks[0].Summary)
+	}
+	if got := client.calls.Load(); got != 3 {
+		// 2 images -> error/drop twice, then success with no images.
+		t.Fatalf("expected 3 calls (2 drops + success), got %d", got)
 	}
 }

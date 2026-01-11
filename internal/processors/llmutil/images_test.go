@@ -336,16 +336,54 @@ func TestImageURLForMessage_UsesURLWhenPresent(t *testing.T) {
 }
 
 func TestMissingImageURL(t *testing.T) {
-	err := errors.New(`chat completion failed: POST "https://openrouter.ai/api/v1/chat/completions": 400 Bad Request {"message":"Received 404 status code when fetching image from URL: https://i.redd.it/6ocf1gbxj6cg1.png","code":400}`)
-	url, ok := MissingImageURL(err)
-	if !ok {
-		t.Fatalf("expected ok=true")
-	}
-	if url != "https://i.redd.it/6ocf1gbxj6cg1.png" {
-		t.Fatalf("expected url parsed, got %q", url)
-	}
+	t.Run("valid url extracts", func(t *testing.T) {
+		err := errors.New(`chat completion failed: POST "https://openrouter.ai/api/v1/chat/completions": 400 Bad Request {"message":"Received 404 status code when fetching image from URL: https://i.redd.it/6ocf1gbxj6cg1.png","code":400}`)
+		url, ok := MissingImageURL(err)
+		if !ok {
+			t.Fatalf("expected ok=true")
+		}
+		if url != "https://i.redd.it/6ocf1gbxj6cg1.png" {
+			t.Fatalf("expected url parsed, got %q", url)
+		}
+	})
 
-	_, ok = MissingImageURL(errors.New("other error"))
+	t.Run("marker with empty url returns ok but empty", func(t *testing.T) {
+		err := errors.New(`chat completion failed: 400 Bad Request {"message":"Received 404 status code when fetching image from URL: ","code":400}`)
+		url, ok := MissingImageURL(err)
+		if !ok {
+			t.Fatalf("expected ok=true")
+		}
+		if url != "" {
+			t.Fatalf("expected empty url, got %q", url)
+		}
+	})
+
+	t.Run("marker with malformed url returns ok but empty", func(t *testing.T) {
+		tests := []string{
+			`chat completion failed: 400 Bad Request {"message":"Received 404 status code when fetching image from URL: not-a-url","code":400}`,
+			`chat completion failed: 400 Bad Request {"message":"Received 404 status code when fetching image from URL: https://","code":400}`,
+			`chat completion failed: 400 Bad Request {"message":"Received 404 status code when fetching image from URL: ftp://example.com/a.png","code":400}`,
+			`chat completion failed: 400 Bad Request {"message":"Received 404 status code when fetching image from URL: https://example.com/a.png)","code":400}`,
+		}
+		for i, msg := range tests {
+			_, _ = i, msg
+			url, ok := MissingImageURL(errors.New(msg))
+			if !ok {
+				t.Fatalf("case %d: expected ok=true", i)
+			}
+			if i == 3 {
+				if url != "https://example.com/a.png" {
+					t.Fatalf("case %d: expected trimmed url, got %q", i, url)
+				}
+				continue
+			}
+			if url != "" {
+				t.Fatalf("case %d: expected empty url, got %q", i, url)
+			}
+		}
+	})
+
+	_, ok := MissingImageURL(errors.New("other error"))
 	if ok {
 		t.Fatalf("expected ok=false for unrelated error")
 	}

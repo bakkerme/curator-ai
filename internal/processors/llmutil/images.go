@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"text/template"
@@ -218,7 +219,24 @@ func MissingImageURL(err error) (string, bool) {
 	if space := strings.IndexAny(urlPart, " \n\t"); space >= 0 {
 		urlPart = urlPart[:space]
 	}
-	return strings.TrimSpace(urlPart), true
+	candidate := strings.TrimSpace(urlPart)
+	if candidate == "" {
+		return "", true
+	}
+	// Defensive: ensure we only return a usable URL. If parsing fails, callers can still
+	// treat this as a missing-image signal and drop an image without relying on a URL match.
+	candidate = strings.TrimRight(candidate, ",.)];}")
+	parsed, parseErr := url.Parse(candidate)
+	if parseErr != nil || parsed == nil {
+		return "", true
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", true
+	}
+	if parsed.Host == "" {
+		return "", true
+	}
+	return candidate, true
 }
 
 func DropImageByURL(images []*core.ImageBlock, url string) ([]*core.ImageBlock, *core.ImageBlock) {
