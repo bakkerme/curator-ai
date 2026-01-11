@@ -172,14 +172,30 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		var parsed qualityResponse
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
-			userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
+			for {
+				userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
 
-			_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
-				{Role: llm.RoleSystem, Content: system_prompt},
-				userMessage,
-			}, decodeRetries, func(content string) error {
-				return json.Unmarshal([]byte(content), &parsed)
-			}, temperature)
+				_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+					{Role: llm.RoleSystem, Content: system_prompt},
+					userMessage,
+				}, decodeRetries, func(content string) error {
+					return json.Unmarshal([]byte(content), &parsed)
+				}, temperature)
+				if err == nil {
+					break
+				}
+				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+					var removed *core.ImageBlock
+					images, removed = llmutil.DropImageByURL(images, url)
+					if removed != nil {
+						logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
+					} else {
+						logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID)
+					}
+					continue
+				}
+				return false, fmt.Errorf("could not parse llm quality response: %w", err)
+			}
 		} else {
 			_, err = llmutil.ChatSystemUserWithRetries(
 				ctx,

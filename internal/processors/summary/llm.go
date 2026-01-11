@@ -150,11 +150,27 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		var response llm.ChatResponse
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
-			userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
-			response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
-				{Role: llm.RoleSystem, Content: systemPrompt},
-				userMessage,
-			}, RETRIES, nil, temperature)
+			for {
+				userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
+				response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+					{Role: llm.RoleSystem, Content: systemPrompt},
+					userMessage,
+				}, RETRIES, nil, temperature)
+				if err == nil {
+					break
+				}
+				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+					var removed *core.ImageBlock
+					images, removed = llmutil.DropImageByURL(images, url)
+					if removed != nil {
+						logger.Warn("llm post summary missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
+					} else {
+						logger.Warn("llm post summary missing image; retrying without image", "block_id", block.ID)
+					}
+					continue
+				}
+				break
+			}
 		} else {
 			response, err = llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
 		}
