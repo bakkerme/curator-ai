@@ -35,14 +35,12 @@ func NewRunLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, def
 		return nil, fmt.Errorf("run summary config is required")
 	}
 
-	systemTmpl, tmpl, err := llmutil.ParseSystemAndPromptTemplates(cfg.Name, cfg.SystemTemplate, cfg.PromptTemplate)
+	systemTmpl, tmpl, _, err := llmutil.ParseProcessorTemplates(cfg.Name, cfg.SystemTemplate, cfg.PromptTemplate, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = llmutil.DefaultLogger(logger)
 
 	return &RunLLMProcessor{
 		name:           cfg.Name,
@@ -85,11 +83,7 @@ func (p *RunLLMProcessor) SummarizeRun(ctx context.Context, blocks []*core.PostB
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	logger := p.logger
-	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
-		logger = ctxLogger
-	}
-	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+	logger := llmutil.ProcessorLogger(ctx, p.logger, p.name, p)
 
 	data := struct {
 		Blocks []*core.PostBlock
