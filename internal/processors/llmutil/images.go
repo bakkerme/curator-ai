@@ -208,7 +208,7 @@ func imageURLForMessage(image *core.ImageBlock) (string, bool) {
 //
 // When this happens we want to *salvage the post* by retrying without the failing image rather than
 // dropping the entire block.
-const missingImageMarker = "Received 404 status code when fetching image from URL:"
+const openRouterMissingImageErrorMarker = "Received 404 status code when fetching image from URL:"
 
 // MissingImageURL inspects an error and returns (url, true) if it looks like the provider failed to
 // fetch an image URL we provided (typically a 404).
@@ -225,11 +225,11 @@ func MissingImageURL(err error) (string, bool) {
 		return "", false
 	}
 	message := err.Error()
-	idx := strings.Index(message, missingImageMarker)
+	idx := strings.Index(message, openRouterMissingImageErrorMarker)
 	if idx == -1 {
 		return "", false
 	}
-	urlPart := strings.TrimSpace(message[idx+len(missingImageMarker):])
+	urlPart := strings.TrimSpace(message[idx+len(openRouterMissingImageErrorMarker):])
 	if urlPart == "" {
 		return "", true
 	}
