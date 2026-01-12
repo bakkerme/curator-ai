@@ -172,6 +172,9 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		var parsed qualityResponse
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
+			// Multimodal quality checks can fail hard if any provided image URL is missing (404).
+			// When this happens we want to avoid dropping the post purely due to an external image fetch
+			// failure, so we retry while removing failing images until the request succeeds or we run out.
 			for {
 				userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
 
@@ -185,13 +188,19 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 					break
 				}
 				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+					// MissingImageURL is intentionally heuristic: we only have an `error` and no structured
+					// provider response. We only retry if we can identify and remove the exact failing image
+					// URL; otherwise we fail the block and let block_error_policy decide whether the post should
+					// be dropped.
+					if url == "" {
+						return false, fmt.Errorf("could not parse llm quality response: %w", err)
+					}
 					var removed *core.ImageBlock
 					images, removed = llmutil.DropImageByURL(images, url)
-					if removed != nil {
-						logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
-					} else {
-						logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID)
+					if removed == nil {
+						return false, fmt.Errorf("could not parse llm quality response: %w", err)
 					}
+					logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
 					continue
 				}
 				return false, fmt.Errorf("could not parse llm quality response: %w", err)

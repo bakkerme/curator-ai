@@ -198,8 +198,28 @@ func imageURLForMessage(image *core.ImageBlock) (string, bool) {
 	return fmt.Sprintf("data:%s;base64,%s", contentType, encoded), true
 }
 
+// missingImageMarker is a best-effort signature used to detect a specific class of upstream
+// multimodal failures: the LLM provider attempted to fetch an image URL we supplied and got a 404.
+//
+// Why string matching?
+// Some OpenAI-compatible providers (e.g. OpenRouter) surface this as an HTTP 400 response with a
+// nested JSON body that contains a human-readable message. In our current llm client abstraction we
+// don't get a typed/structured error for "image fetch failed"; we only get an `error`.
+//
+// When this happens we want to *salvage the post* by retrying without the failing image rather than
+// dropping the entire block.
 const missingImageMarker = "Received 404 status code when fetching image from URL:"
 
+// MissingImageURL inspects an error and returns (url, true) if it looks like the provider failed to
+// fetch an image URL we provided (typically a 404).
+//
+// This is intentionally conservative:
+//   - We only activate on a known marker substring.
+//   - If we can extract a valid http(s) URL, we return it so callers can remove that exact image.
+//   - If we detect the marker but can't extract a usable URL, we return ("", true) so callers can
+//     still treat this as a "missing image" signal and drop *some* image to make progress.
+//
+// Callers should treat this as a heuristic, not a guarantee.
 func MissingImageURL(err error) (string, bool) {
 	if err == nil {
 		return "", false
@@ -239,6 +259,16 @@ func MissingImageURL(err error) (string, bool) {
 	return candidate, true
 }
 
+// DropImageByURL removes a single image from an image slice and returns (remaining, removed).
+//
+// Behaviour:
+//   - If `url` matches an image's URL exactly, that image is removed.
+//   - If `url` is empty or doesn't match anything, nothing is removed.
+//
+// We intentionally do *not* "guess" which image to drop when the URL can't be matched.
+// Missing-image detection is heuristic (string parsing). If we can't identify the exact image that
+// triggered the provider error, we prefer to fail the block and let block_error_policy decide
+// whether to drop the post, rather than silently producing unpredictable results.
 func DropImageByURL(images []*core.ImageBlock, url string) ([]*core.ImageBlock, *core.ImageBlock) {
 	if len(images) == 0 {
 		return images, nil
@@ -252,6 +282,5 @@ func DropImageByURL(images []*core.ImageBlock, url string) ([]*core.ImageBlock, 
 			}
 		}
 	}
-	removed := images[len(images)-1]
-	return images[:len(images)-1], removed
+	return images, nil
 }

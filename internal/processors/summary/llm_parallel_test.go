@@ -237,6 +237,9 @@ func TestPostLLMProcessor_Summarize_MultimodalMissingImage_EmptyURL_NoInfiniteRe
 		SystemTemplate: "system",
 		PromptTemplate: "prompt",
 		MaxConcurrency: 1,
+		// If the provider signals a missing image but we cannot identify which image URL caused it
+		// (empty URL in the upstream error), we fail the block and rely on block_error_policy.
+		BlockErrorPolicy: config.BlockErrorPolicyDrop,
 		Images: &config.LLMImages{
 			Enabled: true,
 			Mode:    config.ImageModeMultimodal,
@@ -248,15 +251,15 @@ func TestPostLLMProcessor_Summarize_MultimodalMissingImage_EmptyURL_NoInfiniteRe
 	}
 
 	blocks := []*core.PostBlock{{ID: "1", Title: "a", ImageBlocks: []core.ImageBlock{{URL: "https://example.com/a.png"}, {URL: "https://example.com/b.png"}}}}
-	_, err = processor.Summarize(ctx, blocks)
+	filtered, err := processor.Summarize(ctx, blocks)
 	if err != nil {
 		t.Fatalf("Summarize error: %v", err)
 	}
-	if blocks[0].Summary == nil || blocks[0].Summary.Summary != "ok" {
-		t.Fatalf("expected summary to be set, got %#v", blocks[0].Summary)
+	if len(filtered) != 0 {
+		t.Fatalf("expected block to be dropped, got %d blocks", len(filtered))
 	}
-	if got := client.calls.Load(); got != 3 {
-		// 2 images -> error/drop twice, then success with no images.
-		t.Fatalf("expected 3 calls (2 drops + success), got %d", got)
+	if got := client.calls.Load(); got != 1 {
+		// One attempt with images, then drop (no retries because we can't identify a specific URL).
+		t.Fatalf("expected 1 call, got %d", got)
 	}
 }

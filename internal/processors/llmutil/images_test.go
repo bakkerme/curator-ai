@@ -405,10 +405,10 @@ func TestDropImageByURL(t *testing.T) {
 	}
 
 	remaining, removed = DropImageByURL(remaining, "missing")
-	if removed == nil || removed.URL != "c" {
-		t.Fatalf("expected to remove last image, got %v", removed)
+	if removed != nil {
+		t.Fatalf("expected to remove nothing on mismatch, got %v", removed)
 	}
-	if len(remaining) != 1 || remaining[0].URL != "a" {
+	if len(remaining) != 2 || remaining[0].URL != "a" || remaining[1].URL != "c" {
 		t.Fatalf("unexpected remaining: %#v", remaining)
 	}
 
