@@ -85,8 +85,8 @@ workflow:
           mode: multimodal
           max_images: 4
           include_comment_images: false
-        # block_error_policy: drop
-        block_error_policy: fail
+        block_error_policy: drop
+        # block_error_policy: fail
         # snapshot:
         #   snapshot: true
         #   # restore: true
@@ -209,7 +209,6 @@ templates:
       - 3-6 bullet points
       - then "Why it matters:" (1-2 sentences)
       - then "Community response:" (1-2 sentences if comments are provided)
-      - then "Key entities:" (comma-separated list)
 
     template: |-
       -----USER CONTENT START-----

@@ -3,6 +3,7 @@
 .gomodcache
 .gopath
 .gotmp
+curator-seen.db
 
 # Build artifacts
 /bin/

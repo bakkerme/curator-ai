@@ -1,0 +1,305 @@
+workflow:
+  name: "AI Research Intelligence"
+  # version: "1.0" # optional
+  max_concurrency: 20
+  dedupe_store:
+    driver: "sqlite"
+    dsn: "./curator-seen.db"
+    table: "seen_posts"
+    ttl: "14d"
+
+  trigger:
+    - cron:
+        schedule: "0 0 * * *" # midnight UTC
+        # timezone: "UTC"     # optional
+
+  sources:
+    - reddit:
+        subreddits: ["LocalLLaMA"]
+        include_comments: true
+        include_web: true
+        include_images: true
+        limit: 50          # optional
+        sort: "hot"        # optional
+        time_filter: "day" # optional
+        min_score: 10      # optional
+        snapshot:
+          # snapshot: true
+          restore: true
+          path: "snapshots/reddit.json"
+
+  quality:
+    - quality_rule:
+        name: min_comments
+        rule: "comment_count < 5"
+        action_type: pass_drop
+        result: drop
+    - llm:
+        name: is_relevant
+        prompt_template: isRelevantTemplateMultimodal
+        evaluations:
+          - "Contains specific technical details or specifications"
+          - "Explains the significance and impact of the development"
+          - "Includes performance metrics, benchmarks, or comparisons"
+          - "Discusses novel approaches or techniques"
+          - "Valuable insights into commercial applications of AI technology"
+          - "New model releases or updates from major AI labs"
+          - "Innovative use cases or applications of LLMs"
+          - "News and discussion on the financing of AI (but not on the 'AI Crash')"
+        exclusions:
+          - "Content entirely unrelated to AI/ML technology"
+          - "Questions that would be better suited for tech support"
+          - "Random complaints without technical content"
+          - "Humor posts"
+          - "Personal blog-style posts"
+          - "Career advice or job postings"
+        action_type: pass_drop
+        threshold: 0.5 # optional
+        images:
+          enabled: true
+          mode: multimodal
+          max_images: 4
+          include_comment_images: false
+        block_error_policy: drop
+        # block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/quality-llm.json"
+
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        prompt_template: postSummaryTemplateMultimodal
+        params:
+          interests:
+            - "New LLM models, runners or other infrastructure being released or open sourced"
+            - "Big AI lab news (OpenAI, Anthropic, DeepSeek, Qwen etc.)"
+            - "Security news"
+        images:
+          enabled: true
+          mode: multimodal
+          max_images: 4
+          include_comment_images: false
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/post-summary.json"
+
+    - markdown:
+        name: markdown_to_html_post_sum
+        type: markdown
+        context: post
+
+  run_summary:
+    - llm:
+        name: full_sum
+        type: llm
+        context: flow
+        prompt_template: fullSummaryTemplate
+        params:
+          focus:
+            - "Major advances in model architecture or capabilities"
+            - "Emerging trends in open-source LLM development"
+            - "Notable performance breakthroughs"
+            - "Industry impact and adoption patterns"
+        block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/run-summary.json"
+    - markdown:
+        name: markdown_to_html_sum
+        type: markdown
+        context: "flow"
+
+  output:
+    - email:
+        template: emailTemplate
+        to: brandon@bdmd.com.au
+        subject: "Daily AI Research"
+
+templates:
+  - id: isRelevantTemplateMultimodal
+    system_template: |-
+      You are a strict relevance/quality evaluator.
+
+      You may be given post text plus one or more images attached as multimodal inputs.
+      Use images as primary evidence when the post text is sparse. If charts/tables are present, extract key numbers and units.
+
+      Evaluate the post and output ONLY valid JSON with this exact shape:
+      {"score": <number 0..1>, "reason": <string>}
+
+      Scoring guidance:
+      - 0.0 = completely irrelevant / low-signal
+      - 1.0 = extremely relevant / high-signal
+
+      Positive evaluation criteria (score higher when these apply):
+      {{- range .Evaluations }}
+      - {{ . }}
+      {{- end }}
+
+      Exclusion criteria (score near 0 when these apply):
+      {{- range .Exclusions }}
+      - {{ . }}
+      {{- end }}
+
+      Reason should be a single sentence of 25 words or less.
+
+      Return ONLY the JSON object. No markdown, no code fences.
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+      CreatedAt: {{ .CreatedAt }}
+
+      Content:
+      {{ .Content }}
+
+      Web Content:
+      {{- range .WebBlocks }}
+      - {{ .URL }}
+        {{ .Page }}
+      {{- end }}
+
+      Images attached: {{ len .ImageBlocks }}
+      -----USER CONTENT END-----
+
+  - id: postSummaryTemplateMultimodal
+    system_template: |-
+      You are an expert technical analyst.
+
+      You may be given post text plus one or more images attached as multimodal inputs.
+      Use images as primary evidence when the post text is sparse. If charts/tables are present, extract key numbers and units.
+
+      Write a concise summary of the post. Focus on the reader interests.
+      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
+
+      Reader interests:
+      {{- range (index .Params "interests") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      - 3-6 bullet points
+      - then "Why it matters:" (1-2 sentences)
+      - then "Community response:" (1-2 sentences if comments are provided)
+      - then "Key entities:" (comma-separated list)
+
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+
+      Content:
+      {{ .Content }}
+
+      Comments (optional signal; {{ len .Comments }}):
+      {{- range $i, $c := .Comments }}
+      - {{ $c.Author }}: {{ $c.Content }}
+      {{- end }}
+
+      Linked URLs:
+      {{- range .WebBlocks }}
+      - {{ .URL }}
+        {{ .Page }}
+      {{- end }}
+
+      Images attached: {{ len .ImageBlocks }}
+      -----USER CONTENT END-----
+
+  - id: fullSummaryTemplate
+    system_template: |-
+      You are writing an aggregate digest across multiple posts.
+
+      Produce an executive summary, then group notable items.
+
+      Include an:
+      - Executive summary, focused on 4-8 bullet points
+      - Notable Items, pick 5 most relevant items to the focus area, bulleted, include post title + 1 sentence
+
+      Focus areas:
+      {{- range (index .Params "focus") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      # Executive summary
+      # Notable items
+
+    template: |-
+      There are {{ len .Blocks }} posts.
+
+      Posts:
+      {{- range $i, $p := .Blocks }}
+      ---
+      Title: {{ $p.Title }}
+      URL: {{ $p.URL }}
+      Author: {{ $p.Author }}
+      Post summary (if present): {{- if $p.Summary }}
+      {{ $p.Summary.Summary }}
+      {{- else }}
+      (none)
+      {{- end }}
+      {{- end }}
+
+  - id: emailTemplate
+    system_template: "--" # Email is still considered a prompt template right now
+    template: |-
+      <!doctype html>
+      <html>
+        <body style="margin:0;padding:0;background:#ffffff;">
+          <div style="max-width:720px;margin:0 auto;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
+            <h1 style="margin:0 0 12px 0;font-size:22px;">Daily AI Research Digest</h1>
+
+            {{- if .RunSummary }}
+            {{- .RunSummary.HTML }}
+            {{- end }}
+
+            <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
+
+            {{- range .Blocks }}
+            <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+              {{- if gt (len .ImageBlocks) 0 }}
+              <img src="{{ (index .ImageBlocks 0).URL }}" style="max-width:100%;height:auto;display:block;margin:0 0 8px 0;" />
+              {{- end }}
+
+              <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
+                <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
+              </div>
+
+              <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
+                <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
+              </div>
+
+              <div style="font-size:13px;margin:0;">
+                {{- if .Summary }}
+                {{ .Summary.HTML }}
+                {{- else }}
+                (no summary)
+                {{- end }}
+              </div>
+
+              {{- if .WebBlocks }}
+              <div style="margin:10px 0 0 0;font-size:13px;">
+                <div style="font-weight:700;margin:0 0 4px 0;">Links</div>
+                <ul style="margin:0;padding-left:18px;">
+                  {{- range .WebBlocks }}
+                  <li style="margin:0 0 4px 0;"><a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .URL }}</a></li>
+                  {{- end }}
+                </ul>
+              </div>
+              {{- end }}
+            </div>
+            {{- end }}
+          </div>
+        </body>
+      </html>
+
