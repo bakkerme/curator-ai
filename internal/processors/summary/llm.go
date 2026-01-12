@@ -38,25 +38,11 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 		return nil, fmt.Errorf("summary config is required")
 	}
 
-	systemTmpl, tmpl, err := llmutil.ParseSystemAndPromptTemplates(cfg.Name, cfg.SystemTemplate, cfg.PromptTemplate)
+	systemTmpl, tmpl, captionTemplates, err := llmutil.ParseProcessorTemplates(cfg.Name, cfg.SystemTemplate, cfg.PromptTemplate, cfg.Images)
 	if err != nil {
 		return nil, err
 	}
-	var imageSystemTmpl *template.Template
-	var imagePromptTmpl *template.Template
-	if cfg.Images != nil && cfg.Images.Enabled && cfg.Images.Mode == config.ImageModeCaption {
-		if cfg.Images.Caption == nil {
-			return nil, fmt.Errorf("image caption config is required when images.mode=caption")
-		}
-		imageSystemTmpl, imagePromptTmpl, err = llmutil.ParseSystemAndPromptTemplates(cfg.Name+"-image-caption", cfg.Images.Caption.SystemTemplate, cfg.Images.Caption.PromptTemplate)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = llmutil.DefaultLogger(logger)
 
 	return &PostLLMProcessor{
 		name:           cfg.Name,
@@ -66,8 +52,8 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
-		imageSystem:    imageSystemTmpl,
-		imageTemplate:  imagePromptTmpl,
+		imageSystem:    captionTemplates.System,
+		imageTemplate:  captionTemplates.Prompt,
 		logger:         logger,
 	}, nil
 }
@@ -94,11 +80,7 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	logger := p.logger
-	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
-		logger = ctxLogger
-	}
-	logger = logger.With("processor", p.name, "processor_type", fmt.Sprintf("%T", p))
+	logger := llmutil.ProcessorLogger(ctx, p.logger, p.name, p)
 	policy := p.config.BlockErrorPolicy
 	if policy == "" {
 		policy = config.BlockErrorPolicyFail
