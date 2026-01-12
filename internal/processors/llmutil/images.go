@@ -198,18 +198,18 @@ func imageURLForMessage(image *core.ImageBlock) (string, bool) {
 	return fmt.Sprintf("data:%s;base64,%s", contentType, encoded), true
 }
 
-const missingImageMarker = "Received 404 status code when fetching image from URL:"
+const openRouterMissingImageErrorMarker = "Received 404 status code when fetching image from URL:"
 
 func MissingImageURL(err error) (string, bool) {
 	if err == nil {
 		return "", false
 	}
 	message := err.Error()
-	idx := strings.Index(message, missingImageMarker)
+	idx := strings.Index(message, openRouterMissingImageErrorMarker)
 	if idx == -1 {
 		return "", false
 	}
-	urlPart := strings.TrimSpace(message[idx+len(missingImageMarker):])
+	urlPart := strings.TrimSpace(message[idx+len(openRouterMissingImageErrorMarker):])
 	if urlPart == "" {
 		return "", true
 	}
