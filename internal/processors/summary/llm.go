@@ -150,11 +150,38 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 		var response llm.ChatResponse
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
-			userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
-			response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
-				{Role: llm.RoleSystem, Content: systemPrompt},
-				userMessage,
-			}, RETRIES, nil, temperature)
+			// Multimodal calls are brittle in the face of dead/expired image URLs (common for scraped content).
+			// Some providers fail the *entire* request if any referenced image returns 404.
+			//
+			// We treat this as a recoverable error: if we can detect this specific failure, we retry the same
+			// prompt while progressively removing the offending image(s) so the post summary still completes.
+			for {
+				userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
+				response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+					{Role: llm.RoleSystem, Content: systemPrompt},
+					userMessage,
+				}, RETRIES, nil, temperature)
+				if err == nil {
+					break
+				}
+				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+					// MissingImageURL is a best-effort heuristic based on parsing the upstream provider error
+					// message (see llmutil.MissingImageURL docs). We only retry if we can identify and remove
+					// the exact failing image URL; otherwise we fail the block and let block_error_policy decide
+					// whether the post should be dropped.
+					if url == "" {
+						break
+					}
+					var removed *core.ImageBlock
+					images, removed = llmutil.DropImageByURL(images, url)
+					if removed == nil {
+						break
+					}
+					logger.Warn("llm post summary missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
+					continue
+				}
+				break
+			}
 		} else {
 			response, err = llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
 		}
@@ -182,9 +209,10 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 			}
 			return filtered, nil
 		}
+
 		for _, block := range blocks {
 			if err := summarizeOne(ctx, block); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("llm post summary failed for block. Failing due to block_error_policy being set to fail. To ignore, change policy to drop. Block ID: %s, error: %w", block.ID, err)
 			}
 		}
 		return blocks, nil
@@ -200,7 +228,6 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 
 loop:
 	for i, block := range blocks {
-		i, block := i, block
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
@@ -218,7 +245,7 @@ loop:
 					return
 				}
 				select {
-				case errCh <- err:
+				case errCh <- fmt.Errorf("llm post summary failed for block. Failing due to block_error_policy being set to fail. To ignore, change policy to drop. Block ID: %s, error: %w", block.ID, err):
 				default:
 				}
 				cancel()

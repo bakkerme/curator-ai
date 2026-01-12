@@ -172,14 +172,39 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 		var parsed qualityResponse
 		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
 			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
-			userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
+			// Multimodal quality checks can fail hard if any provided image URL is missing (404).
+			// When this happens we want to avoid dropping the post purely due to an external image fetch
+			// failure, so we retry while removing failing images until the request succeeds or we run out.
+			for {
+				userMessage := llmutil.BuildUserMessageWithImages(user_prompt, images)
 
-			_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
-				{Role: llm.RoleSystem, Content: system_prompt},
-				userMessage,
-			}, decodeRetries, func(content string) error {
-				return json.Unmarshal([]byte(content), &parsed)
-			}, temperature)
+				_, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+					{Role: llm.RoleSystem, Content: system_prompt},
+					userMessage,
+				}, decodeRetries, func(content string) error {
+					return json.Unmarshal([]byte(content), &parsed)
+				}, temperature)
+				if err == nil {
+					break
+				}
+				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+					// MissingImageURL is intentionally heuristic: we only have an `error` and no structured
+					// provider response. We only retry if we can identify and remove the exact failing image
+					// URL; otherwise we fail the block and let block_error_policy decide whether the post should
+					// be dropped.
+					if url == "" {
+						return false, fmt.Errorf("could not parse llm quality response: %w", err)
+					}
+					var removed *core.ImageBlock
+					images, removed = llmutil.DropImageByURL(images, url)
+					if removed == nil {
+						return false, fmt.Errorf("could not parse llm quality response: %w", err)
+					}
+					logger.Warn("llm quality missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
+					continue
+				}
+				return false, fmt.Errorf("could not parse llm quality response: %w", err)
+			}
 		} else {
 			_, err = llmutil.ChatSystemUserWithRetries(
 				ctx,
@@ -221,7 +246,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 					logger.Warn("llm quality failed for block (dropping)", "block_id", block.ID, "error", err)
 					continue
 				}
-				return nil, err
+				return nil, fmt.Errorf("llm quality failed for block. Failing due to block_error_policy being set to fail. To ignore, change policy to drop. Block ID: %s, error: %w", block.ID, err)
 			}
 			if pass {
 				filtered = append(filtered, block)
@@ -259,7 +284,7 @@ loop:
 					return
 				}
 				select {
-				case errCh <- err:
+				case errCh <- fmt.Errorf("llm quality failed for block. Failing due to block_error_policy being set to fail. To ignore, change policy to drop. Block ID: %s, error: %w", block.ID, err):
 				default:
 				}
 				cancel()
