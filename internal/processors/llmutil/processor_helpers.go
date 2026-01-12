@@ -56,6 +56,5 @@ func ProcessorLogger(ctx context.Context, logger *slog.Logger, name string, proc
 	if ctxLogger := core.LoggerFromContext(ctx); ctxLogger != nil {
 		logger = ctxLogger
 	}
-	logger = DefaultLogger(logger)
 	return logger.With("processor", name, "processor_type", fmt.Sprintf("%T", processor))
 }
