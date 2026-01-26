@@ -68,11 +68,12 @@ type RSSEnvConfig struct {
 }
 
 type SMTPEnvConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	TLSMode  string
+	Host               string
+	Port               int
+	User               string
+	Password           string
+	TLSMode            string
+	InsecureSkipVerify bool
 }
 
 func LoadEnv() EnvConfig {
@@ -131,11 +132,12 @@ func LoadEnv() EnvConfig {
 			UserAgent:   envString("RSS_USER_AGENT", "curator-ai/0.1"),
 		},
 		SMTP: SMTPEnvConfig{
-			Host:     envString("SMTP_HOST", ""),
-			Port:     envInt("SMTP_PORT", 587),
-			User:     envString("SMTP_USER", ""),
-			Password: envString("SMTP_PASSWORD", ""),
-			TLSMode:  envString("SMTP_TLS_MODE", ""),
+			Host:               envString("SMTP_HOST", ""),
+			Port:               envInt("SMTP_PORT", 587),
+			User:               envString("SMTP_USER", ""),
+			Password:           envString("SMTP_PASSWORD", ""),
+			TLSMode:            envString("SMTP_TLS_MODE", ""),
+			InsecureSkipVerify: envBool("SMTP_INSECURE_SKIP_VERIFY", false),
 		},
 	}
 }
