@@ -72,7 +72,7 @@ type SMTPEnvConfig struct {
 	Port     int
 	User     string
 	Password string
-	UseTLS   bool
+	TLSMode  string
 }
 
 func LoadEnv() EnvConfig {
@@ -135,7 +135,7 @@ func LoadEnv() EnvConfig {
 			Port:     envInt("SMTP_PORT", 587),
 			User:     envString("SMTP_USER", ""),
 			Password: envString("SMTP_PASSWORD", ""),
-			UseTLS:   envBool("SMTP_USE_TLS", true),
+			TLSMode:  envString("SMTP_TLS_MODE", ""),
 		},
 	}
 }

@@ -25,7 +25,7 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `SMTP_PORT` (optional, default: `587`)
 - `SMTP_USER` (optional, depends on provider)
 - `SMTP_PASSWORD` (optional, depends on provider)
-- `SMTP_USE_TLS` (optional, default: `true`)
+- `SMTP_TLS_MODE` (optional, default: `auto`; values: `auto`, `starttls`, `implicit`, `disabled`)
 
 ### HTTP Source Settings
 - `REDDIT_HTTP_TIMEOUT` (optional, e.g. `10s`)

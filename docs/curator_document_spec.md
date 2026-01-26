@@ -204,7 +204,7 @@ email:
   smtp_port: number              # Optional: SMTP port (default: from config)
   smtp_user: string              # Optional: SMTP username (default: from config)
   smtp_password: string          # Optional: SMTP password (default: from config)
-  use_tls: boolean               # Optional: Enable TLS (default: true)
+  smtp_tls_mode: string          # Optional: "auto" (default), "starttls", "implicit", "disabled"
 ```
 
 ## Data Flow and Processing Order

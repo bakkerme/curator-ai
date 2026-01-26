@@ -16,18 +16,34 @@ type Sender struct {
 	port     int
 	username string
 	password string
-	useTLS   bool
+	tlsMode  string
 }
 
-func NewSender(host string, port int, username, password string, useTLS bool) *Sender {
+// NewSender creates an SMTP sender with explicit TLS mode support.
+// The tlsMode value is optional; if empty, port-based defaults apply.
+func NewSender(host string, port int, username, password string, tlsMode string) *Sender {
 	return &Sender{
 		host:     host,
 		port:     port,
 		username: username,
 		password: password,
-		useTLS:   useTLS,
+		tlsMode:  tlsMode,
 	}
 }
+
+// TLSMode determines how the SMTP client should negotiate TLS.
+type TLSMode string
+
+const (
+	// TLSModeAuto uses port-based defaults (implicit TLS on 465, STARTTLS otherwise).
+	TLSModeAuto TLSMode = "auto"
+	// TLSModeDisabled forces cleartext SMTP.
+	TLSModeDisabled TLSMode = "disabled"
+	// TLSModeStartTLS requires STARTTLS on the SMTP connection.
+	TLSModeStartTLS TLSMode = "starttls"
+	// TLSModeImplicit uses implicit TLS (SMTPS), typically on port 465.
+	TLSModeImplicit TLSMode = "implicit"
+)
 
 func (s *Sender) Send(ctx context.Context, message email.Message) error {
 	if message.From == "" {
@@ -51,20 +67,25 @@ func (s *Sender) Send(ctx context.Context, message email.Message) error {
 	}
 
 	sendWithAuth := func(enableAuth bool) error {
+		mode, modeErr := s.resolveTLSMode()
+		if modeErr != nil {
+			return modeErr
+		}
+
 		clientOpts := []mail.Option{
 			mail.WithPort(s.port),
 			mail.WithTLSConfig(&tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}),
 		}
-		if s.useTLS {
-			// Preserve prior behavior: when useTLS is true and port is 465, use implicit TLS.
-			// Otherwise, prefer STARTTLS.
-			if s.port == 465 {
-				clientOpts = append(clientOpts, mail.WithSSL())
-			} else {
-				clientOpts = append(clientOpts, mail.WithTLSPortPolicy(mail.TLSMandatory))
-			}
-		} else {
+
+		switch mode {
+		case TLSModeDisabled:
 			clientOpts = append(clientOpts, mail.WithTLSPortPolicy(mail.NoTLS))
+		case TLSModeStartTLS:
+			clientOpts = append(clientOpts, mail.WithTLSPortPolicy(mail.TLSMandatory))
+		case TLSModeImplicit:
+			clientOpts = append(clientOpts, mail.WithSSL())
+		default:
+			return fmt.Errorf("unsupported smtp tls mode %q", mode)
 		}
 
 		if enableAuth && s.username != "" {
@@ -102,6 +123,39 @@ func (s *Sender) Send(ctx context.Context, message email.Message) error {
 	}
 
 	return err
+}
+
+// resolveTLSMode returns the configured TLS behavior, falling back to port defaults.
+func (s *Sender) resolveTLSMode() (TLSMode, error) {
+	mode, err := parseTLSMode(s.tlsMode)
+	if err != nil {
+		return "", err
+	}
+	if mode == TLSModeAuto {
+		if s.port == 465 {
+			return TLSModeImplicit, nil
+		}
+		return TLSModeStartTLS, nil
+	}
+	return mode, nil
+}
+
+// parseTLSMode normalizes the TLS mode string and validates supported values.
+func parseTLSMode(mode string) (TLSMode, error) {
+	normalized := strings.TrimSpace(strings.ToLower(mode))
+	if normalized == "" || normalized == string(TLSModeAuto) {
+		return TLSModeAuto, nil
+	}
+	switch normalized {
+	case "disabled", "off", "none":
+		return TLSModeDisabled, nil
+	case "starttls", "start_tls":
+		return TLSModeStartTLS, nil
+	case "implicit", "smtptls", "smtp_tls":
+		return TLSModeImplicit, nil
+	default:
+		return "", fmt.Errorf("invalid smtp tls mode %q (expected: auto, disabled/off/none, starttls/start_tls, implicit/smtptls/smtp_tls)", mode)
+	}
 }
 
 func ValidateConfig(host string, port int) error {

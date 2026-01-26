@@ -235,7 +235,7 @@ type EmailOutput struct {
 	SMTPPort     int                  `yaml:"smtp_port,omitempty"`
 	SMTPUser     string               `yaml:"smtp_user,omitempty"`
 	SMTPPassword string               `yaml:"smtp_password,omitempty"`
-	UseTLS       *bool                `yaml:"use_tls,omitempty"`
+	SMTPTLSMode  string               `yaml:"smtp_tls_mode,omitempty"`
 	Snapshot     *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 

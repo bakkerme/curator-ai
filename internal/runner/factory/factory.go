@@ -131,11 +131,7 @@ func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor,
 	merged := f.mergeEmailConfig(cfg)
 	sender := f.EmailSender
 	if sender == nil {
-		useTLS := true
-		if merged.UseTLS != nil {
-			useTLS = *merged.UseTLS
-		}
-		sender = smtp.NewSender(merged.SMTPHost, merged.SMTPPort, merged.SMTPUser, merged.SMTPPassword, useTLS)
+		sender = smtp.NewSender(merged.SMTPHost, merged.SMTPPort, merged.SMTPUser, merged.SMTPPassword, merged.SMTPTLSMode)
 	}
 	processor, err := output.NewEmailProcessor(merged, sender)
 	if err != nil {
@@ -161,9 +157,8 @@ func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput 
 	if merged.SMTPPassword == "" {
 		merged.SMTPPassword = f.SMTPDefaults.Password
 	}
-	if merged.UseTLS == nil {
-		useTLS := f.SMTPDefaults.UseTLS
-		merged.UseTLS = &useTLS
+	if merged.SMTPTLSMode == "" {
+		merged.SMTPTLSMode = f.SMTPDefaults.TLSMode
 	}
 	return &merged
 }
