@@ -227,16 +227,17 @@ func (c *DedupeStoreConfig) UnmarshalYAML(value *yaml.Node) error {
 
 // EmailOutput defines email delivery configuration
 type EmailOutput struct {
-	Template     string               `yaml:"template"`
-	To           string               `yaml:"to"`
-	From         string               `yaml:"from"`
-	Subject      string               `yaml:"subject"`
-	SMTPHost     string               `yaml:"smtp_host,omitempty"`
-	SMTPPort     int                  `yaml:"smtp_port,omitempty"`
-	SMTPUser     string               `yaml:"smtp_user,omitempty"`
-	SMTPPassword string               `yaml:"smtp_password,omitempty"`
-	SMTPTLSMode  string               `yaml:"smtp_tls_mode,omitempty"`
-	Snapshot     *core.SnapshotConfig `yaml:"snapshot,omitempty"`
+	Template               string               `yaml:"template"`
+	To                     string               `yaml:"to"`
+	From                   string               `yaml:"from"`
+	Subject                string               `yaml:"subject"`
+	SMTPHost               string               `yaml:"smtp_host,omitempty"`
+	SMTPPort               int                  `yaml:"smtp_port,omitempty"`
+	SMTPUser               string               `yaml:"smtp_user,omitempty"`
+	SMTPPassword           string               `yaml:"smtp_password,omitempty"`
+	SMTPTLSMode            string               `yaml:"smtp_tls_mode,omitempty"`
+	SMTPInsecureSkipVerify *bool                `yaml:"smtp_insecure_skip_verify,omitempty"`
+	Snapshot               *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // ProcessorType identifies the type of processor

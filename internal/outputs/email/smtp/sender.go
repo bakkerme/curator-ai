@@ -12,22 +12,24 @@ import (
 )
 
 type Sender struct {
-	host     string
-	port     int
-	username string
-	password string
-	tlsMode  string
+	host               string
+	port               int
+	username           string
+	password           string
+	tlsMode            string
+	insecureSkipVerify bool
 }
 
 // NewSender creates an SMTP sender with explicit TLS mode support.
 // The tlsMode value is optional; if empty, port-based defaults apply.
-func NewSender(host string, port int, username, password string, tlsMode string) *Sender {
+func NewSender(host string, port int, username, password string, tlsMode string, insecureSkipVerify bool) *Sender {
 	return &Sender{
-		host:     host,
-		port:     port,
-		username: username,
-		password: password,
-		tlsMode:  tlsMode,
+		host:               host,
+		port:               port,
+		username:           username,
+		password:           password,
+		tlsMode:            tlsMode,
+		insecureSkipVerify: insecureSkipVerify,
 	}
 }
 
@@ -74,7 +76,12 @@ func (s *Sender) Send(ctx context.Context, message email.Message) error {
 
 		clientOpts := []mail.Option{
 			mail.WithPort(s.port),
-			mail.WithTLSConfig(&tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}),
+			// Allow self-signed or otherwise invalid TLS certs when explicitly configured.
+			mail.WithTLSConfig(&tls.Config{
+				ServerName:         s.host,
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: s.insecureSkipVerify,
+			}),
 		}
 
 		switch mode {

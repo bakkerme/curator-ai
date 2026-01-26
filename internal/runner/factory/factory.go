@@ -131,7 +131,14 @@ func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor,
 	merged := f.mergeEmailConfig(cfg)
 	sender := f.EmailSender
 	if sender == nil {
-		sender = smtp.NewSender(merged.SMTPHost, merged.SMTPPort, merged.SMTPUser, merged.SMTPPassword, merged.SMTPTLSMode)
+		sender = smtp.NewSender(
+			merged.SMTPHost,
+			merged.SMTPPort,
+			merged.SMTPUser,
+			merged.SMTPPassword,
+			merged.SMTPTLSMode,
+			merged.SMTPInsecureSkipVerify != nil && *merged.SMTPInsecureSkipVerify,
+		)
 	}
 	processor, err := output.NewEmailProcessor(merged, sender)
 	if err != nil {
@@ -159,6 +166,10 @@ func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput 
 	}
 	if merged.SMTPTLSMode == "" {
 		merged.SMTPTLSMode = f.SMTPDefaults.TLSMode
+	}
+	if merged.SMTPInsecureSkipVerify == nil {
+		defaultSkipVerify := f.SMTPDefaults.InsecureSkipVerify
+		merged.SMTPInsecureSkipVerify = &defaultSkipVerify
 	}
 	return &merged
 }

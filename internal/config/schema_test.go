@@ -775,21 +775,23 @@ func TestParseToFlow(t *testing.T) {
 }
 
 func TestParseEmailOutputConfig(t *testing.T) {
+	skipVerify := true
 	doc := CuratorDocument{
 		Workflow: Workflow{
 			Name:    "Email Test",
 			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
 			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
 			Output: []OutputConfig{{Email: &EmailOutput{
-				Template:     "test",
-				To:           "test@test.com",
-				From:         "noreply@test.com",
-				Subject:      "Test Subject",
-				SMTPHost:     "smtp.test.com",
-				SMTPPort:     2525,
-				SMTPUser:     "user",
-				SMTPPassword: "pass",
-				SMTPTLSMode:  "starttls",
+				Template:               "test",
+				To:                     "test@test.com",
+				From:                   "noreply@test.com",
+				Subject:                "Test Subject",
+				SMTPHost:               "smtp.test.com",
+				SMTPPort:               2525,
+				SMTPUser:               "user",
+				SMTPPassword:           "pass",
+				SMTPTLSMode:            "starttls",
+				SMTPInsecureSkipVerify: &skipVerify,
 			}}},
 		},
 	}
@@ -820,6 +822,9 @@ func TestParseEmailOutputConfig(t *testing.T) {
 	}
 	if emailConfig.SMTPTLSMode != "starttls" {
 		t.Errorf("Expected smtp_tls_mode starttls, got %q", emailConfig.SMTPTLSMode)
+	}
+	if emailConfig.SMTPInsecureSkipVerify == nil || !*emailConfig.SMTPInsecureSkipVerify {
+		t.Errorf("Expected smtp_insecure_skip_verify true, got %#v", emailConfig.SMTPInsecureSkipVerify)
 	}
 }
 
