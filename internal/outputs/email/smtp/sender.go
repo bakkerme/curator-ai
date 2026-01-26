@@ -154,7 +154,7 @@ func parseTLSMode(mode string) (TLSMode, error) {
 	case "implicit", "smtptls", "smtp_tls":
 		return TLSModeImplicit, nil
 	default:
-		return "", fmt.Errorf("invalid smtp tls mode %q (expected auto, disabled, starttls, implicit)", mode)
+		return "", fmt.Errorf("invalid smtp tls mode %q (expected: auto, disabled/off/none, starttls/start_tls, implicit/smtptls/smtp_tls)", mode)
 	}
 }
 
