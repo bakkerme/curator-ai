@@ -10,10 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func boolPtr(value bool) *bool {
-	return &value
-}
-
 func TestParseExampleFlow(t *testing.T) {
 	data := []byte(`
 workflow:
@@ -793,7 +789,7 @@ func TestParseEmailOutputConfig(t *testing.T) {
 				SMTPPort:     2525,
 				SMTPUser:     "user",
 				SMTPPassword: "pass",
-				UseTLS:       boolPtr(true),
+				SMTPTLSMode:  "starttls",
 			}}},
 		},
 	}
@@ -822,8 +818,8 @@ func TestParseEmailOutputConfig(t *testing.T) {
 	if emailConfig.SMTPPassword != "pass" {
 		t.Errorf("Expected smtp password, got %s", emailConfig.SMTPPassword)
 	}
-	if emailConfig.UseTLS == nil || !*emailConfig.UseTLS {
-		t.Errorf("Expected use_tls true")
+	if emailConfig.SMTPTLSMode != "starttls" {
+		t.Errorf("Expected smtp_tls_mode starttls, got %q", emailConfig.SMTPTLSMode)
 	}
 }
 

@@ -24,7 +24,7 @@ services:
       CURATOR_CONFIG: /app/curator.yaml
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      SMTP_USE_TLS: "false"
+      SMTP_TLS_MODE: "disabled"
       SMTP_USER: "dummy@dummy"
       SMTP_PASSWORD: "dummy"
 

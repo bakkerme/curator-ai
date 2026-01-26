@@ -76,7 +76,7 @@ func TestMailpitE2E(t *testing.T) {
 		"SMTP_PORT=1025",
 		"SMTP_USER=user@curator.ai",
 		"SMTP_PASSWORD=123asdf123",
-		"SMTP_USE_TLS=false",
+		"SMTP_TLS_MODE=disabled",
 	)
 
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/curator", "-config", flowFile, "-run-once")
@@ -138,7 +138,7 @@ const flowFixtureYAML = `workflow:
         subject: "Curator Mailpit E2E __RUN_ID__"
         smtp_host: "localhost"
         smtp_port: 1025
-        use_tls: false
+        smtp_tls_mode: "disabled"
         template: |-
           <html>
             <body>
