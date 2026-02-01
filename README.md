@@ -4,7 +4,7 @@ This repo contains the MVP runner for Curator AI. It parses a Curator Document Y
 
 ## Quick Start
 
-1. Create a `curator.yaml` in the repo root (or set `CURATOR_CONFIG`).
+1. Create a `curator.yaml` in the repo root (or set `CURATOR_CONFIG`). This can be a single file or a directory of `.yml/.yaml` Curator Documents.
 2. Set the required environment variables (see below).
 3. Run the entrypoint.
 
@@ -49,6 +49,8 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `FLOW_ID` (default: `flow-1`)
 - `RUN_ONCE` (default: `false`)
 - `ALLOW_PARTIAL_SOURCE_ERRORS` (default: `false`)
+
+Note: when `CURATOR_CONFIG` (or `-config`) points to a directory, Curator loads all `.yml/.yaml` docs in that directory and derives a unique `flow.id` for each from `workflow.name` (falling back to the filename).
 
 ## Example (Run Once)
 

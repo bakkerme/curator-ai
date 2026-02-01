@@ -50,6 +50,7 @@ workflow:
           # - https://kameleo.io/blog
           # - https://www.humansecurity.com/learn/blog/
           # - https://www.arkoselabs.com/blog/
+          # - https://oxylabs.io/blog
         snapshot:
             # snapshot: true
             restore: true
