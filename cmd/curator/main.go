@@ -133,7 +133,7 @@ func uniqueFlowID(base string, seen map[string]int) string {
 	if n == 0 {
 		return base
 	}
-	return fmt.Sprintf("%s-%d", base, n+1)
+	return fmt.Sprintf("%s-%d", base, n)
 }
 
 // slugify converts a string to a conservative identifier suitable for flow IDs:
