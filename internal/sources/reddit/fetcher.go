@@ -306,5 +306,11 @@ func isIgnoreURL(u *url.URL) bool {
 	case "preview.redd.it", "localhost", "discord.gg":
 		return true
 	}
+
+	// Ignore user profile links
+	if host == "www.reddit.com" && (strings.HasPrefix(u.Path, "/user/") || strings.HasPrefix(u.Path, "/u/")) {
+		return true
+	}
+
 	return false
 }
