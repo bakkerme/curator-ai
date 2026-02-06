@@ -107,6 +107,8 @@ func TestPostLLMProcessor_Summarize_Parallel(t *testing.T) {
 		Context:        "post",
 		SystemTemplate: "system",
 		PromptTemplate: "title={{.Title}}",
+		ChunkSystem:    "chunk-system",
+		ChunkPrompt:    "chunk-prompt",
 		MaxConcurrency: 3,
 	}
 	processor, err := NewPostLLMProcessor(cfg, client, "default-model")
@@ -114,7 +116,11 @@ func TestPostLLMProcessor_Summarize_Parallel(t *testing.T) {
 		t.Fatalf("NewPostLLMProcessor error: %v", err)
 	}
 
-	blocks := []*core.PostBlock{{ID: "1", Title: "a"}, {ID: "2", Title: "b"}, {ID: "3", Title: "c"}}
+	blocks := []*core.PostBlock{
+		{ID: "1", Title: "a", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "2", Title: "b", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "3", Title: "c", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+	}
 	done := make(chan error, 1)
 	go func() {
 		_, err := processor.Summarize(context.Background(), blocks)
@@ -162,6 +168,8 @@ func TestPostLLMProcessor_Summarize_BlockErrorPolicyDrop_Parallel(t *testing.T) 
 		Context:          "post",
 		SystemTemplate:   "system",
 		PromptTemplate:   "title={{.Title}}",
+		ChunkSystem:      "chunk-system",
+		ChunkPrompt:      "chunk-prompt",
 		MaxConcurrency:   3,
 		BlockErrorPolicy: config.BlockErrorPolicyDrop,
 	}
@@ -170,7 +178,11 @@ func TestPostLLMProcessor_Summarize_BlockErrorPolicyDrop_Parallel(t *testing.T) 
 		t.Fatalf("NewPostLLMProcessor error: %v", err)
 	}
 
-	blocks := []*core.PostBlock{{ID: "1", Title: "a"}, {ID: "2", Title: "b"}, {ID: "3", Title: "c"}}
+	blocks := []*core.PostBlock{
+		{ID: "1", Title: "a", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "2", Title: "b", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "3", Title: "c", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+	}
 	filtered, err := processor.Summarize(context.Background(), blocks)
 	if err != nil {
 		t.Fatalf("Summarize error: %v", err)
@@ -202,6 +214,8 @@ func TestPostLLMProcessor_Summarize_BlockErrorPolicyDrop_Serial(t *testing.T) {
 		Context:          "post",
 		SystemTemplate:   "system",
 		PromptTemplate:   "title={{.Title}}",
+		ChunkSystem:      "chunk-system",
+		ChunkPrompt:      "chunk-prompt",
 		MaxConcurrency:   1,
 		BlockErrorPolicy: config.BlockErrorPolicyDrop,
 	}
@@ -210,7 +224,11 @@ func TestPostLLMProcessor_Summarize_BlockErrorPolicyDrop_Serial(t *testing.T) {
 		t.Fatalf("NewPostLLMProcessor error: %v", err)
 	}
 
-	blocks := []*core.PostBlock{{ID: "1", Title: "a"}, {ID: "2", Title: "b"}, {ID: "3", Title: "c"}}
+	blocks := []*core.PostBlock{
+		{ID: "1", Title: "a", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "2", Title: "b", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+		{ID: "3", Title: "c", SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull}},
+	}
 	filtered, err := processor.Summarize(context.Background(), blocks)
 	if err != nil {
 		t.Fatalf("Summarize error: %v", err)
@@ -236,6 +254,8 @@ func TestPostLLMProcessor_Summarize_MultimodalMissingImage_EmptyURL_NoInfiniteRe
 		Context:        "post",
 		SystemTemplate: "system",
 		PromptTemplate: "prompt",
+		ChunkSystem:    "chunk-system",
+		ChunkPrompt:    "chunk-prompt",
 		MaxConcurrency: 1,
 		// If the provider signals a missing image but we cannot identify which image URL caused it
 		// (empty URL in the upstream error), we fail the block and rely on block_error_policy.
@@ -250,7 +270,12 @@ func TestPostLLMProcessor_Summarize_MultimodalMissingImage_EmptyURL_NoInfiniteRe
 		t.Fatalf("NewPostLLMProcessor error: %v", err)
 	}
 
-	blocks := []*core.PostBlock{{ID: "1", Title: "a", ImageBlocks: []core.ImageBlock{{URL: "https://example.com/a.png"}, {URL: "https://example.com/b.png"}}}}
+	blocks := []*core.PostBlock{{
+		ID:          "1",
+		Title:       "a",
+		SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull},
+		ImageBlocks: []core.ImageBlock{{URL: "https://example.com/a.png"}, {URL: "https://example.com/b.png"}},
+	}}
 	filtered, err := processor.Summarize(ctx, blocks)
 	if err != nil {
 		t.Fatalf("Summarize error: %v", err)

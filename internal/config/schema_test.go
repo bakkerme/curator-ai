@@ -20,6 +20,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   output:
     - email:
         template: "Hello"
@@ -64,6 +66,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   post_summary:
     - llm:
         name: post_sum
@@ -105,6 +109,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   run_summary:
     - llm:
         name: run_sum
@@ -146,6 +152,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   output:
     - email:
         template: "EMAIL {{ .RunSummary.DoesNotExist }}"
@@ -180,6 +188,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   quality:
     - llm:
         name: quality_check
@@ -291,6 +301,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   output:
     - email:
         template: "Hello"
@@ -326,6 +338,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   output:
     - email:
         template: "Hello"
@@ -364,6 +378,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   output:
     - email:
         template: "Hello"
@@ -392,6 +408,8 @@ workflow:
   sources:
     - reddit:
         subreddits: ["MachineLearning"]
+        summary_plan:
+          mode: full
   post_summary:
     - llm:
         name: post_sum
@@ -433,7 +451,7 @@ func TestValidation(t *testing.T) {
 			doc: CuratorDocument{
 				Workflow: Workflow{
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Output: []OutputConfig{{Email: &EmailOutput{
 						Template: "test",
 						To:       "test@test.com",
@@ -450,7 +468,7 @@ func TestValidation(t *testing.T) {
 			doc: CuratorDocument{
 				Workflow: Workflow{
 					Name:    "Test",
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Output: []OutputConfig{{Email: &EmailOutput{
 						Template: "test",
 						To:       "test@test.com",
@@ -485,7 +503,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 				},
 			},
 			expectError: true,
@@ -497,7 +515,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Quality: []QualityConfig{{LLM: &LLMQuality{
 						Name:           "quality_check",
 						PromptTemplate: "quality_template",
@@ -521,7 +539,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					PostSummary: []SummaryConfig{{LLM: &LLMSummary{
 						Name:           "post_sum",
 						Type:           "llm",
@@ -568,7 +586,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "* * * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Quality: []QualityConfig{{
 						QualityRule: &QualityRule{
 							Name:       "test",
@@ -594,7 +612,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test Workflow",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Output: []OutputConfig{{Email: &EmailOutput{
 						Template: "test",
 						To:       "test@test.com",
@@ -611,7 +629,7 @@ func TestValidation(t *testing.T) {
 				Workflow: Workflow{
 					Name:    "Test Workflow",
 					Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
-					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+					Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 					Output: []OutputConfig{{Email: &EmailOutput{
 						Template: "test",
 						To:       "invalid-email",
@@ -650,7 +668,7 @@ func TestParseToFlow(t *testing.T) {
 			Name:    "Test Workflow",
 			Version: "1.0",
 			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
-			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 			Quality: []QualityConfig{
 				{QualityRule: &QualityRule{
 					Name:       "min_score",
@@ -780,7 +798,7 @@ func TestParseEmailOutputConfig(t *testing.T) {
 		Workflow: Workflow{
 			Name:    "Email Test",
 			Trigger: []TriggerConfig{{Cron: &CronTrigger{Schedule: "0 0 * * *"}}},
-			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}}}},
+			Sources: []SourceConfig{{Reddit: &RedditSource{Subreddits: []string{"test"}, SummaryPlan: &SummaryPlanConfig{Mode: core.SummaryModeFull}}}},
 			Output: []OutputConfig{{Email: &EmailOutput{
 				Template:               "test",
 				To:                     "test@test.com",
@@ -839,6 +857,10 @@ func (m *mockFactory) NewRedditSource(config *RedditSource) (core.SourceProcesso
 }
 
 func (m *mockFactory) NewRSSSource(config *RSSSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewTestFileSource(config *TestFileSource) (core.SourceProcessor, error) {
 	return &mockSource{}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bakkerme/curator-ai/internal/config"
+	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/llm"
 	llmmock "github.com/bakkerme/curator-ai/internal/llm/mock"
 	emailmock "github.com/bakkerme/curator-ai/internal/outputs/email/mock"
@@ -47,7 +48,12 @@ func TestRunnerEndToEnd(t *testing.T) {
 		Workflow: config.Workflow{
 			Name:    "Test Flow",
 			Trigger: []config.TriggerConfig{{Cron: &config.CronTrigger{Schedule: "0 0 * * *"}}},
-			Sources: []config.SourceConfig{{RSS: &config.RSSSource{Feeds: []string{"https://example.com/feed.xml"}}}},
+			Sources: []config.SourceConfig{{
+				RSS: &config.RSSSource{
+					Feeds:       []string{"https://example.com/feed.xml"},
+					SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
+				},
+			}},
 			Quality: []config.QualityConfig{{LLM: &config.LLMQuality{
 				Name:           "quality",
 				SystemTemplate: "system",

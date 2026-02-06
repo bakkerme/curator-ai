@@ -72,10 +72,14 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 		}
 		data := struct {
 			*core.PostBlock
-			Params map[string]interface{}
+			Chunk      core.ContentChunk
+			ChunkIndex int
+			Params     map[string]interface{}
 		}{
-			PostBlock: post,
-			Params:    s.Params,
+			PostBlock:  post,
+			Chunk:      core.ContentChunk{Content: "Example chunk", Summary: "Example chunk summary"},
+			ChunkIndex: 0,
+			Params:     s.Params,
 		}
 		if s.SystemTemplate != "" {
 			if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].system_template", i), s.SystemTemplate, data); err != nil {
@@ -85,6 +89,16 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 		if s.PromptTemplate != "" {
 			if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].prompt_template", i), s.PromptTemplate, data); err != nil {
 				return fmt.Errorf("post_summary %d (%s): prompt_template type check failed: %w", i, s.Name, err)
+			}
+		}
+		if s.ChunkSystem != "" {
+			if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].chunk_system_template", i), s.ChunkSystem, data); err != nil {
+				return fmt.Errorf("post_summary %d (%s): chunk_system_template type check failed: %w", i, s.Name, err)
+			}
+		}
+		if s.ChunkPrompt != "" {
+			if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].chunk_prompt_template", i), s.ChunkPrompt, data); err != nil {
+				return fmt.Errorf("post_summary %d (%s): chunk_prompt_template type check failed: %w", i, s.Name, err)
 			}
 		}
 		if s.Images != nil && s.Images.Caption != nil {
@@ -214,6 +228,10 @@ func samplePostBlockForTemplateValidation() *core.PostBlock {
 		ImageBlocks: []core.ImageBlock{
 			{URL: "https://example.com/image.jpg"},
 		},
+		Chunks: []core.ContentChunk{
+			{Content: "Example chunk", Summary: "Example chunk summary"},
+		},
+		SummaryPlan: &core.SummaryPlan{Mode: core.SummaryModeFull},
 		Summary: &core.SummaryResult{
 			ProcessorName: "summary",
 			Summary:       "Example summary",

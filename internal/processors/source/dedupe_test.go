@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
+	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	redditmock "github.com/bakkerme/curator-ai/internal/sources/reddit/mock"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
@@ -51,7 +52,10 @@ func (s *fakeSeenStore) Close() error {
 }
 
 func TestRedditProcessorFiltersSeenPosts(t *testing.T) {
-	cfg := &config.RedditSource{Subreddits: []string{"golang"}}
+	cfg := &config.RedditSource{
+		Subreddits:  []string{"golang"},
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
+	}
 	fetcher := &redditmock.Fetcher{
 		Items: []reddit.Item{
 			{ID: "p1", Title: "seen", URL: "https://example.com/1", CreatedAt: time.Now()},
@@ -78,7 +82,10 @@ func TestRedditProcessorFiltersSeenPosts(t *testing.T) {
 }
 
 func TestRSSProcessorFiltersSeenPosts(t *testing.T) {
-	cfg := &config.RSSSource{Feeds: []string{"https://example.com/feed.xml"}}
+	cfg := &config.RSSSource{
+		Feeds:       []string{"https://example.com/feed.xml"},
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
+	}
 	fetcher := &rssFetcherMock{
 		items: []rss.Item{
 			{ID: "a", Title: "seen", Link: "https://example.com/a"},

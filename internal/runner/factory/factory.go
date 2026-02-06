@@ -79,6 +79,14 @@ func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, err
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
+func (f *Factory) NewTestFileSource(cfg *config.TestFileSource) (core.SourceProcessor, error) {
+	processor, err := source.NewTestFileProcessor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
+}
+
 func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor, error) {
 	processor, err := quality.NewRuleProcessor(cfg)
 	if err != nil {

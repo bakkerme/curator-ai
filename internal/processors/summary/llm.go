@@ -24,6 +24,8 @@ type PostLLMProcessor struct {
 	defaultTemp    *float64
 	systemTemplate *template.Template
 	template       *template.Template
+	chunkSystem    *template.Template
+	chunkTemplate  *template.Template
 	imageSystem    *template.Template
 	imageTemplate  *template.Template
 	logger         *slog.Logger
@@ -42,6 +44,10 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 	if err != nil {
 		return nil, err
 	}
+	chunkSystem, chunkTemplate, err := parseChunkTemplates(cfg)
+	if err != nil {
+		return nil, err
+	}
 	logger = llmutil.DefaultLogger(logger)
 
 	return &PostLLMProcessor{
@@ -52,6 +58,8 @@ func NewPostLLMProcessorWithLogger(cfg *config.LLMSummary, client llm.Client, de
 		defaultTemp:    defaultTemp,
 		systemTemplate: systemTmpl,
 		template:       tmpl,
+		chunkSystem:    chunkSystem,
+		chunkTemplate:  chunkTemplate,
 		imageSystem:    captionTemplates.System,
 		imageTemplate:  captionTemplates.Prompt,
 		logger:         logger,
@@ -87,6 +95,9 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	}
 
 	summarizeOne := func(ctx context.Context, block *core.PostBlock) error {
+		if block.SummaryPlan == nil {
+			return fmt.Errorf("summary_plan is required for post %s", block.ID)
+		}
 		if err := llmutil.EnsureImageCaptions(
 			ctx,
 			p.client,
@@ -100,82 +111,56 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 			return err
 		}
 
-		data := struct {
-			*core.PostBlock
-			Params map[string]interface{}
-		}{
-			PostBlock: block,
-			Params:    p.config.Params,
-		}
-
-		systemPrompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
-		if err != nil {
-			return err
-		}
-
-		userPrompt, err := llmutil.ExecuteTemplate(p.template, data)
-		if err != nil {
-			return err
-		}
-
-		model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
-		temperature := p.config.Temperature
-		if temperature == nil {
-			temperature = p.defaultTemp
-		}
-		var temperatureLog any
-		if temperature != nil {
-			temperatureLog = *temperature
-		}
-		logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
-
-		var response llm.ChatResponse
-		if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
-			images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
-			// Multimodal calls are brittle in the face of dead/expired image URLs (common for scraped content).
-			// Some providers fail the *entire* request if any referenced image returns 404.
-			//
-			// We treat this as a recoverable error: if we can detect this specific failure, we retry the same
-			// prompt while progressively removing the offending image(s) so the post summary still completes.
-			for {
-				userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
-				response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
-					{Role: llm.RoleSystem, Content: systemPrompt},
-					userMessage,
-				}, RETRIES, nil, temperature)
-				if err == nil {
-					break
-				}
-				if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
-					// MissingImageURL is a best-effort heuristic based on parsing the upstream provider error
-					// message (see llmutil.MissingImageURL docs). We only retry if we can identify and remove
-					// the exact failing image URL; otherwise we fail the block and let block_error_policy decide
-					// whether the post should be dropped.
-					if url == "" {
-						break
-					}
-					var removed *core.ImageBlock
-					images, removed = llmutil.DropImageByURL(images, url)
-					if removed == nil {
-						break
-					}
-					logger.Warn("llm post summary missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
-					continue
-				}
-				break
+		summarizeChunks := func() error {
+			if len(block.Chunks) == 0 {
+				return fmt.Errorf("summary_plan mode %q requires chunks for post %s", block.SummaryPlan.Mode, block.ID)
 			}
-		} else {
-			response, err = llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+			if p.chunkSystem == nil || p.chunkTemplate == nil {
+				return fmt.Errorf("chunk summary templates are required for summary_plan mode %q", block.SummaryPlan.Mode)
+			}
+			for i := range block.Chunks {
+				chunk := block.Chunks[i]
+				data := summaryTemplateData{
+					PostBlock:  block,
+					Chunk:      chunk,
+					ChunkIndex: i,
+					Params:     p.config.Params,
+				}
+				systemPrompt, err := llmutil.ExecuteTemplate(p.chunkSystem, data)
+				if err != nil {
+					return err
+				}
+				userPrompt, err := llmutil.ExecuteTemplate(p.chunkTemplate, data)
+				if err != nil {
+					return err
+				}
+				model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+				temperature := p.config.Temperature
+				if temperature == nil {
+					temperature = p.defaultTemp
+				}
+				response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+				if err != nil {
+					return err
+				}
+				block.Chunks[i].Summary = response.Content
+			}
+			return nil
 		}
-		if err != nil {
-			return err
+
+		switch block.SummaryPlan.Mode {
+		case core.SummaryModeFull:
+			return p.summarizeFull(ctx, logger, block)
+		case core.SummaryModePerChunk:
+			return summarizeChunks()
+		case core.SummaryModeMapReduce:
+			if err := summarizeChunks(); err != nil {
+				return err
+			}
+			return p.summarizeMapReduce(ctx, logger, block)
+		default:
+			return fmt.Errorf("unsupported summary_plan mode %q for post %s", block.SummaryPlan.Mode, block.ID)
 		}
-		block.Summary = &core.SummaryResult{
-			ProcessorName: p.name,
-			Summary:       response.Content,
-			ProcessedAt:   time.Now().UTC(),
-		}
-		return nil
 	}
 
 	maxConcurrency := p.config.MaxConcurrency
@@ -253,4 +238,137 @@ loop:
 		}
 		return blocks, nil
 	}
+}
+
+type summaryTemplateData struct {
+	*core.PostBlock
+	Chunk          core.ContentChunk
+	ChunkIndex     int
+	ChunkSummaries []string
+	Params         map[string]interface{}
+}
+
+func parseChunkTemplates(cfg *config.LLMSummary) (*template.Template, *template.Template, error) {
+	if cfg.ChunkSystem == "" && cfg.ChunkPrompt == "" {
+		return nil, nil, nil
+	}
+	if cfg.ChunkSystem == "" || cfg.ChunkPrompt == "" {
+		return nil, nil, fmt.Errorf("chunk_system_template and chunk_prompt_template must both be set")
+	}
+	return llmutil.ParseSystemAndPromptTemplates(cfg.Name+"-chunk", cfg.ChunkSystem, cfg.ChunkPrompt)
+}
+
+func (p *PostLLMProcessor) summarizeFull(ctx context.Context, logger *slog.Logger, block *core.PostBlock) error {
+	data := summaryTemplateData{
+		PostBlock: block,
+		Params:    p.config.Params,
+	}
+
+	systemPrompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
+	if err != nil {
+		return err
+	}
+
+	userPrompt, err := llmutil.ExecuteTemplate(p.template, data)
+	if err != nil {
+		return err
+	}
+
+	model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+	temperature := p.config.Temperature
+	if temperature == nil {
+		temperature = p.defaultTemp
+	}
+	var temperatureLog any
+	if temperature != nil {
+		temperatureLog = *temperature
+	}
+	logger.Info("llm post summary summarizing block", "block_id", block.ID, "model", model, "temperature", temperatureLog)
+
+	var response llm.ChatResponse
+	if p.config.Images != nil && p.config.Images.Enabled && p.config.Images.Mode == config.ImageModeMultimodal {
+		images := llmutil.CollectImageBlocks(block, p.config.Images.IncludeCommentImages, p.config.Images.MaxImages)
+		// Multimodal calls are brittle in the face of dead/expired image URLs (common for scraped content).
+		// Some providers fail the *entire* request if any referenced image returns 404.
+		//
+		// We treat this as a recoverable error: if we can detect this specific failure, we retry the same
+		// prompt while progressively removing the offending image(s) so the post summary still completes.
+		for {
+			userMessage := llmutil.BuildUserMessageWithImages(userPrompt, images)
+			response, err = llmutil.ChatCompletionWithRetries(ctx, p.client, model, []llm.Message{
+				{Role: llm.RoleSystem, Content: systemPrompt},
+				userMessage,
+			}, RETRIES, nil, temperature)
+			if err == nil {
+				break
+			}
+			if url, ok := llmutil.MissingImageURL(err); ok && len(images) > 0 {
+				// MissingImageURL is a best-effort heuristic based on parsing the upstream provider error
+				// message (see llmutil.MissingImageURL docs). We only retry if we can identify and remove
+				// the exact failing image URL; otherwise we fail the block and let block_error_policy decide
+				// whether the post should be dropped.
+				if url == "" {
+					break
+				}
+				var removed *core.ImageBlock
+				images, removed = llmutil.DropImageByURL(images, url)
+				if removed == nil {
+					break
+				}
+				logger.Warn("llm post summary missing image; retrying without image", "block_id", block.ID, "image_url", removed.URL)
+				continue
+			}
+			break
+		}
+	} else {
+		response, err = llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+	}
+	if err != nil {
+		return err
+	}
+	block.Summary = &core.SummaryResult{
+		ProcessorName: p.name,
+		Summary:       response.Content,
+		ProcessedAt:   time.Now().UTC(),
+	}
+	return nil
+}
+
+func (p *PostLLMProcessor) summarizeMapReduce(ctx context.Context, logger *slog.Logger, block *core.PostBlock) error {
+	chunkSummaries := make([]string, 0, len(block.Chunks))
+	for _, chunk := range block.Chunks {
+		if chunk.Summary == "" {
+			continue
+		}
+		chunkSummaries = append(chunkSummaries, chunk.Summary)
+	}
+	data := summaryTemplateData{
+		PostBlock:      block,
+		ChunkSummaries: chunkSummaries,
+		Params:         p.config.Params,
+	}
+	systemPrompt, err := llmutil.ExecuteTemplate(p.systemTemplate, data)
+	if err != nil {
+		return err
+	}
+	userPrompt, err := llmutil.ExecuteTemplate(p.template, data)
+	if err != nil {
+		return err
+	}
+	model := llmutil.ModelOrDefault(p.config.Model, p.defaultModel)
+	temperature := p.config.Temperature
+	if temperature == nil {
+		temperature = p.defaultTemp
+	}
+	response, err := llmutil.ChatSystemUserWithRetries(ctx, p.client, model, systemPrompt, userPrompt, RETRIES, nil, temperature)
+	if err != nil {
+		return err
+	}
+	block.Summary = &core.SummaryResult{
+		ProcessorName: p.name,
+		Summary:       response.Content,
+		ProcessedAt:   time.Now().UTC(),
+	}
+	logger.Info("llm post summary map-reduce completed", "block_id", block.ID, "chunks", len(block.Chunks))
+	return nil
 }

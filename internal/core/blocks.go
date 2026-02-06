@@ -18,10 +18,36 @@ type PostBlock struct {
 	Comments    []CommentBlock `json:"comments,omitempty" yaml:"comments,omitempty"`
 	WebBlocks   []WebBlock     `json:"web_blocks,omitempty" yaml:"web_blocks,omitempty"`
 	ImageBlocks []ImageBlock   `json:"image_blocks,omitempty" yaml:"image_blocks,omitempty"`
+	Chunks      []ContentChunk `json:"chunks,omitempty" yaml:"chunks,omitempty"`
+	SummaryPlan *SummaryPlan   `json:"summary_plan,omitempty" yaml:"summary_plan,omitempty"`
 	Summary     *SummaryResult `json:"summary,omitempty" yaml:"summary,omitempty"`
 	Quality     *QualityResult `json:"quality,omitempty" yaml:"quality,omitempty"`
 	ProcessedAt time.Time      `json:"processed_at" yaml:"processed_at"`
 	Errors      []ProcessError `json:"errors,omitempty" yaml:"errors,omitempty"`
+}
+
+// SummaryMode describes how summarization processors should interpret a PostBlock.
+type SummaryMode string
+
+const (
+	SummaryModeFull      SummaryMode = "full"
+	SummaryModePerChunk  SummaryMode = "per_chunk"
+	SummaryModeMapReduce SummaryMode = "map_reduce"
+)
+
+// ContentChunk contains raw chunk content plus any chunk-level summary.
+// Chunk summaries are written by summary processors, not sources.
+type ContentChunk struct {
+	Content string `json:"content" yaml:"content"`
+	Summary string `json:"summary,omitempty" yaml:"summary,omitempty"`
+}
+
+// SummaryPlan is an intent signal for summary processors describing how to handle the PostBlock.
+// Summary processors may ignore this if they do not support the requested mode.
+type SummaryPlan struct {
+	Mode          SummaryMode `json:"mode" yaml:"mode"`
+	MaxChunkChars int         `json:"max_chunk_chars,omitempty" yaml:"max_chunk_chars,omitempty"`
+	ChunkLimit    int         `json:"chunk_limit,omitempty" yaml:"chunk_limit,omitempty"`
 }
 
 // CommentBlock contains data and metadata representing a Comment attached to a Post
