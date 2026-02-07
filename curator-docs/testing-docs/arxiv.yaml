@@ -1,0 +1,25 @@
+workflow:
+  name: "arxiv-test"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv:
+        query: "retrieval augmented generation"
+        categories: ["cs.CL", "cs.IR"]
+        max_results: 5
+        sort_by: "lastUpdatedDate"
+        sort_order: "descending"
+        include_abstract_in_chunks: true
+        chunking:
+          mode: "section"
+          fallback_max_chars: 3500
+          min_section_chars: 400
+        summary_plan:
+          mode: per_chunk
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"

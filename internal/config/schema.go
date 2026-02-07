@@ -53,6 +53,7 @@ type CronTrigger struct {
 type SourceConfig struct {
 	Reddit   *RedditSource   `yaml:"reddit,omitempty"`
 	RSS      *RSSSource      `yaml:"rss,omitempty"`
+	Arxiv    *ArxivSource    `yaml:"arxiv,omitempty"`
 	TestFile *TestFileSource `yaml:"testfile,omitempty"`
 }
 
@@ -79,6 +80,28 @@ type RSSSource struct {
 	UserAgent               string               `yaml:"user_agent,omitempty"`
 	SummaryPlan             *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`
 	Snapshot                *core.SnapshotConfig `yaml:"snapshot,omitempty"`
+}
+
+// ArxivSource defines arXiv API configuration for paper discovery and ingestion.
+type ArxivSource struct {
+	Query                   string               `yaml:"query,omitempty"`
+	Categories              []string             `yaml:"categories,omitempty"`
+	MaxResults              int                  `yaml:"max_results,omitempty"`
+	SortBy                  string               `yaml:"sort_by,omitempty"`
+	SortOrder               string               `yaml:"sort_order,omitempty"`
+	DateFrom                string               `yaml:"date_from,omitempty"`
+	DateTo                  string               `yaml:"date_to,omitempty"`
+	IncludeAbstractInChunks *bool                `yaml:"include_abstract_in_chunks,omitempty"`
+	Chunking                *ArxivChunkingConfig `yaml:"chunking,omitempty"`
+	SummaryPlan             *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`
+	Snapshot                *core.SnapshotConfig `yaml:"snapshot,omitempty"`
+}
+
+// ArxivChunkingConfig controls how arXiv paper content is split into chunks.
+type ArxivChunkingConfig struct {
+	Mode             string `yaml:"mode,omitempty"`
+	FallbackMaxChars int    `yaml:"fallback_max_chars,omitempty"`
+	MinSectionChars  int    `yaml:"min_section_chars,omitempty"`
 }
 
 // SummaryPlanConfig declares how summary processors should handle a post.
@@ -299,6 +322,7 @@ type ProcessorFactory interface {
 	NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error)
 	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
 	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
+	NewArxivSource(config *ArxivSource) (core.SourceProcessor, error)
 	NewTestFileSource(config *TestFileSource) (core.SourceProcessor, error)
 	NewQualityRule(config *QualityRule) (core.QualityProcessor, error)
 	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
@@ -384,7 +408,7 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate sources
 	for i, source := range d.Workflow.Sources {
-		if source.Reddit == nil && source.RSS == nil && source.TestFile == nil {
+		if source.Reddit == nil && source.RSS == nil && source.Arxiv == nil && source.TestFile == nil {
 			return fmt.Errorf("source %d: unsupported source type", i)
 		}
 		if source.Reddit != nil && len(source.Reddit.Subreddits) == 0 {
@@ -392,6 +416,9 @@ func (d *CuratorDocument) Validate() error {
 		}
 		if source.RSS != nil && len(source.RSS.Feeds) == 0 {
 			return fmt.Errorf("source %d: at least one rss feed is required", i)
+		}
+		if source.Arxiv != nil && strings.TrimSpace(source.Arxiv.Query) == "" && len(source.Arxiv.Categories) == 0 {
+			return fmt.Errorf("source %d: arxiv requires query or categories", i)
 		}
 		if source.TestFile != nil && strings.TrimSpace(source.TestFile.Path) == "" {
 			return fmt.Errorf("source %d: testfile path is required", i)
@@ -409,6 +436,14 @@ func (d *CuratorDocument) Validate() error {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("source %d rss", i), source.RSS.Snapshot); err != nil {
+				return err
+			}
+		}
+		if source.Arxiv != nil {
+			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d arxiv", i), source.Arxiv.SummaryPlan); err != nil {
+				return err
+			}
+			if err := validateSnapshotConfig(fmt.Sprintf("source %d arxiv", i), source.Arxiv.Snapshot); err != nil {
 				return err
 			}
 		}
@@ -944,6 +979,24 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 
 			processRef := core.ProcessReference{
 				Name:   "rss",
+				Type:   core.SourceProcessorType,
+				Source: sourceProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		}
+		if source.Arxiv != nil {
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewArxivSource(source.Arxiv)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.Sources = append(flow.Sources, sourceProcessor)
+
+			processRef := core.ProcessReference{
+				Name:   "arxiv",
 				Type:   core.SourceProcessorType,
 				Source: sourceProcessor,
 			}

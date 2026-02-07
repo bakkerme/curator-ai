@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -18,6 +19,8 @@ import (
 	"github.com/bakkerme/curator-ai/internal/processors/summary"
 	"github.com/bakkerme/curator-ai/internal/processors/trigger"
 	"github.com/bakkerme/curator-ai/internal/runner/snapshot"
+	"github.com/bakkerme/curator-ai/internal/sources/arxiv"
+	arxivimpl "github.com/bakkerme/curator-ai/internal/sources/arxiv/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 	jinaimpl "github.com/bakkerme/curator-ai/internal/sources/jina/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
@@ -32,6 +35,7 @@ type Factory struct {
 	DefaultTemperature *float64
 	SMTPDefaults       config.SMTPEnvConfig
 	JinaReader         jina.Reader
+	ArxivFetcher       arxiv.Fetcher
 	RedditFetcher      reddit.Fetcher
 	RSSFetcher         rss.Fetcher
 	EmailSender        email.Sender
@@ -50,6 +54,7 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 		DefaultTemperature: env.OpenAI.Temperature,
 		SMTPDefaults:       env.SMTP,
 		JinaReader:         jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
+		ArxivFetcher:       arxivimpl.NewFetcher(10*time.Second, "curator-ai/0.1", ""),
 		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
 		RSSFetcher:         rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
@@ -73,6 +78,14 @@ func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcesso
 
 func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
 	processor, err := source.NewRSSProcessor(cfg, f.RSSFetcher, f.SeenStore)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
+}
+
+func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
+	processor, err := source.NewArxivProcessor(cfg, f.ArxivFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}

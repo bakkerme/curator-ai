@@ -154,6 +154,59 @@ workflow:
 	}
 }
 
+func TestValidate_ArxivRequiresQueryOrCategories(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv: {}
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err == nil {
+		t.Fatalf("Expected validation to fail without arxiv query or categories")
+	}
+}
+
+func TestValidate_AllowsArxivQuery(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv:
+        query: "retrieval"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+}
+
 func TestTemplateTypeCheckFailsOnBadRunSummaryTemplate(t *testing.T) {
 	data := []byte(`
 workflow:
@@ -912,6 +965,10 @@ func (m *mockFactory) NewRedditSource(config *RedditSource) (core.SourceProcesso
 }
 
 func (m *mockFactory) NewRSSSource(config *RSSSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewArxivSource(config *ArxivSource) (core.SourceProcessor, error) {
 	return &mockSource{}, nil
 }
 
