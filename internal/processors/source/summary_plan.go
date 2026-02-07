@@ -1,7 +1,9 @@
 package source
 
-import "github.com/bakkerme/curator-ai/internal/config"
-import "github.com/bakkerme/curator-ai/internal/core"
+import (
+	"github.com/bakkerme/curator-ai/internal/config"
+	"github.com/bakkerme/curator-ai/internal/core"
+)
 
 func summaryPlanFromConfig(cfg *config.SummaryPlanConfig) *core.SummaryPlan {
 	// Default summary behavior is full-document summarization when no plan is configured.
