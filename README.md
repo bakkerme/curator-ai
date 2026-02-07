@@ -36,6 +36,9 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `REDDIT_PASSWORD` (optional; required with `REDDIT_USERNAME`)
 - `RSS_HTTP_TIMEOUT` (optional, e.g. `10s`)
 - `RSS_USER_AGENT` (optional, default: `curator-ai/0.1`)
+- `ARXIV_BASE_URL` (optional, default: `https://export.arxiv.org/api/query`)
+- `ARXIV_HTTP_TIMEOUT` (optional, e.g. `10s`)
+- `ARXIV_USER_AGENT` (optional, default: `curator-ai/0.1`)
 
 ### Jina Reader (URL → markdown)
 - `JINA_API_KEY` (required to use the Jina Reader client)

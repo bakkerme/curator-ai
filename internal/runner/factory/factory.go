@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -54,7 +53,7 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 		DefaultTemperature: env.OpenAI.Temperature,
 		SMTPDefaults:       env.SMTP,
 		JinaReader:         jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
-		ArxivFetcher:       arxivimpl.NewFetcher(10*time.Second, "curator-ai/0.1", ""),
+		ArxivFetcher:       arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
 		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
 		RSSFetcher:         rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
