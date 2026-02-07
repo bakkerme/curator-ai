@@ -1,8 +1,13 @@
 package impl
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bakkerme/curator-ai/internal/sources/arxiv"
 )
@@ -134,6 +139,75 @@ func TestNormalizeArxivID(t *testing.T) {
 				t.Fatalf("normalizeArxivID(%q): got %q, want %q", tc.raw, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSearch_DoesNotRetryPermanent4xx(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad query syntax"))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(2*time.Second, "test-agent", server.URL)
+	_, err := fetcher.Search(context.Background(), searchOptions("bad", nil, "", ""))
+	if err == nil {
+		t.Fatalf("expected search error")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected one request without retries, got %d", got)
+	}
+	if !strings.Contains(err.Error(), "status 400") {
+		t.Fatalf("expected status code in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "bad query syntax") {
+		t.Fatalf("expected response body details in error, got %v", err)
+	}
+}
+
+func TestSearch_RetriesTransientStatuses(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := atomic.AddInt32(&calls, 1)
+		if call < 3 {
+			if call == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte("rate limited"))
+				return
+			}
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("upstream failure"))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/atom+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/1234.5678v1</id>
+    <title>Sample Paper</title>
+    <summary>Abstract text.</summary>
+    <published>2024-01-10T00:00:00Z</published>
+    <updated>2024-01-12T00:00:00Z</updated>
+    <author><name>Jane Doe</name></author>
+    <category term="cs.CL"/>
+  </entry>
+</feed>`))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(2*time.Second, "test-agent", server.URL)
+	papers, err := fetcher.Search(context.Background(), searchOptions("test", nil, "", ""))
+	if err != nil {
+		t.Fatalf("expected search to succeed after retries, got %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Fatalf("expected 3 calls (2 retries + success), got %d", got)
+	}
+	if len(papers) != 1 {
+		t.Fatalf("expected one paper, got %d", len(papers))
 	}
 }
 

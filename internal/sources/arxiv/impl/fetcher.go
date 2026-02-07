@@ -74,7 +74,12 @@ func (f *Fetcher) Search(ctx context.Context, options arxiv.SearchOptions) ([]ar
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("arxiv api status %d", resp.StatusCode)
+			bodySnippet := readBodySnippet(resp.Body, 2048)
+			statusErr := fmt.Errorf("arxiv api status %d: %s", resp.StatusCode, bodySnippet)
+			if shouldRetryStatus(resp.StatusCode) {
+				return statusErr
+			}
+			return retry.Permanent(statusErr)
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -327,4 +332,23 @@ func findPDFURL(links []link) string {
 		}
 	}
 	return ""
+}
+
+func shouldRetryStatus(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= 500
+}
+
+func readBodySnippet(body io.Reader, limit int64) string {
+	if limit <= 0 {
+		limit = 2048
+	}
+	payload, err := io.ReadAll(io.LimitReader(body, limit))
+	if err != nil {
+		return "failed to read response body"
+	}
+	snippet := strings.TrimSpace(string(payload))
+	if snippet == "" {
+		return "empty response body"
+	}
+	return snippet
 }
