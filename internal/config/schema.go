@@ -290,6 +290,7 @@ const (
 	ProcessorTriggerCron   ProcessorType = "trigger_cron"
 	ProcessorSourceReddit  ProcessorType = "source_reddit"
 	ProcessorSourceRSS     ProcessorType = "source_rss"
+	ProcessorSourceArxiv   ProcessorType = "source_arxiv"
 	ProcessorSourceTest    ProcessorType = "source_testfile"
 	ProcessorQualityRule   ProcessorType = "quality_rule"
 	ProcessorQualityLLM    ProcessorType = "quality_llm"
@@ -812,6 +813,13 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Type:   ProcessorSourceRSS,
 				Name:   "rss",
 				Config: source.RSS,
+			})
+		}
+		if source.Arxiv != nil {
+			flow.Sources = append(flow.Sources, ParsedProcessor{
+				Type:   ProcessorSourceArxiv,
+				Name:   "arxiv",
+				Config: source.Arxiv,
 			})
 		}
 		if source.TestFile != nil {
