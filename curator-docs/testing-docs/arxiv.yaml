@@ -5,8 +5,8 @@ workflow:
         schedule: "0 0 * * *"
   sources:
     - arxiv:
-        query: "retrieval augmented generation"
-        categories: ["cs.CL", "cs.IR"]
+        # query: ""
+        categories: ["cs.CR"]
         max_results: 5
         sort_by: "lastUpdatedDate"
         sort_order: "descending"
@@ -16,10 +16,150 @@ workflow:
           fallback_max_chars: 3500
           min_section_chars: 400
         summary_plan:
-          mode: per_chunk
+          mode: map_reduce
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv.json"
+
+  quality:
+    - llm:
+        name: is_relevant
+        prompt_template: isRelevantTemplate
+        evaluations:
+          - "Is focused on AI or Large Language Model secutiy, or it's use in security"
+        action_type: pass_drop
+        threshold: 0.5 # optional
+        # block_error_policy: drop
+        block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv-quality-llm.json"
+
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        prompt_template: postSummaryTemplate
+        params:
+          interests:
+            - "AI and Large Language Model Security"
+        chunk_system_template: |-
+          You are a helpful assistant that summarizes a document chunk. You are provided an abstract for a paper, alongside a chunk. You should try to provide a high level overview of what's in that chunk, in a way that can by synthersised into a full summary of the paper. Do not summarise the abstract, it is intended to provide context on what the paper is about.
+
+          Always summarise in markdown and provide the summarisation directly.
+        chunk_prompt_template: |-
+          Summarize the following chunk:
+          {{.Chunk.Content}}
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv-post-summary.json"
+    - markdown:
+        name: markdown_to_html_post_sum
+        type: markdown
+        context: post
+
   output:
     - email:
-        template: "Hello"
-        to: "test@example.com"
-        from: "noreply@example.com"
-        subject: "Daily Report"
+        template: emailTemplate
+        to: brandon@bdmd.com.au
+        subject: "Paper Test"
+
+templates:
+  - id: postSummaryTemplate
+    system_template: |-
+      You are an expert security and AI analyst.
+
+      Write a concise summary of the post. Focus on the reader interests.
+      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
+
+      Reader interests:
+      {{- range (index .Params "interests") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      - One sentence summary of the paper
+      - 3-6 bullet points
+      - then "Why it matters:" (1-2 sentences)
+      - then "Key entities:" (comma-separated list)
+
+      Don't add any additional comments that stray from the output format. Use markdown, do not include code fences.
+
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+
+      Content:
+      {{ .ChunkSummaries }}
+      -----USER CONTENT END-----
+
+  - id: emailTemplate
+    system_template: "--" # Email is still considered a prompt template right now
+    template: |-
+      <!doctype html>
+      <html>
+        <body style="margin:0;padding:0;background:#ffffff;">
+        {{- range .Blocks }}
+        <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+          <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
+            <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
+            <div style="font-size:13px;margin:0;">
+              {{- if .Summary }}
+              {{ .Summary.HTML }}
+              {{- else }}
+              {{ .Content }}
+              {{- end }}
+            </div>
+          </div>
+        </div>
+        {{- end }}
+
+  - id: isRelevantTemplate
+    system_template: |-
+      You are a strict relevance/quality evaluator.
+
+      You may be given post text plus one or more images attached as multimodal inputs.
+      Use images as primary evidence when the post text is sparse. If charts/tables are present, extract key numbers and units.
+
+      Evaluate the post and output ONLY valid JSON with this exact shape:
+      {"score": <number 0..1>, "reason": <string>}
+
+      Scoring guidance:
+      - 0.0 = completely irrelevant / low-signal
+      - 1.0 = extremely relevant / high-signal
+
+      Positive evaluation criteria (score higher when these apply):
+      {{- range .Evaluations }}
+      - {{ . }}
+      {{- end }}
+
+      {{- if .Exclusions }}
+      Exclusion criteria (score near 0 when these apply):
+      {{- range .Exclusions }}
+      - {{ . }}
+      {{- end }}
+      {{- end }}
+
+      Reason should be a single sentence of 25 words or less.
+
+      Return ONLY the JSON object. No markdown, no code fences, no json```
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+      CreatedAt: {{ .CreatedAt }}
+
+      Content:
+      {{ .Content }}
+      -----USER CONTENT END-----
+

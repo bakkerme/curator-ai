@@ -16,7 +16,7 @@ import (
 )
 
 const defaultBaseURL = "https://r.jina.ai/"
-const tokenBudget = "15000" // 10k tokens
+const defaultTokenBudget = 15000 // 15k tokens
 
 type Reader struct {
 	client      *http.Client
@@ -63,6 +63,11 @@ func (r *Reader) Read(ctx context.Context, urlStr string, options jina.ReadOptio
 		return "", fmt.Errorf("jina: url is blocklisted")
 	}
 
+	tokenBudget := options.TokenBudget
+	if tokenBudget <= 0 {
+		tokenBudget = defaultTokenBudget
+	}
+
 	retainImages := strings.TrimSpace(options.RetainImages)
 	if retainImages == "" {
 		retainImages = "none"
@@ -85,7 +90,7 @@ func (r *Reader) Read(ctx context.Context, urlStr string, options jina.ReadOptio
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Retain-Images", retainImages)
 		req.Header.Set("User-Agent", r.userAgent)
-		req.Header.Set("X-Token-Budget", tokenBudget) // 10k tokens
+		req.Header.Set("X-Token-Budget", fmt.Sprintf("%d", tokenBudget))
 
 		resp, err := r.client.Do(req)
 		if err != nil {

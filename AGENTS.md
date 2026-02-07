@@ -59,6 +59,7 @@ This file is intentionally a short index. The authoritative behavior and design 
 ## Coding Standards (Project-Specific)
 
 - Comments, comments comments. Comment functions and use comments to explain the behaviour of blocks of code and why they should do that.
+- Use `logger` to log activity during a run. This ensures that the current state of processing is understood.
 - Keep configuration/env access centralized in [internal/config/env.go](internal/config/env.go) (avoid sprinkling `os.Getenv`).
 - Prefer the existing processor pattern:
   - add schema config in [internal/config/schema.go](internal/config/schema.go)

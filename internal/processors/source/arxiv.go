@@ -143,10 +143,15 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 }
 
 func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Logger, paper arxiv.Paper) (string, []core.ProcessError) {
+	jinaReadOptions := jina.ReadOptions{
+		RetainImages: "none",
+		TokenBudget:  250000, // default to 250k tokens for arXiv papers
+	}
+
 	var errors []core.ProcessError
 	if paper.HTMLURL != "" {
 		logger.Info("Fetching arXiv HTML via Jina", "paper_id", paper.ID, "url", paper.HTMLURL)
-		if content, err := p.reader.Read(ctx, paper.HTMLURL, jina.ReadOptions{}); err == nil && strings.TrimSpace(content) != "" {
+		if content, err := p.reader.Read(ctx, paper.HTMLURL, jinaReadOptions); err == nil && strings.TrimSpace(content) != "" {
 			return content, nil
 		} else if err != nil {
 			logger.Info("arXiv HTML fetch failed, falling back to PDF", "paper_id", paper.ID, "error", err)
@@ -164,7 +169,7 @@ func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Log
 	}
 
 	logger.Info("Fetching arXiv PDF via Jina", "paper_id", paper.ID, "url", paper.PDFURL)
-	content, err := p.reader.Read(ctx, paper.PDFURL, jina.ReadOptions{})
+	content, err := p.reader.Read(ctx, paper.PDFURL, jinaReadOptions)
 	if err != nil || strings.TrimSpace(content) == "" {
 		msg := "arxiv pdf fetch failed"
 		if err != nil {
