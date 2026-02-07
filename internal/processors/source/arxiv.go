@@ -106,11 +106,15 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			}
 		}
 
+		var chunks []core.ContentChunk
 		content, errors := p.fetchPaperContent(ctx, logger, paper)
 		if strings.TrimSpace(content) == "" {
 			content = paper.Abstract
+			chunks = chunkArxivContent(content, paper.Abstract, false, chunking)
+			logger.Error("Failed to fetch full text content; using abstract only", "paper_id", paper.ID)
+		} else {
+			chunks = chunkArxivContent(content, paper.Abstract, includeAbstract, chunking)
 		}
-		chunks := chunkArxivContent(content, paper.Abstract, includeAbstract, chunking)
 
 		block := &core.PostBlock{
 			ID:          paper.ID,
