@@ -51,8 +51,9 @@ type CronTrigger struct {
 
 // SourceConfig wraps different source types
 type SourceConfig struct {
-	Reddit *RedditSource `yaml:"reddit,omitempty"`
-	RSS    *RSSSource    `yaml:"rss,omitempty"`
+	Reddit   *RedditSource   `yaml:"reddit,omitempty"`
+	RSS      *RSSSource      `yaml:"rss,omitempty"`
+	TestFile *TestFileSource `yaml:"testfile,omitempty"`
 }
 
 // RedditSource defines Reddit data source configuration
@@ -65,6 +66,7 @@ type RedditSource struct {
 	IncludeWeb      bool                 `yaml:"include_web,omitempty"`
 	IncludeImages   bool                 `yaml:"include_images,omitempty"`
 	MinScore        int                  `yaml:"min_score,omitempty"`
+	SummaryPlan     *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`
 	Snapshot        *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
@@ -75,7 +77,23 @@ type RSSSource struct {
 	IncludeContent          *bool                `yaml:"include_content,omitempty"`
 	ConvertSourceToMarkdown bool                 `yaml:"convert_source_to_markdown,omitempty"`
 	UserAgent               string               `yaml:"user_agent,omitempty"`
+	SummaryPlan             *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`
 	Snapshot                *core.SnapshotConfig `yaml:"snapshot,omitempty"`
+}
+
+// SummaryPlanConfig declares how summary processors should handle a post.
+type SummaryPlanConfig struct {
+	Mode          core.SummaryMode `yaml:"mode"`
+	MaxChunkChars int              `yaml:"max_chunk_chars,omitempty"`
+	ChunkLimit    int              `yaml:"chunk_limit,omitempty"`
+}
+
+// TestFileSource defines a file-backed source for local testing.
+type TestFileSource struct {
+	Path        string               `yaml:"path"`
+	ChunkSize   int                  `yaml:"chunk_size,omitempty"`
+	SummaryPlan *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`
+	Snapshot    *core.SnapshotConfig `yaml:"snapshot,omitempty"`
 }
 
 // QualityConfig wraps different quality processor types
@@ -129,6 +147,8 @@ type LLMSummary struct {
 	Temperature    *float64               `yaml:"temperature,omitempty"`
 	SystemTemplate string                 `yaml:"system_template"`
 	PromptTemplate string                 `yaml:"prompt_template"`
+	ChunkSystem    string                 `yaml:"chunk_system_template,omitempty"`
+	ChunkPrompt    string                 `yaml:"chunk_prompt_template,omitempty"`
 	Params         map[string]interface{} `yaml:"params,omitempty"`
 	// BlockErrorPolicy controls behavior when processing a single PostBlock fails.
 	// Allowed values: "fail" (default) or "drop".
@@ -247,6 +267,7 @@ const (
 	ProcessorTriggerCron   ProcessorType = "trigger_cron"
 	ProcessorSourceReddit  ProcessorType = "source_reddit"
 	ProcessorSourceRSS     ProcessorType = "source_rss"
+	ProcessorSourceTest    ProcessorType = "source_testfile"
 	ProcessorQualityRule   ProcessorType = "quality_rule"
 	ProcessorQualityLLM    ProcessorType = "quality_llm"
 	ProcessorSummaryLLM    ProcessorType = "summary_llm"
@@ -278,6 +299,7 @@ type ProcessorFactory interface {
 	NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error)
 	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
 	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
+	NewTestFileSource(config *TestFileSource) (core.SourceProcessor, error)
 	NewQualityRule(config *QualityRule) (core.QualityProcessor, error)
 	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
 	NewLLMSummary(config *LLMSummary) (core.SummaryProcessor, error)
@@ -362,7 +384,7 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate sources
 	for i, source := range d.Workflow.Sources {
-		if source.Reddit == nil && source.RSS == nil {
+		if source.Reddit == nil && source.RSS == nil && source.TestFile == nil {
 			return fmt.Errorf("source %d: unsupported source type", i)
 		}
 		if source.Reddit != nil && len(source.Reddit.Subreddits) == 0 {
@@ -371,13 +393,30 @@ func (d *CuratorDocument) Validate() error {
 		if source.RSS != nil && len(source.RSS.Feeds) == 0 {
 			return fmt.Errorf("source %d: at least one rss feed is required", i)
 		}
+		if source.TestFile != nil && strings.TrimSpace(source.TestFile.Path) == "" {
+			return fmt.Errorf("source %d: testfile path is required", i)
+		}
 		if source.Reddit != nil {
+			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d reddit", i), source.Reddit.SummaryPlan); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("source %d reddit", i), source.Reddit.Snapshot); err != nil {
 				return err
 			}
 		}
 		if source.RSS != nil {
+			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d rss", i), source.RSS.SummaryPlan); err != nil {
+				return err
+			}
 			if err := validateSnapshotConfig(fmt.Sprintf("source %d rss", i), source.RSS.Snapshot); err != nil {
+				return err
+			}
+		}
+		if source.TestFile != nil {
+			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d testfile", i), source.TestFile.SummaryPlan); err != nil {
+				return err
+			}
+			if err := validateSnapshotConfig(fmt.Sprintf("source %d testfile", i), source.TestFile.Snapshot); err != nil {
 				return err
 			}
 		}
@@ -441,6 +480,9 @@ func (d *CuratorDocument) Validate() error {
 			if err := validateLLMTemperature(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Temperature); err != nil {
 				return err
 			}
+			if err := validateChunkTemplates(fmt.Sprintf("post_summary %d llm", i), summary.LLM); err != nil {
+				return err
+			}
 			if err := validateImagesConfig(fmt.Sprintf("post_summary %d llm", i), summary.LLM.Images); err != nil {
 				return err
 			}
@@ -470,6 +512,9 @@ func (d *CuratorDocument) Validate() error {
 				return err
 			}
 			if err := validateLLMTemperature(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Temperature); err != nil {
+				return err
+			}
+			if err := validateChunkTemplates(fmt.Sprintf("run_summary %d llm", i), summary.LLM); err != nil {
 				return err
 			}
 			if err := validateImagesConfig(fmt.Sprintf("run_summary %d llm", i), summary.LLM.Images); err != nil {
@@ -515,6 +560,20 @@ func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
 		return fmt.Errorf("%s: snapshot path is required", label)
 	}
 	return nil
+}
+
+func validateSummaryPlanConfig(label string, cfg *SummaryPlanConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("%s: summary_plan is required", label)
+	}
+	switch cfg.Mode {
+	case core.SummaryModeFull, core.SummaryModePerChunk, core.SummaryModeMapReduce:
+		return nil
+	case "":
+		return fmt.Errorf("%s: summary_plan.mode is required", label)
+	default:
+		return fmt.Errorf("%s: summary_plan.mode must be %q, %q, or %q", label, core.SummaryModeFull, core.SummaryModePerChunk, core.SummaryModeMapReduce)
+	}
 }
 
 func validateLLMTemperature(label string, temperature *float64) error {
@@ -568,6 +627,19 @@ func validateImagesConfig(label string, cfg *LLMImages) error {
 	return nil
 }
 
+func validateChunkTemplates(label string, cfg *LLMSummary) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.ChunkSystem == "" && cfg.ChunkPrompt == "" {
+		return nil
+	}
+	if cfg.ChunkSystem == "" || cfg.ChunkPrompt == "" {
+		return fmt.Errorf("%s: chunk_system_template and chunk_prompt_template must both be set", label)
+	}
+	return nil
+}
+
 func (d *CuratorDocument) resolveTemplateReferences() error {
 	if len(d.Templates) == 0 {
 		return nil
@@ -617,6 +689,10 @@ func (d *CuratorDocument) resolveTemplateReferences() error {
 		if resolved, ok := byID[s.PromptTemplate]; ok {
 			s.SystemTemplate = resolved.SystemTemplate
 			s.PromptTemplate = resolved.Template
+		}
+		if resolved, ok := byID[s.ChunkPrompt]; ok {
+			s.ChunkSystem = resolved.SystemTemplate
+			s.ChunkPrompt = resolved.Template
 		}
 		if s.Images != nil && s.Images.Caption != nil {
 			if resolved, ok := byID[s.Images.Caption.Template]; ok {
@@ -698,6 +774,13 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Type:   ProcessorSourceRSS,
 				Name:   "rss",
 				Config: source.RSS,
+			})
+		}
+		if source.TestFile != nil {
+			flow.Sources = append(flow.Sources, ParsedProcessor{
+				Type:   ProcessorSourceTest,
+				Name:   "testfile",
+				Config: source.TestFile,
 			})
 		}
 	}
@@ -858,6 +941,24 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 
 			processRef := core.ProcessReference{
 				Name:   "rss",
+				Type:   core.SourceProcessorType,
+				Source: sourceProcessor,
+			}
+			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+		}
+		if source.TestFile != nil {
+			var sourceProcessor core.SourceProcessor
+			if factory != nil {
+				var err error
+				sourceProcessor, err = factory.NewTestFileSource(source.TestFile)
+				if err != nil {
+					return nil, err
+				}
+			}
+			flow.Sources = append(flow.Sources, sourceProcessor)
+
+			processRef := core.ProcessReference{
+				Name:   "testfile",
 				Type:   core.SourceProcessorType,
 				Source: sourceProcessor,
 			}

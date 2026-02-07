@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bakkerme/curator-ai/internal/config"
+	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 )
 
@@ -22,7 +23,8 @@ func (m *rssFetcherMock) Fetch(ctx context.Context, feedURL string, options rss.
 
 func TestRSSProcessorPrefersContentByDefault(t *testing.T) {
 	cfg := &config.RSSSource{
-		Feeds: []string{"https://example.com/feed.xml"},
+		Feeds:       []string{"https://example.com/feed.xml"},
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &rssFetcherMock{
 		items: []rss.Item{
@@ -56,6 +58,7 @@ func TestRSSProcessorConvertsHTMLToMarkdownWhenEnabled(t *testing.T) {
 	cfg := &config.RSSSource{
 		Feeds:                   []string{"https://example.com/feed.xml"},
 		ConvertSourceToMarkdown: true,
+		SummaryPlan:             &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &rssFetcherMock{
 		items: []rss.Item{
@@ -92,6 +95,7 @@ func TestRSSProcessorExtractsDataURIImagesIntoImageBlocks(t *testing.T) {
 	cfg := &config.RSSSource{
 		Feeds:                   []string{"https://example.com/feed.xml"},
 		ConvertSourceToMarkdown: true,
+		SummaryPlan:             &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &rssFetcherMock{items: []rss.Item{{
 		ID:          "1",

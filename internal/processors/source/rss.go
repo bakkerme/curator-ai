@@ -43,6 +43,9 @@ func (p *RSSProcessor) Validate() error {
 	if len(p.config.Feeds) == 0 {
 		return fmt.Errorf("at least one rss feed is required")
 	}
+	if p.config.SummaryPlan == nil {
+		return fmt.Errorf("summary_plan is required")
+	}
 	if p.fetcher == nil {
 		return fmt.Errorf("rss fetcher is required")
 	}
@@ -152,12 +155,13 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			}
 
 			block := &core.PostBlock{
-				ID:        id,
-				URL:       item.Link,
-				Title:     item.Title,
-				Content:   content,
-				Author:    item.Author,
-				CreatedAt: item.PublishedAt,
+				ID:          id,
+				URL:         item.Link,
+				Title:       item.Title,
+				Content:     content,
+				Author:      item.Author,
+				CreatedAt:   item.PublishedAt,
+				SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
 			}
 			if len(images) > 0 {
 				block.ImageBlocks = append(block.ImageBlocks, images...)

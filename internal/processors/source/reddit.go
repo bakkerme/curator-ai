@@ -51,6 +51,9 @@ func (p *RedditProcessor) Validate() error {
 	if len(p.config.Subreddits) == 0 {
 		return fmt.Errorf("at least one subreddit is required")
 	}
+	if p.config.SummaryPlan == nil {
+		return fmt.Errorf("summary_plan is required")
+	}
 	if p.fetcher == nil {
 		return fmt.Errorf("reddit fetcher is required")
 	}
@@ -90,12 +93,13 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 		}
 
 		block := &core.PostBlock{
-			ID:        item.ID,
-			URL:       item.URL,
-			Title:     item.Title,
-			Content:   item.Content,
-			Author:    item.Author,
-			CreatedAt: item.CreatedAt,
+			ID:          item.ID,
+			URL:         item.URL,
+			Title:       item.Title,
+			Content:     item.Content,
+			Author:      item.Author,
+			CreatedAt:   item.CreatedAt,
+			SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
 		}
 
 		if p.config.IncludeComments && len(item.Comments) > 0 {

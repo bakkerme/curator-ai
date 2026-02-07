@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
+	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	redditmock "github.com/bakkerme/curator-ai/internal/sources/reddit/mock"
@@ -31,8 +32,9 @@ func (m *jinaReaderMock) Read(ctx context.Context, url string, options jina.Read
 
 func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
 	cfg := &config.RedditSource{
-		Subreddits: []string{"golang"},
-		IncludeWeb: true,
+		Subreddits:  []string{"golang"},
+		IncludeWeb:  true,
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &redditmock.Fetcher{
 		Items: []reddit.Item{
@@ -79,8 +81,9 @@ func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
 
 func TestRedditProcessor_IncludeWeb_JinaErrorRecordedOnPost(t *testing.T) {
 	cfg := &config.RedditSource{
-		Subreddits: []string{"golang"},
-		IncludeWeb: true,
+		Subreddits:  []string{"golang"},
+		IncludeWeb:  true,
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &redditmock.Fetcher{
 		Items: []reddit.Item{

@@ -1,0 +1,39 @@
+workflow:
+  name: "TestFile Chunk Summary"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - testfile:
+        path: "/home/brandon/sources/curator-ai/testdata/test-md-input.md"
+        chunk_size: 12000
+        summary_plan:
+          mode: map_reduce
+          max_chunk_chars: 12000
+          chunk_limit: 8
+  post_summary:
+    - llm:
+        name: chunked_post_summary
+        type: llm
+        context: post
+        system_template: |-
+          You are a helpful assistant that summarizes technical documents.
+        prompt_template: |-
+          Write a concise final summary using these chunk summaries:
+          {{range .ChunkSummaries}}- {{.}}
+          {{end}}
+        chunk_system_template: |-
+          You are a helpful assistant that summarizes a document chunk.
+        chunk_prompt_template: |-
+          Summarize the following chunk:
+          {{.Chunk.Content}}
+  output:
+    - email:
+        template: |-
+          {{range .Blocks}}
+          ## {{.Title}}
+          {{if .Summary}}{{.Summary.Summary}}{{end}}
+          {{end}}
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "TestFile Summary"
