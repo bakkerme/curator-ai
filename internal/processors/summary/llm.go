@@ -95,8 +95,12 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 	}
 
 	summarizeOne := func(ctx context.Context, block *core.PostBlock) error {
+		// Keep runtime behavior backward-compatible with documents/posts that omit summary_plan.
 		if block.SummaryPlan == nil {
-			return fmt.Errorf("summary_plan is required for post %s", block.ID)
+			block.SummaryPlan = &core.SummaryPlan{Mode: core.SummaryModeFull}
+		}
+		if block.SummaryPlan.Mode == "" {
+			block.SummaryPlan.Mode = core.SummaryModeFull
 		}
 		if err := llmutil.EnsureImageCaptions(
 			ctx,

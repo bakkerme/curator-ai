@@ -43,9 +43,6 @@ func (p *RSSProcessor) Validate() error {
 	if len(p.config.Feeds) == 0 {
 		return fmt.Errorf("at least one rss feed is required")
 	}
-	if p.config.SummaryPlan == nil {
-		return fmt.Errorf("summary_plan is required")
-	}
 	if p.fetcher == nil {
 		return fmt.Errorf("rss fetcher is required")
 	}

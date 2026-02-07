@@ -72,16 +72,16 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 		}
 		data := struct {
 			*core.PostBlock
-			Chunk      core.ContentChunk
-			ChunkIndex int
+			Chunk          core.ContentChunk
+			ChunkIndex     int
 			ChunkSummaries []string
-			Params     map[string]interface{}
+			Params         map[string]interface{}
 		}{
-			PostBlock:  post,
-			Chunk:      core.ContentChunk{Content: "Example chunk", Summary: "Example chunk summary"},
-			ChunkIndex: 0,
+			PostBlock:      post,
+			Chunk:          core.ContentChunk{Content: "Example chunk", Summary: "Example chunk summary"},
+			ChunkIndex:     0,
 			ChunkSummaries: []string{"Example chunk summary", "Another chunk summary"},
-			Params:     s.Params,
+			Params:         s.Params,
 		}
 		if s.SystemTemplate != "" {
 			if err := typeCheckTextTemplate(fmt.Sprintf("post_summary[%d].system_template", i), s.SystemTemplate, data); err != nil {

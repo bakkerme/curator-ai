@@ -564,13 +564,16 @@ func validateSnapshotConfig(label string, cfg *core.SnapshotConfig) error {
 
 func validateSummaryPlanConfig(label string, cfg *SummaryPlanConfig) error {
 	if cfg == nil {
-		return fmt.Errorf("%s: summary_plan is required", label)
+		// summary_plan is optional; when omitted, sources default to mode=full.
+		return nil
 	}
 	switch cfg.Mode {
 	case core.SummaryModeFull, core.SummaryModePerChunk, core.SummaryModeMapReduce:
 		return nil
 	case "":
-		return fmt.Errorf("%s: summary_plan.mode is required", label)
+		// Treat an empty mode as implicit full so existing docs can opt in gradually.
+		cfg.Mode = core.SummaryModeFull
+		return nil
 	default:
 		return fmt.Errorf("%s: summary_plan.mode must be %q, %q, or %q", label, core.SummaryModeFull, core.SummaryModePerChunk, core.SummaryModeMapReduce)
 	}

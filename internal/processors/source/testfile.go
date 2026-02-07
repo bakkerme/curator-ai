@@ -36,9 +36,6 @@ func (p *TestFileProcessor) Validate() error {
 	if strings.TrimSpace(p.config.Path) == "" {
 		return fmt.Errorf("testfile path is required")
 	}
-	if p.config.SummaryPlan == nil {
-		return fmt.Errorf("summary_plan is required")
-	}
 	return nil
 }
 

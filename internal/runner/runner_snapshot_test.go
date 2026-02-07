@@ -15,9 +15,9 @@ type testSource struct {
 	name string
 }
 
-func (s *testSource) Name() string { return s.name }
+func (s *testSource) Name() string                           { return s.name }
 func (s *testSource) Configure(map[string]interface{}) error { return nil }
-func (s *testSource) Validate() error { return nil }
+func (s *testSource) Validate() error                        { return nil }
 func (s *testSource) Fetch(context.Context) ([]*core.PostBlock, error) {
 	return []*core.PostBlock{{ID: "p1"}}, nil
 }
@@ -27,9 +27,9 @@ type testQuality struct {
 	evaluateFn func([]*core.PostBlock) ([]*core.PostBlock, error)
 }
 
-func (q *testQuality) Name() string { return q.name }
+func (q *testQuality) Name() string                           { return q.name }
 func (q *testQuality) Configure(map[string]interface{}) error { return nil }
-func (q *testQuality) Validate() error { return nil }
+func (q *testQuality) Validate() error                        { return nil }
 func (q *testQuality) Evaluate(_ context.Context, blocks []*core.PostBlock) ([]*core.PostBlock, error) {
 	return q.evaluateFn(blocks)
 }
@@ -86,4 +86,3 @@ func TestRunner_QualityRestore_HonorsLaterRestoreWithoutRunningProcessor(t *test
 		t.Fatalf("unexpected first block: got %q want %q", got, want)
 	}
 }
-

@@ -51,9 +51,6 @@ func (p *RedditProcessor) Validate() error {
 	if len(p.config.Subreddits) == 0 {
 		return fmt.Errorf("at least one subreddit is required")
 	}
-	if p.config.SummaryPlan == nil {
-		return fmt.Errorf("summary_plan is required")
-	}
 	if p.fetcher == nil {
 		return fmt.Errorf("reddit fetcher is required")
 	}
