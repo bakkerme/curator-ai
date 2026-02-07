@@ -5,7 +5,7 @@ workflow:
         schedule: "0 0 * * *"
   sources:
     - testfile:
-        path: "./path/to/your/large.md"
+        path: "/home/brandon/sources/curator-ai/testdata/test-md-input.md"
         chunk_size: 12000
         summary_plan:
           mode: map_reduce

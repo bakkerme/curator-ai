@@ -74,11 +74,13 @@ func (d *CuratorDocument) validateTemplateTypes() error {
 			*core.PostBlock
 			Chunk      core.ContentChunk
 			ChunkIndex int
+			ChunkSummaries []string
 			Params     map[string]interface{}
 		}{
 			PostBlock:  post,
 			Chunk:      core.ContentChunk{Content: "Example chunk", Summary: "Example chunk summary"},
 			ChunkIndex: 0,
+			ChunkSummaries: []string{"Example chunk summary", "Another chunk summary"},
 			Params:     s.Params,
 		}
 		if s.SystemTemplate != "" {
