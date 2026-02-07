@@ -572,6 +572,7 @@ func validateSummaryPlanConfig(label string, cfg *SummaryPlanConfig) error {
 		return nil
 	case "":
 		// Treat an empty mode as implicit full so existing docs can opt in gradually.
+		cfg.Mode = core.SummaryModeFull
 		return nil
 	default:
 		return fmt.Errorf("%s: summary_plan.mode must be %q, %q, or %q", label, core.SummaryModeFull, core.SummaryModePerChunk, core.SummaryModeMapReduce)
