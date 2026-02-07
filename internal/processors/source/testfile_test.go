@@ -10,7 +10,7 @@ import (
 )
 
 func TestTestFileProcessorFetchesChunks(t *testing.T) {
-	path := filepath.Join("testdata", "sample.md")
+	path := filepath.Join("../", "../", "../", "testdata", "test-md-input.md")
 	cfg := &config.TestFileSource{
 		Path:        path,
 		ChunkSize:   10,
