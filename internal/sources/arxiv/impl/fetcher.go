@@ -275,15 +275,49 @@ func normalizeArxivID(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	parts := strings.Split(raw, "/")
-	id := parts[len(parts)-1]
-	if strings.Contains(id, "v") {
-		versionIndex := strings.LastIndex(id, "v")
-		if versionIndex > 0 {
-			return id[:versionIndex]
+
+	// IDs are commonly provided as full URLs (`.../abs/<id>`) but may also be bare
+	// IDs. Legacy IDs have an archive prefix (`hep-th/9901001v2`) that must be
+	// preserved for stable dedupe keys.
+	id := raw
+	hadAbsPrefix := false
+	if _, after, ok := strings.Cut(raw, "/abs/"); ok {
+		id = after
+		hadAbsPrefix = true
+	}
+
+	id = strings.Trim(id, "/")
+	if idx := strings.IndexAny(id, "?#"); idx >= 0 {
+		id = id[:idx]
+	}
+	if id == "" {
+		return ""
+	}
+
+	if strings.Contains(id, "/") {
+		parts := strings.Split(id, "/")
+		if hadAbsPrefix || strings.Count(id, "/") == 1 {
+			// Preserve legacy archive-prefixed IDs (for example, `hep-th/9901001v2`).
+			id = strings.TrimSpace(parts[len(parts)-2]) + "/" + strings.TrimSpace(parts[len(parts)-1])
+		} else {
+			id = strings.TrimSpace(parts[len(parts)-1])
 		}
 	}
-	return id
+
+	return stripArxivVersionSuffix(id)
+}
+
+func stripArxivVersionSuffix(id string) string {
+	versionIndex := strings.LastIndexAny(id, "vV")
+	if versionIndex <= 0 || versionIndex == len(id)-1 {
+		return id
+	}
+	for _, r := range id[versionIndex+1:] {
+		if r < '0' || r > '9' {
+			return id
+		}
+	}
+	return id[:versionIndex]
 }
 
 func findPDFURL(links []link) string {

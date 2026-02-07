@@ -58,6 +58,85 @@ func TestParseFeed(t *testing.T) {
 	}
 }
 
+func TestParseFeedLegacyID(t *testing.T) {
+	payload := []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/hep-th/9901001v2</id>
+    <title>Legacy Paper</title>
+    <summary>Legacy abstract.</summary>
+    <published>1999-01-10T00:00:00Z</published>
+    <updated>1999-01-12T00:00:00Z</updated>
+    <author><name>John Doe</name></author>
+    <category term="hep-th"/>
+    <link href="http://arxiv.org/abs/hep-th/9901001v2" rel="alternate" type="text/html"/>
+    <link href="http://arxiv.org/pdf/hep-th/9901001v2" rel="related" type="application/pdf"/>
+  </entry>
+</feed>`)
+
+	entries, err := parseFeed(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	paper := entries[0].toPaper()
+	if paper.ID != "hep-th/9901001" {
+		t.Fatalf("expected normalized legacy ID, got %q", paper.ID)
+	}
+	if paper.HTMLURL != "https://arxiv.org/html/hep-th/9901001" {
+		t.Fatalf("expected legacy html url, got %q", paper.HTMLURL)
+	}
+}
+
+func TestNormalizeArxivID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "modern URL",
+			raw:  "http://arxiv.org/abs/1234.5678v2",
+			want: "1234.5678",
+		},
+		{
+			name: "legacy URL",
+			raw:  "http://arxiv.org/abs/hep-th/9901001v2",
+			want: "hep-th/9901001",
+		},
+		{
+			name: "legacy bare id",
+			raw:  "hep-th/9901001v3",
+			want: "hep-th/9901001",
+		},
+		{
+			name: "modern URL with query fragment",
+			raw:  "https://arxiv.org/abs/2501.01234v1?context=cs#frag",
+			want: "2501.01234",
+		},
+		{
+			name: "do not strip embedded v",
+			raw:  "http://arxiv.org/abs/cs.CV/0301001version",
+			want: "cs.CV/0301001version",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := normalizeArxivID(tc.raw)
+			if got != tc.want {
+				t.Fatalf("normalizeArxivID(%q): got %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func searchOptions(query string, categories []string, dateFrom string, dateTo string) arxiv.SearchOptions {
 	return arxiv.SearchOptions{
 		Query:      query,
