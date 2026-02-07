@@ -12,4 +12,3 @@ type ReadOptions struct {
 type Reader interface {
 	Read(ctx context.Context, url string, options ReadOptions) (string, error)
 }
-

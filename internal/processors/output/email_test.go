@@ -36,4 +36,3 @@ func TestRenderEmailTemplate_RendersSummaryHTMLUnescaped(t *testing.T) {
 		t.Fatalf("expected other fields to remain escaped, got %q", body)
 	}
 }
-
