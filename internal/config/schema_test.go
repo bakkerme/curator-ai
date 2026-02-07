@@ -56,6 +56,61 @@ workflow:
 	}
 }
 
+func TestValidate_AllowsMissingSummaryPlan(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+}
+
+func TestValidate_AllowsEmptySummaryPlanMode(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["MachineLearning"]
+        summary_plan: {}
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+}
+
 func TestTemplateTypeCheckFailsOnBadPostSummaryTemplate(t *testing.T) {
 	data := []byte(`
 workflow:

@@ -90,7 +90,7 @@ func TestPostLLMProcessor_Summarize_MapReduce(t *testing.T) {
 	}
 }
 
-func TestPostLLMProcessor_Summarize_MissingSummaryPlan(t *testing.T) {
+func TestPostLLMProcessor_Summarize_MissingSummaryPlanDefaultsToFull(t *testing.T) {
 	client := &echoClient{}
 	cfg := &config.LLMSummary{
 		Name:           "s",
@@ -106,8 +106,17 @@ func TestPostLLMProcessor_Summarize_MissingSummaryPlan(t *testing.T) {
 		t.Fatalf("NewPostLLMProcessor error: %v", err)
 	}
 	blocks := []*core.PostBlock{{ID: "1", Content: "full"}}
-	_, err = processor.Summarize(context.Background(), blocks)
-	if err == nil {
-		t.Fatalf("expected error for missing summary plan")
+	updated, err := processor.Summarize(context.Background(), blocks)
+	if err != nil {
+		t.Fatalf("Summarize error: %v", err)
+	}
+	if updated[0].Summary == nil {
+		t.Fatalf("expected final summary to be set")
+	}
+	if got := updated[0].Summary.Summary; got != "full=full" {
+		t.Fatalf("expected full-mode summary, got %q", got)
+	}
+	if updated[0].SummaryPlan == nil || updated[0].SummaryPlan.Mode != core.SummaryModeFull {
+		t.Fatalf("expected summary plan mode to default to full, got %#v", updated[0].SummaryPlan)
 	}
 }
