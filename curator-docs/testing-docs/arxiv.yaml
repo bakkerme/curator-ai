@@ -81,7 +81,7 @@ workflow:
         snapshot:
           snapshot: true
           # restore: true
-          path: "snapshots/run-summary.json"
+          path: "snapshots/arxiv-run-summary.json"
     - markdown:
         name: markdown_to_html_sum
         type: markdown
