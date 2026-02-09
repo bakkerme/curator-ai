@@ -89,6 +89,26 @@ reddit:
   min_score: number              # Optional: Minimum post score filter
 ```
 
+#### arXiv Source
+Fetches papers from arXiv and emits each paper as a `PostBlock`.
+
+```yaml
+arxiv:
+  query: string                         # Optional when categories provided
+  categories: [string]                  # Optional when query provided (e.g. ["cs.LG"])
+  max_results: number                   # Optional: max papers to fetch
+  sort_by: string                       # Optional: "relevance" | "lastUpdatedDate" | "submittedDate"
+  sort_order: string                    # Optional: "ascending" | "descending"
+  date_from: string                     # Optional: YYYY-MM-DD
+  date_to: string                       # Optional: YYYY-MM-DD
+  abstract_only: boolean                # Optional: when true, PostBlock.Content is abstract-only
+  include_abstract_in_chunks: boolean   # Optional: include abstract prefix on chunk text
+  chunking:
+    mode: string                        # Optional: "section" | "size"
+    fallback_max_chars: number          # Optional: max chars per chunk in size fallback
+    min_section_chars: number           # Optional: merge tiny sections below this size
+```
+
 ### Quality Processors
 
 #### Quality Rule

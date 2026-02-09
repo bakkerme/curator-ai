@@ -2,7 +2,6 @@ package quality
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -164,7 +163,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 					{Role: llm.RoleSystem, Content: system_prompt},
 					userMessage,
 				}, decodeRetries, func(content string) error {
-					return json.Unmarshal([]byte(content), &parsed)
+					return llmutil.UnmarshalJSONResponse(content, &parsed)
 				}, temperature)
 				if err == nil {
 					break
@@ -196,7 +195,7 @@ func (p *LLMProcessor) Evaluate(ctx context.Context, blocks []*core.PostBlock) (
 				user_prompt,
 				decodeRetries,
 				func(content string) error {
-					return json.Unmarshal([]byte(content), &parsed)
+					return llmutil.UnmarshalJSONResponse(content, &parsed)
 				},
 				temperature,
 			)

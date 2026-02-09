@@ -91,6 +91,9 @@ type ArxivSource struct {
 	SortOrder               string               `yaml:"sort_order,omitempty"`
 	DateFrom                string               `yaml:"date_from,omitempty"`
 	DateTo                  string               `yaml:"date_to,omitempty"`
+	// AbstractOnly forces PostBlock content/chunks to be built from the abstract only.
+	// When enabled, the processor skips full-text fetches via Jina.
+	AbstractOnly            *bool                `yaml:"abstract_only,omitempty"`
 	IncludeAbstractInChunks *bool                `yaml:"include_abstract_in_chunks,omitempty"`
 	Chunking                *ArxivChunkingConfig `yaml:"chunking,omitempty"`
 	SummaryPlan             *SummaryPlanConfig   `yaml:"summary_plan,omitempty"`

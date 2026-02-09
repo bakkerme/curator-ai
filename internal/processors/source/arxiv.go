@@ -88,6 +88,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 	if p.config.IncludeAbstractInChunks != nil {
 		includeAbstract = *p.config.IncludeAbstractInChunks
 	}
+	abstractOnly := p.config.AbstractOnly != nil && *p.config.AbstractOnly
 	chunking := defaultArxivChunkingConfig(p.config.Chunking)
 
 	blocks := make([]*core.PostBlock, 0, len(papers))
@@ -107,13 +108,22 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 		}
 
 		var chunks []core.ContentChunk
-		content, errors := p.fetchPaperContent(ctx, logger, paper)
-		if strings.TrimSpace(content) == "" {
+		var content string
+		var errors []core.ProcessError
+		if abstractOnly {
+			// Abstract-only mode ensures downstream processors receive only abstract text.
 			content = paper.Abstract
 			chunks = chunkArxivContent(content, paper.Abstract, false, chunking)
-			logger.Error("Failed to fetch full text content; using abstract only", "paper_id", paper.ID)
+			logger.Info("Using abstract-only mode for arXiv paper", "paper_id", paper.ID)
 		} else {
-			chunks = chunkArxivContent(content, paper.Abstract, includeAbstract, chunking)
+			content, errors = p.fetchPaperContent(ctx, logger, paper)
+			if strings.TrimSpace(content) == "" {
+				content = paper.Abstract
+				chunks = chunkArxivContent(content, paper.Abstract, false, chunking)
+				logger.Error("Failed to fetch full text content; using abstract only", "paper_id", paper.ID)
+			} else {
+				chunks = chunkArxivContent(content, paper.Abstract, includeAbstract, chunking)
+			}
 		}
 
 		block := &core.PostBlock{

@@ -2,6 +2,7 @@ package llmutil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -10,6 +11,57 @@ import (
 )
 
 type ResponseDecoder func(content string) error
+
+// UnmarshalJSONResponse unmarshals JSON from an LLM response.
+// It accepts either raw JSON content or JSON wrapped in a markdown code fence.
+func UnmarshalJSONResponse(content string, v any) error {
+	trimmed := strings.TrimSpace(content)
+	if err := json.Unmarshal([]byte(trimmed), v); err == nil {
+		return nil
+	}
+
+	fenced, ok := extractCodeFenceContent(trimmed)
+	if !ok {
+		return json.Unmarshal([]byte(trimmed), v)
+	}
+	return json.Unmarshal([]byte(fenced), v)
+}
+
+// extractCodeFenceContent extracts the first markdown code fence body that is either:
+// - explicitly labeled as json (```json), or
+// - unlabeled (```), for compatibility with model responses that omit language hints.
+func extractCodeFenceContent(content string) (string, bool) {
+	const fence = "```"
+	remaining := content
+
+	for {
+		start := strings.Index(remaining, fence)
+		if start < 0 {
+			return "", false
+		}
+		remaining = remaining[start+len(fence):]
+
+		lineEnd := strings.IndexByte(remaining, '\n')
+		if lineEnd < 0 {
+			return "", false
+		}
+
+		info := strings.TrimSpace(remaining[:lineEnd])
+		bodyStart := lineEnd + 1
+		bodyEndRel := strings.Index(remaining[bodyStart:], fence)
+		if bodyEndRel < 0 {
+			return "", false
+		}
+
+		bodyEnd := bodyStart + bodyEndRel
+		body := strings.TrimSpace(remaining[bodyStart:bodyEnd])
+		remaining = remaining[bodyEnd+len(fence):]
+
+		if info == "" || strings.EqualFold(info, "json") {
+			return body, true
+		}
+	}
+}
 
 func ParseSystemAndPromptTemplates(name, systemTemplate, promptTemplate string) (*template.Template, *template.Template, error) {
 	if name == "" {
