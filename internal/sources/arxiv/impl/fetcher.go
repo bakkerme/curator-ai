@@ -265,14 +265,11 @@ func parseTime(value string) time.Time {
 }
 
 func normalizeAbsURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	id := normalizeArxivID(raw)
+	if id == "" {
 		return ""
 	}
-	if strings.Contains(raw, "/abs/") {
-		return raw
-	}
-	return strings.TrimSuffix(raw, "/") + "/abs"
+	return "https://arxiv.org/abs/" + id
 }
 
 func normalizeArxivID(raw string) string {
@@ -281,35 +278,61 @@ func normalizeArxivID(raw string) string {
 		return ""
 	}
 
-	// IDs are commonly provided as full URLs (`.../abs/<id>`) but may also be bare
-	// IDs. Legacy IDs have an archive prefix (`hep-th/9901001v2`) that must be
-	// preserved for stable dedupe keys.
+	id, hadCanonicalPrefix := extractArxivIdentifier(raw)
+	if id == "" {
+		return ""
+	}
+
+	// Legacy IDs may contain one slash (archive/id). If we extracted from canonical
+	// arXiv URL paths, preserve the trailing archive/id pair.
+	if strings.Contains(id, "/") {
+		parts := strings.Split(id, "/")
+		filtered := make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				filtered = append(filtered, part)
+			}
+		}
+		if len(filtered) == 0 {
+			return ""
+		}
+		if (hadCanonicalPrefix || len(filtered) == 2) && len(filtered) >= 2 {
+			id = filtered[len(filtered)-2] + "/" + filtered[len(filtered)-1]
+		} else {
+			id = filtered[len(filtered)-1]
+		}
+	}
+
+	return stripArxivVersionSuffix(id)
+}
+
+func extractArxivIdentifier(raw string) (string, bool) {
 	id := raw
-	hadAbsPrefix := false
+	hadCanonicalPrefix := false
 	if _, after, ok := strings.Cut(raw, "/abs/"); ok {
 		id = after
-		hadAbsPrefix = true
+		hadCanonicalPrefix = true
+	} else if strings.HasPrefix(raw, "abs/") {
+		id = strings.TrimPrefix(raw, "abs/")
+		hadCanonicalPrefix = true
+	} else if _, after, ok := strings.Cut(raw, "/pdf/"); ok {
+		id = after
+		hadCanonicalPrefix = true
+	} else if strings.HasPrefix(raw, "pdf/") {
+		id = strings.TrimPrefix(raw, "pdf/")
+		hadCanonicalPrefix = true
 	}
 
 	id = strings.Trim(id, "/")
 	if idx := strings.IndexAny(id, "?#"); idx >= 0 {
 		id = id[:idx]
 	}
-	if id == "" {
-		return ""
+	if strings.HasSuffix(strings.ToLower(id), ".pdf") {
+		id = id[:len(id)-4]
 	}
-
-	if strings.Contains(id, "/") {
-		parts := strings.Split(id, "/")
-		if hadAbsPrefix || strings.Count(id, "/") == 1 {
-			// Preserve legacy archive-prefixed IDs (for example, `hep-th/9901001v2`).
-			id = strings.TrimSpace(parts[len(parts)-2]) + "/" + strings.TrimSpace(parts[len(parts)-1])
-		} else {
-			id = strings.TrimSpace(parts[len(parts)-1])
-		}
-	}
-
-	return stripArxivVersionSuffix(id)
+	id = strings.TrimSpace(strings.Trim(id, "/"))
+	return id, hadCanonicalPrefix
 }
 
 func stripArxivVersionSuffix(id string) string {

@@ -128,6 +128,16 @@ func TestNormalizeArxivID(t *testing.T) {
 			raw:  "http://arxiv.org/abs/cs.CV/0301001version",
 			want: "cs.CV/0301001version",
 		},
+		{
+			name: "pdf URL",
+			raw:  "https://arxiv.org/pdf/2501.01234v2.pdf",
+			want: "2501.01234",
+		},
+		{
+			name: "pdf URL legacy",
+			raw:  "https://arxiv.org/pdf/hep-th/9901001v2.pdf",
+			want: "hep-th/9901001",
+		},
 	}
 
 	for _, tc := range tests {
@@ -139,6 +149,67 @@ func TestNormalizeArxivID(t *testing.T) {
 				t.Fatalf("normalizeArxivID(%q): got %q, want %q", tc.raw, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeAbsURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "bare modern id",
+			raw:  "2501.01234v2",
+			want: "https://arxiv.org/abs/2501.01234",
+		},
+		{
+			name: "bare legacy id",
+			raw:  "hep-th/9901001v3",
+			want: "https://arxiv.org/abs/hep-th/9901001",
+		},
+		{
+			name: "pdf URL becomes canonical abs URL",
+			raw:  "https://arxiv.org/pdf/2501.01234v2.pdf",
+			want: "https://arxiv.org/abs/2501.01234",
+		},
+		{
+			name: "abs URL normalized",
+			raw:  "http://arxiv.org/abs/1234.5678v2",
+			want: "https://arxiv.org/abs/1234.5678",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := normalizeAbsURL(tc.raw)
+			if got != tc.want {
+				t.Fatalf("normalizeAbsURL(%q): got %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestToPaper_BareIDBuildsCanonicalAbsAndFallbackPDF(t *testing.T) {
+	e := entry{
+		ID:      "2501.01234v2",
+		Title:   "Bare ID Paper",
+		Summary: "Abstract",
+	}
+	paper := e.toPaper()
+
+	if paper.ID != "2501.01234" {
+		t.Fatalf("expected normalized ID, got %q", paper.ID)
+	}
+	if paper.AbsURL != "https://arxiv.org/abs/2501.01234" {
+		t.Fatalf("expected canonical abs URL, got %q", paper.AbsURL)
+	}
+	if paper.PDFURL != "https://arxiv.org/pdf/2501.01234.pdf" {
+		t.Fatalf("expected canonical fallback pdf URL, got %q", paper.PDFURL)
 	}
 }
 
