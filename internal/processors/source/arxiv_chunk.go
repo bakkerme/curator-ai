@@ -3,6 +3,7 @@ package source
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
@@ -143,7 +144,8 @@ func mergeSmallSections(sections []section, minChars int) []section {
 			current = &secCopy
 			continue
 		}
-		if len(current.content) < minChars {
+		// Use rune count so thresholds are based on characters, not UTF-8 bytes.
+		if utf8.RuneCountInString(current.content) < minChars {
 			current.content = strings.TrimSpace(current.content + "\n\n" + sec.title + "\n" + sec.content)
 			continue
 		}

@@ -73,3 +73,18 @@ func TestChunkArxivContent_EmptyContentAbstractPresent_IncludeAbstractFalseStill
 		t.Fatalf("expected abstract content, got %q", chunks[0].Content)
 	}
 }
+
+func TestMergeSmallSections_UsesRuneCountForUTF8Threshold(t *testing.T) {
+	sections := []section{
+		{title: "Intro", content: "你你"},
+		{title: "Method", content: "method body"},
+	}
+
+	merged := mergeSmallSections(sections, 3)
+	if len(merged) != 1 {
+		t.Fatalf("expected 1 merged section when first section has 2 runes (<3), got %d", len(merged))
+	}
+	if !strings.Contains(merged[0].content, "Method") {
+		t.Fatalf("expected merged content to include next section title, got %q", merged[0].content)
+	}
+}
