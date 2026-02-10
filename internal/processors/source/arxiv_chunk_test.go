@@ -43,3 +43,33 @@ func TestChunkArxivContent_FallbacksToSizeChunking(t *testing.T) {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
 	}
 }
+
+func TestChunkArxivContent_EmptyContentAbstractPresent_NoDupWhenIncludeAbstractTrue(t *testing.T) {
+	chunks := chunkArxivContent("", "Abstract text.", true, arxivChunkingConfig{
+		mode:             "section",
+		fallbackMaxChars: 1000,
+		minSectionChars:  1,
+	})
+
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if chunks[0].Content != "Abstract text." {
+		t.Fatalf("expected abstract once, got %q", chunks[0].Content)
+	}
+}
+
+func TestChunkArxivContent_EmptyContentAbstractPresent_IncludeAbstractFalseStillReturnsAbstract(t *testing.T) {
+	chunks := chunkArxivContent("", "Abstract text.", false, arxivChunkingConfig{
+		mode:             "section",
+		fallbackMaxChars: 1000,
+		minSectionChars:  1,
+	})
+
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if chunks[0].Content != "Abstract text." {
+		t.Fatalf("expected abstract content, got %q", chunks[0].Content)
+	}
+}

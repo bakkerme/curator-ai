@@ -47,7 +47,9 @@ func defaultArxivChunkingConfig(cfg *config.ArxivChunkingConfig) arxivChunkingCo
 func chunkArxivContent(content string, abstract string, includeAbstract bool, cfg arxivChunkingConfig) []core.ContentChunk {
 	content = strings.TrimSpace(content)
 	if content == "" && strings.TrimSpace(abstract) != "" {
-		return []core.ContentChunk{{Content: buildChunkText("", abstract, abstract, includeAbstract)}}
+		// When no full content is available, emit the abstract exactly once.
+		// We force includeAbstract=false here so abstract text is treated as primary content.
+		return []core.ContentChunk{{Content: buildChunkText("", abstract, abstract, false)}}
 	}
 	if strings.EqualFold(cfg.mode, "size") {
 		return chunkBySize(content, abstract, includeAbstract, cfg.fallbackMaxChars)
