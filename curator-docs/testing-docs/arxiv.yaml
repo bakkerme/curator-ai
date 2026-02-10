@@ -1,0 +1,245 @@
+workflow:
+  name: "LLM Security Papers"
+  max_concurrency: 20
+  # dedupe_store:
+  #   driver: "sqlite"
+  #   dsn: "./curator-seen.db"
+  #   table: "seen_posts"
+  #   ttl: "365d"
+
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+
+  sources:
+    - arxiv:
+        # query: ""
+        categories: ["cs.CR"]
+        max_results: 50
+        sort_by: "lastUpdatedDate"
+        sort_order: "descending"
+        # When true, PostBlock.Content is only the abstract (no full-text fetch).
+        abstract_only: true
+        # include_abstract_in_chunks: true
+        # chunking:
+        #   mode: "section"
+        #   fallback_max_chars: 3500
+        #   min_section_chars: 400
+        # summary_plan:
+        #   mode: map_reduce
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv.json"
+
+  quality:
+    - llm:
+        name: is_relevant
+        prompt_template: isRelevantTemplate
+        evaluations:
+          - "Is focused on the application of LLMs or AI on cybersecurity"
+          - "Novel uses of LLMs or AI in penetration testing or cyber defence"
+          - "Advances in custom models focused on cybersecurity"
+        action_type: pass_drop
+        threshold: 0.5 # optional
+        # block_error_policy: drop
+        block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv-quality-llm.json"
+
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        prompt_template: postSummaryTemplate
+        params:
+          interests:
+            - "AI and Large Language Model Security"
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv-post-summary.json"
+    - markdown:
+        name: markdown_to_html_post_sum
+        type: markdown
+        context: post
+
+  run_summary:
+    - llm:
+        name: full_sum
+        type: llm
+        context: flow
+        prompt_template: fullSummaryTemplate
+        params:
+          focus:
+            - "Novel attack vectors against LLMs"
+            - "LLM use in security research, penetration testing or defence"
+        block_error_policy: fail
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/arxiv-run-summary.json"
+    - markdown:
+        name: markdown_to_html_sum
+        type: markdown
+        context: "flow"
+
+  output:
+    - email:
+        template: emailTemplate
+        to: brandon@bdmd.com.au
+        subject: "Paper Test"
+
+templates:
+  - id: isRelevantTemplate
+    system_template: |-
+      You are a strict relevance/quality evaluator.
+
+      You may be given post text plus one or more images attached as multimodal inputs.
+      Use images as primary evidence when the post text is sparse. If charts/tables are present, extract key numbers and units.
+
+      Evaluate the post and output ONLY valid JSON with this exact shape:
+      {"score": <number 0..1>, "reason": <string>}
+
+      Scoring guidance:
+      - 0.0 = completely irrelevant / low-signal
+      - 1.0 = extremely relevant / high-signal
+
+      Positive evaluation criteria (score higher when these apply):
+      {{- range .Evaluations }}
+      - {{ . }}
+      {{- end }}
+
+      {{- if .Exclusions }}
+      Exclusion criteria (score near 0 when these apply):
+      {{- range .Exclusions }}
+      - {{ . }}
+      {{- end }}
+      {{- end }}
+
+      Reason should be a single sentence of 25 words or less.
+
+      Return ONLY the JSON object. No markdown, no code fences, no json```
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+      CreatedAt: {{ .CreatedAt }}
+
+      Abstract:
+      {{ .Content }}
+      -----USER CONTENT END-----
+
+  - id: postSummaryTemplate
+    system_template: |-
+      You are an expert security and AI analyst.
+
+      Write a concise summary of the post. Focus on the reader interests.
+      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
+
+      Reader interests:
+      {{- range (index .Params "interests") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      - One sentence summary of the paper
+      - 3-6 bullet points
+      - then "Why it matters:" (1-2 sentences)
+      - then "Key entities:" (comma-separated list)
+
+      Don't add any additional comments that stray from the output format. Use markdown, do not include code fences.
+
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+
+      Content:
+      {{ .ChunkSummaries }}
+      -----USER CONTENT END-----
+
+  - id: fullSummaryTemplate
+    system_template: |-
+      You are writing an aggregate digest across multiple posts.
+
+      Produce an executive summary, then group notable items.
+
+      Include an:
+      - Executive summary, focused on 4-8 bullet points
+      - Notable Items, pick 5 most relevant items to the focus area, bulleted, include post title + 1 sentence
+
+      Focus areas:
+      {{- range (index .Params "focus") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      # Executive summary
+      # Notable items
+
+    template: |-
+      There are {{ len .Blocks }} posts.
+
+      Posts:
+      {{- range $i, $p := .Blocks }}
+      ---
+      Title: {{ $p.Title }}
+      URL: {{ $p.URL }}
+      Author: {{ $p.Author }}
+      Post summary (if present): {{- if $p.Summary }}
+      {{ $p.Summary.Summary }}
+      {{- else }}
+      (none)
+      {{- end }}
+      {{- end }}
+
+
+
+  - id: emailTemplate
+    system_template: "--" # Email is still considered a prompt template right now
+    template: |-
+      <!doctype html>
+        <html>
+          <body style="margin:0;padding:0;background:#ffffff;">
+            <div style="max-width:720px;margin:0 auto;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
+              <h1 style="margin:0 0 12px 0;font-size:22px;">LLM Research Papers</h1>
+
+              {{- if .RunSummary }}
+              {{- .RunSummary.HTML }}
+              {{- end }}
+
+              <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
+
+              {{- range .Blocks }}
+              <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+                <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
+                  <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
+                </div>
+
+                <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
+                  <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
+                </div>
+
+                <div style="font-size:13px;margin:0;">
+                  {{- if .Summary }}
+                  {{ .Summary.HTML }}
+                  {{- else }}
+                  (no summary)
+                  {{- end }}
+                </div>
+              </div>
+              {{- end }}
+            </div>
+          </body>
+        </html>
+
+

@@ -17,6 +17,7 @@ type EnvConfig struct {
 	OpenAI                   OpenAIEnvConfig
 	OTel                     OTelEnvConfig
 	Jina                     JinaEnvConfig
+	Arxiv                    ArxivEnvConfig
 	Reddit                   RedditEnvConfig
 	RSS                      RSSEnvConfig
 	SMTP                     SMTPEnvConfig
@@ -48,6 +49,12 @@ type OTelEnvConfig struct {
 
 type JinaEnvConfig struct {
 	APIKey      string
+	BaseURL     string
+	HTTPTimeout time.Duration
+	UserAgent   string
+}
+
+type ArxivEnvConfig struct {
 	BaseURL     string
 	HTTPTimeout time.Duration
 	UserAgent   string
@@ -118,6 +125,11 @@ func LoadEnv() EnvConfig {
 			BaseURL:     strings.TrimSpace(envString("JINA_BASE_URL", "")),
 			HTTPTimeout: envDuration("JINA_HTTP_TIMEOUT", 15*time.Second),
 			UserAgent:   envString("JINA_USER_AGENT", "curator-ai/0.1"),
+		},
+		Arxiv: ArxivEnvConfig{
+			BaseURL:     strings.TrimSpace(envString("ARXIV_BASE_URL", "")),
+			HTTPTimeout: envDuration("ARXIV_HTTP_TIMEOUT", 10*time.Second),
+			UserAgent:   envString("ARXIV_USER_AGENT", "curator-ai/0.1"),
 		},
 		Reddit: RedditEnvConfig{
 			HTTPTimeout:  envDuration("REDDIT_HTTP_TIMEOUT", 10*time.Second),

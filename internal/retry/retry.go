@@ -2,6 +2,7 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -12,6 +13,33 @@ type Config struct {
 	BaseDelay time.Duration
 	MaxDelay  time.Duration
 	Jitter    time.Duration
+}
+
+// permanentError marks an error as non-retryable for retry.Do.
+type permanentError struct {
+	err error
+}
+
+func (e permanentError) Error() string {
+	return e.err.Error()
+}
+
+func (e permanentError) Unwrap() error {
+	return e.err
+}
+
+// Permanent wraps an error to signal retry.Do to stop retrying immediately.
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return permanentError{err: err}
+}
+
+// IsPermanent reports whether an error was marked as non-retryable.
+func IsPermanent(err error) bool {
+	var p permanentError
+	return err != nil && errors.As(err, &p)
 }
 
 func Do(ctx context.Context, config Config, fn func() error) error {
@@ -36,6 +64,9 @@ func Do(ctx context.Context, config Config, fn func() error) error {
 	delay := baseDelay
 	for attempt := 0; attempt < attempts; attempt++ {
 		if err := fn(); err != nil {
+			if IsPermanent(err) {
+				return err
+			}
 			lastErr = err
 			if attempt == attempts-1 {
 				break

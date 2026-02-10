@@ -154,6 +154,101 @@ workflow:
 	}
 }
 
+func TestValidate_ArxivRequiresQueryOrCategories(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv: {}
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err == nil {
+		t.Fatalf("Expected validation to fail without arxiv query or categories")
+	}
+}
+
+func TestValidate_AllowsArxivQuery(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv:
+        query: "retrieval"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+}
+
+func TestParse_IncludesArxivSourceProcessor(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - arxiv:
+        query: "retrieval"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+
+	flow, err := doc.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse document: %v", err)
+	}
+
+	if len(flow.Sources) != 1 {
+		t.Fatalf("Expected 1 source processor, got %d", len(flow.Sources))
+	}
+	if flow.Sources[0].Type != ProcessorSourceArxiv {
+		t.Fatalf("Expected source type %q, got %q", ProcessorSourceArxiv, flow.Sources[0].Type)
+	}
+	if flow.Sources[0].Name != "arxiv" {
+		t.Fatalf("Expected source name %q, got %q", "arxiv", flow.Sources[0].Name)
+	}
+	if _, ok := flow.Sources[0].Config.(*ArxivSource); !ok {
+		t.Fatalf("Expected source config type *ArxivSource, got %T", flow.Sources[0].Config)
+	}
+}
+
 func TestTemplateTypeCheckFailsOnBadRunSummaryTemplate(t *testing.T) {
 	data := []byte(`
 workflow:
@@ -912,6 +1007,10 @@ func (m *mockFactory) NewRedditSource(config *RedditSource) (core.SourceProcesso
 }
 
 func (m *mockFactory) NewRSSSource(config *RSSSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewArxivSource(config *ArxivSource) (core.SourceProcessor, error) {
 	return &mockSource{}, nil
 }
 

@@ -4,6 +4,7 @@
 .gopath
 .gotmp
 curator-seen.db
+snapshots/
 
 # Build artifacts
 /bin/

@@ -148,6 +148,7 @@ func (p *PostLLMProcessor) Summarize(ctx context.Context, blocks []*core.PostBlo
 					return err
 				}
 				block.Chunks[i].Summary = response.Content
+				logger.Info("llm post summary chunk summarized", "block_id", block.ID, "chunk_index", i, "chunk_length", len(chunk.Content))
 			}
 			return nil
 		}
