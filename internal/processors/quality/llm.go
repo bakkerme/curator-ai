@@ -287,6 +287,4 @@ loop:
 		}
 		return filtered, nil
 	}
-
-	return filtered, nil
 }
