@@ -1,6 +1,8 @@
 ARG GO_VERSION=1.25.5
 
 FROM golang:${GO_VERSION} AS build
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -11,7 +13,7 @@ COPY . .
 
 # Build a small, static-ish binary (CGO disabled) suitable for distroless.
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /out/curator ./cmd/curator
 
 FROM debian:bookworm-slim AS runtime
