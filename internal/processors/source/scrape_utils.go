@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/bakkerme/curator-ai/internal/config"
 )
 
 func extractValue(doc *goquery.Document, selector, attr string) string {
@@ -58,22 +59,7 @@ func parseLookbackWindow(value string) (time.Time, bool, error) {
 }
 
 func parseExtendedDuration(value string) (time.Duration, error) {
-	value = strings.TrimSpace(value)
-	if strings.HasSuffix(value, "d") {
-		n, err := time.ParseDuration(strings.TrimSuffix(value, "d") + "h")
-		if err != nil {
-			return 0, err
-		}
-		return n * 24, nil
-	}
-	if strings.HasSuffix(value, "w") {
-		n, err := time.ParseDuration(strings.TrimSuffix(value, "w") + "h")
-		if err != nil {
-			return 0, err
-		}
-		return n * 24 * 7, nil
-	}
-	return time.ParseDuration(value)
+	return config.ParseDurationExtended(value)
 }
 
 func parseTimeFlexible(s string) (time.Time, bool) {

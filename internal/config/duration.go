@@ -32,6 +32,12 @@ func parseDurationExtended(raw string) (time.Duration, error) {
 	return time.ParseDuration(expanded)
 }
 
+// ParseDurationExtended parses Go-style duration strings and also supports day/week units.
+// It is intended for runtime consumers that need the same semantics as configuration validation.
+func ParseDurationExtended(raw string) (time.Duration, error) {
+	return parseDurationExtended(raw)
+}
+
 func expandDaysWeeksToHours(raw string) (string, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
