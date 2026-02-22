@@ -308,7 +308,7 @@ func (c *DedupeStoreConfig) UnmarshalYAML(value *yaml.Node) error {
 		c.TTL = 0
 		return nil
 	}
-	d, err := parseDurationExtended(s)
+	d, err := ParseDurationExtended(s)
 	if err != nil {
 		return fmt.Errorf("dedupe_store ttl: %w", err)
 	}
@@ -491,7 +491,7 @@ func (d *CuratorDocument) Validate() error {
 				return fmt.Errorf("source %d: scrape post_limit must be >= 0", i)
 			}
 			if strings.TrimSpace(source.Scrape.Lookback) != "" {
-				if _, err := parseDurationExtended(source.Scrape.Lookback); err != nil {
+				if _, err := ParseDurationExtended(source.Scrape.Lookback); err != nil {
 					return fmt.Errorf("source %d: scrape lookback: %w", i, err)
 				}
 			}

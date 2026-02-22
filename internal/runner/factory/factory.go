@@ -59,7 +59,7 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
 		ArxivFetcher:       arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
 		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
 		RSSFetcher:         rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
-		ScrapeFetcher:      scrapeimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
+		ScrapeFetcher:      scrapeimpl.NewFetcher(env.Scrape.HTTPTimeout, env.Scrape.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
 		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
 		// Document to take effect.
