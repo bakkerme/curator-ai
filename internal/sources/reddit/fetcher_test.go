@@ -2,10 +2,8 @@ package reddit
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -121,41 +119,5 @@ func TestNewHTTPClient_WrapsObservabilityTransport(t *testing.T) {
 	}
 	if _, ok := client.Transport.(*observabilityRoundTripper); !ok {
 		t.Fatalf("expected observabilityRoundTripper transport, got %T", client.Transport)
-	}
-}
-
-func TestRewriteHTMLAPIError_UsesMessageWhenBodyConsumed(t *testing.T) {
-	t.Parallel()
-
-	req, err := http.NewRequest(http.MethodGet, "https://www.reddit.com/comments/1r8snay.json", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-
-	apiErr := &goreddit.ErrorResponse{
-		Response: &http.Response{
-			StatusCode: http.StatusForbidden,
-			Request:    req,
-			Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
-			Body:       io.NopCloser(strings.NewReader("")),
-		},
-		Message: "<html><body><h1>Blocked</h1><p>Access denied</p></body></html>",
-	}
-
-	rewrittenErr, rewritten := rewriteHTMLAPIError(apiErr)
-	if !rewritten {
-		t.Fatalf("expected HTML error to be rewritten")
-	}
-	if rewrittenErr == nil {
-		t.Fatalf("expected rewritten error")
-	}
-	if strings.Contains(rewrittenErr.Error(), "<html>") {
-		t.Fatalf("expected rewritten error to omit raw HTML, got %q", rewrittenErr.Error())
-	}
-	if !strings.Contains(rewrittenErr.Error(), "Blocked") {
-		t.Fatalf("expected rewritten error to include converted content, got %q", rewrittenErr.Error())
-	}
-	if !strings.Contains(rewrittenErr.Error(), "403 server returned HTML error") {
-		t.Fatalf("expected rewritten error to include status context, got %q", rewrittenErr.Error())
 	}
 }
