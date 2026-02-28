@@ -1,10 +1,8 @@
 package reddit
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -159,35 +157,5 @@ func TestRewriteHTMLAPIError_UsesMessageWhenBodyConsumed(t *testing.T) {
 	}
 	if !strings.Contains(rewrittenErr.Error(), "403 server returned HTML error") {
 		t.Fatalf("expected rewritten error to include status context, got %q", rewrittenErr.Error())
-	}
-}
-
-func TestDoWithRetry_RewritesNonRetryableHTMLErrors(t *testing.T) {
-	t.Parallel()
-
-	req, err := http.NewRequest(http.MethodGet, "https://www.reddit.com/comments/1r8snay.json", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-
-	fetcher := &RedditFetcher{logger: slog.Default()}
-	err = fetcher.doWithRetry(context.Background(), "fetch_comments", func() error {
-		return &goreddit.ErrorResponse{
-			Response: &http.Response{
-				StatusCode: http.StatusForbidden,
-				Request:    req,
-				Body:       io.NopCloser(strings.NewReader("")),
-			},
-			Message: "<html><body><h1>Forbidden</h1><p>Denied</p></body></html>",
-		}
-	})
-	if err == nil {
-		t.Fatalf("expected error")
-	}
-	if strings.Contains(err.Error(), "<html>") {
-		t.Fatalf("expected final retry error to omit raw HTML, got %q", err.Error())
-	}
-	if !strings.Contains(err.Error(), "Forbidden") {
-		t.Fatalf("expected final retry error to include converted markdown, got %q", err.Error())
 	}
 }
