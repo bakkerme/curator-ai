@@ -158,7 +158,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				Content:     content,
 				Author:      item.Author,
 				CreatedAt:   item.PublishedAt,
-				SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+				SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 			}
 			if len(images) > 0 {
 				block.ImageBlocks = append(block.ImageBlocks, images...)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
+	"github.com/bakkerme/curator-ai/internal/sources"
 )
 
 // TestFileProcessor loads a markdown file from disk and emits it as a post with optional chunking.
@@ -57,7 +58,7 @@ func (p *TestFileProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error
 		Content:     content,
 		CreatedAt:   time.Now().UTC(),
 		ProcessedAt: time.Now().UTC(),
-		SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+		SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 		Chunks:      chunks,
 	}
 	return []*core.PostBlock{block}, nil

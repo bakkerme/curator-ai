@@ -9,6 +9,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
+	"github.com/bakkerme/curator-ai/internal/sources"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 )
 
@@ -95,7 +96,7 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 			Content:     item.Content,
 			Author:      item.Author,
 			CreatedAt:   item.CreatedAt,
-			SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+			SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 		}
 
 		if p.config.IncludeComments && len(item.Comments) > 0 {
