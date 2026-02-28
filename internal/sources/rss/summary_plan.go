@@ -1,4 +1,4 @@
-package source
+package rss
 
 import (
 	"github.com/bakkerme/curator-ai/internal/config"

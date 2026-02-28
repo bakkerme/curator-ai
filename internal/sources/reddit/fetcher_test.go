@@ -1,9 +1,13 @@
 package reddit
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,11 +117,77 @@ func TestNewSurfHTTPClient_WithProxyURL(t *testing.T) {
 func TestNewHTTPClient_WrapsObservabilityTransport(t *testing.T) {
 	t.Parallel()
 
-	client := newHTTPClient(nil, 5*time.Second, nil, nil)
+	client := newSurfHTTPClient(nil, 5*time.Second, nil, nil)
 	if client.Timeout != 5*time.Second {
 		t.Fatalf("unexpected timeout: %s", client.Timeout)
 	}
 	if _, ok := client.Transport.(*observabilityRoundTripper); !ok {
 		t.Fatalf("expected observabilityRoundTripper transport, got %T", client.Transport)
+	}
+}
+
+func TestRewriteHTMLAPIError_UsesMessageWhenBodyConsumed(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequest(http.MethodGet, "https://www.reddit.com/comments/1r8snay.json", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	apiErr := &goreddit.ErrorResponse{
+		Response: &http.Response{
+			StatusCode: http.StatusForbidden,
+			Request:    req,
+			Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+			Body:       io.NopCloser(strings.NewReader("")),
+		},
+		Message: "<html><body><h1>Blocked</h1><p>Access denied</p></body></html>",
+	}
+
+	rewrittenErr, rewritten := rewriteHTMLAPIError(apiErr)
+	if !rewritten {
+		t.Fatalf("expected HTML error to be rewritten")
+	}
+	if rewrittenErr == nil {
+		t.Fatalf("expected rewritten error")
+	}
+	if strings.Contains(rewrittenErr.Error(), "<html>") {
+		t.Fatalf("expected rewritten error to omit raw HTML, got %q", rewrittenErr.Error())
+	}
+	if !strings.Contains(rewrittenErr.Error(), "Blocked") {
+		t.Fatalf("expected rewritten error to include converted content, got %q", rewrittenErr.Error())
+	}
+	if !strings.Contains(rewrittenErr.Error(), "403 server returned HTML error") {
+		t.Fatalf("expected rewritten error to include status context, got %q", rewrittenErr.Error())
+	}
+}
+
+func TestDoWithRetry_RewritesNonRetryableHTMLErrors(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequest(http.MethodGet, "https://www.reddit.com/comments/1r8snay.json", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	fetcher := &RedditFetcher{logger: slog.Default()}
+	err = fetcher.doWithRetry(context.Background(), "fetch_comments", func() error {
+		return &goreddit.ErrorResponse{
+			Response: &http.Response{
+				StatusCode: http.StatusForbidden,
+				Request:    req,
+				Body:       io.NopCloser(strings.NewReader("")),
+			},
+			Message: "<html><body><h1>Forbidden</h1><p>Denied</p></body></html>",
+		}
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if strings.Contains(err.Error(), "<html>") {
+		t.Fatalf("expected final retry error to omit raw HTML, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "Forbidden") {
+		t.Fatalf("expected final retry error to include converted markdown, got %q", err.Error())
 	}
 }

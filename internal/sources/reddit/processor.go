@@ -1,4 +1,4 @@
-package source
+package reddit
 
 import (
 	"context"
@@ -10,19 +10,18 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
-	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 )
 
 type RedditProcessor struct {
 	name    string
 	config  config.RedditSource
-	fetcher reddit.Fetcher
+	fetcher Fetcher
 	reader  jina.Reader
 	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
-func NewRedditProcessor(cfg *config.RedditSource, fetcher reddit.Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*RedditProcessor, error) {
+func NewRedditProcessor(cfg *config.RedditSource, fetcher Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*RedditProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("reddit config is required")
 	}
@@ -62,7 +61,7 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 		return nil, err
 	}
 	p.logger.Info("Fetching posts from Reddit", slog.Int("subreddits", len(p.config.Subreddits)))
-	items, err := p.fetcher.Fetch(ctx, reddit.Config{
+	items, err := p.fetcher.Fetch(ctx, Config{
 		Subreddits:      p.config.Subreddits,
 		Limit:           p.config.Limit,
 		Sort:            p.config.Sort,

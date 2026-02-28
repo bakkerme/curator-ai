@@ -15,7 +15,6 @@ import (
 	"github.com/bakkerme/curator-ai/internal/outputs/email/smtp"
 	"github.com/bakkerme/curator-ai/internal/processors/output"
 	"github.com/bakkerme/curator-ai/internal/processors/quality"
-	"github.com/bakkerme/curator-ai/internal/processors/source"
 	"github.com/bakkerme/curator-ai/internal/processors/summary"
 	"github.com/bakkerme/curator-ai/internal/processors/trigger"
 	"github.com/bakkerme/curator-ai/internal/runner/snapshot"
@@ -26,6 +25,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssimpl "github.com/bakkerme/curator-ai/internal/sources/rss/impl"
+	"github.com/bakkerme/curator-ai/internal/sources/testfile"
 )
 
 type Factory struct {
@@ -104,7 +104,7 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 }
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	processor, err := source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := reddit.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcesso
 }
 
 func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	processor, err := source.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := reddit.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.Sour
 }
 
 func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
-	processor, err := source.NewRSSProcessor(cfg, f.RSSFetcher, f.SeenStore)
+	processor, err := rss.NewRSSProcessor(cfg, f.RSSFetcher, f.SeenStore)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor,
 }
 
 func (f *Factory) NewTestFileSource(cfg *config.TestFileSource) (core.SourceProcessor, error) {
-	processor, err := source.NewTestFileProcessor(cfg)
+	processor, err := testfile.NewTestFileProcessor(cfg)
 	if err != nil {
 		return nil, err
 	}

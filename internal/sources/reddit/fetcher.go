@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bakkerme/curator-ai/internal/sources"
 	goreddit "github.com/vartanbeno/go-reddit/v2/reddit"
 )
 
@@ -72,12 +74,10 @@ func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID,
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if userAgent == "" {
-		userAgent = "curator-ai/0.1"
-	}
 
 	fetcher := &RedditFetcher{logger: logger}
-	httpClient := newHTTPClient(logger, timeout, &fetcher.requestCounter, proxyURL)
+	httpClient := newSurfHTTPClient(logger, timeout, &fetcher.requestCounter, proxyURL)
+
 	var (
 		client *goreddit.Client
 		err    error
@@ -98,12 +98,6 @@ func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID,
 	fetcher.client = client
 	fetcher.initErr = err
 	return fetcher
-}
-
-// This wrapper mainly exists since I'm thinking we might want to allow a standard http client in the future.
-// Use surf's HTTP client builder to get a client with impersonation and optional proxy support, then wrap it with our observabilityRoundTripper to track requests and log details.
-func newHTTPClient(logger *slog.Logger, timeout time.Duration, counter *atomic.Uint64, proxyURL *url.URL) *http.Client {
-	return newSurfHTTPClient(logger, timeout, counter, proxyURL)
 }
 
 func (f *RedditFetcher) Fetch(ctx context.Context, config Config) ([]Item, error) {
@@ -274,6 +268,20 @@ func (f *RedditFetcher) doWithRetry(ctx context.Context, operation string, fn fu
 		}
 
 		lastErr = err
+
+		// Before retrying, rewrite HTML error pages into readable Markdown so logs
+		// do not surface a raw HTML blob when Reddit blocks a request.
+		var apiErr *goreddit.ErrorResponse
+		if errors.As(err, &apiErr) {
+			if apiErr.Response.StatusCode == http.StatusForbidden {
+				lastErr = fmt.Errorf("reddit returned 403 forbidden")
+			} else {
+				if rewrittenErr, rewritten := rewriteHTMLAPIError(apiErr); rewritten {
+					lastErr = rewrittenErr
+				}
+			}
+		}
+
 		if attempt == redditRetryAttempts {
 			break
 		}
@@ -307,6 +315,54 @@ func (f *RedditFetcher) doWithRetry(ctx context.Context, operation string, fn fu
 	}
 
 	return fmt.Errorf("retry failed: %w", lastErr)
+}
+
+// rewriteHTMLAPIError converts HTML error pages that Reddit sometimes returns
+// for blocked requests into Markdown and rebuilds the error message without the
+// original raw HTML payload.
+func rewriteHTMLAPIError(apiErr *goreddit.ErrorResponse) (error, bool) {
+	if apiErr == nil {
+		return nil, false
+	}
+
+	htmlBody := strings.TrimSpace(apiErr.Message)
+	if htmlBody == "" && apiErr.Response != nil && apiErr.Response.Body != nil {
+		body, readErr := io.ReadAll(apiErr.Response.Body)
+		if readErr == nil {
+			htmlBody = strings.TrimSpace(string(body))
+		}
+	}
+	if htmlBody == "" || !strings.Contains(htmlBody, "<") {
+		return nil, false
+	}
+
+	md, mdErr := sources.ConvertHTMLToMarkdown(htmlBody)
+	if mdErr != nil || md == "" {
+		return nil, false
+	}
+
+	if apiErr.Response == nil {
+		return fmt.Errorf("server returned HTML error: %s", md), true
+	}
+
+	method := http.MethodGet
+	urlString := ""
+	if apiErr.Response.Request != nil {
+		if apiErr.Response.Request.Method != "" {
+			method = apiErr.Response.Request.Method
+		}
+		if apiErr.Response.Request.URL != nil {
+			urlString = apiErr.Response.Request.URL.String()
+		}
+	}
+
+	return fmt.Errorf(
+		"%s %s: %d server returned HTML error: %s",
+		method,
+		urlString,
+		apiErr.Response.StatusCode,
+		md,
+	), true
 }
 
 // computeRetryDelay classifies retryable errors and chooses an appropriate delay.
