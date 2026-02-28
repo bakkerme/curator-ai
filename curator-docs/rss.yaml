@@ -52,8 +52,8 @@ workflow:
           # - https://www.arkoselabs.com/blog/
           # - https://oxylabs.io/blog
         snapshot:
-            # snapshot: true
-            restore: true
+            snapshot: true
+            # restore: true
             path: "snapshots/rss.json"
 
 
@@ -88,10 +88,10 @@ workflow:
           include_comment_images: false
         block_error_policy: drop
         # block_error_policy: fail
-        # snapshot:
-        #   snapshot: true
-        #   # restore: true
-        #   path: "snapshots/quality-llm.json"
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/rss-quality-llm.json"
 
   post_summary:
     - llm:
@@ -108,17 +108,15 @@ workflow:
             - "Mitigations: rate limits, challenges, device attestation/passkeys/WebAuthn, WAF/edge rules, UX tradeoffs"
             - "Operational details: volumes, impact, timelines, affected surfaces (login/checkout/signup/API)"
             - "Concrete indicators: domains/IPs/ASNs, UA strings, request patterns, SDK identifiers"
-        # snapshot:
-        #   snapshot: true
-        #   restore: true
-        #   path: "snapshots/post-summary.json"
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/rss-post-summary.json"
 
     - markdown:
         name: markdown_to_html_post_sum
         type: markdown
         context: post
-
-
 
   run_summary:
     - llm:
@@ -134,10 +132,10 @@ workflow:
             - "Threat landscape: phishing kits, malware campaigns, initial access and credential theft"
             - "Actionable defense guidance: detections, mitigations, instrumentation, and measurement"
             - "Ecosystem changes that affect bot defense: browser/platform changes, CDN/edge behavior, fingerprinting developments"
-        # snapshot:
-        #   # snapshot: true
-        #   restore: true
-        #   path: "snapshots/run-summary.json"
+        snapshot:
+          snapshot: true
+          # restore: true
+          path: "snapshots/rss-run-summary.json"
     - markdown:
         name: markdown_to_html_sum
         type: markdown

@@ -67,6 +67,8 @@ type RedditEnvConfig struct {
 	ClientSecret string
 	Username     string
 	Password     string
+	ProxyEnabled bool
+	ProxyURL     string
 }
 
 type RSSEnvConfig struct {
@@ -138,6 +140,8 @@ func LoadEnv() EnvConfig {
 			ClientSecret: envString("REDDIT_CLIENT_SECRET", ""),
 			Username:     envString("REDDIT_USERNAME", ""),
 			Password:     envString("REDDIT_PASSWORD", ""),
+			ProxyEnabled: envBool("REDDIT_PROXY_ENABLED", false),
+			ProxyURL:     strings.TrimSpace(envString("REDDIT_PROXY_URL", "")),
 		},
 		RSS: RSSEnvConfig{
 			HTTPTimeout: envDuration("RSS_HTTP_TIMEOUT", 10*time.Second),

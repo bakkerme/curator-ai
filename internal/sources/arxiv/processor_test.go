@@ -1,4 +1,4 @@
-package source
+package arxiv
 
 import (
 	"context"
@@ -7,26 +7,25 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
-	"github.com/bakkerme/curator-ai/internal/sources/arxiv"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 )
 
-type arxivFetcherMock struct {
-	papers []arxiv.Paper
+type fetcherMock struct {
+	papers []Paper
 }
 
-func (m *arxivFetcherMock) Search(ctx context.Context, options arxiv.SearchOptions) ([]arxiv.Paper, error) {
+func (m *fetcherMock) Search(ctx context.Context, options SearchOptions) ([]Paper, error) {
 	_ = ctx
 	_ = options
 	return m.papers, nil
 }
 
-type arxivReaderMock struct {
+type readerMock struct {
 	pages map[string]string
 	calls []string
 }
 
-func (m *arxivReaderMock) Read(ctx context.Context, url string, options jina.ReadOptions) (string, error) {
+func (m *readerMock) Read(ctx context.Context, url string, options jina.ReadOptions) (string, error) {
 	_ = ctx
 	_ = options
 	m.calls = append(m.calls, url)
@@ -40,8 +39,8 @@ func TestArxivProcessor_AbstractOnlyUsesAbstractContent(t *testing.T) {
 		AbstractOnly: &abstractOnly,
 		SummaryPlan:  &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
-	fetcher := &arxivFetcherMock{
-		papers: []arxiv.Paper{{
+	fetcher := &fetcherMock{
+		papers: []Paper{{
 			ID:          "1234.5678",
 			Title:       "Paper",
 			Abstract:    "This is only the abstract.",
@@ -52,7 +51,7 @@ func TestArxivProcessor_AbstractOnlyUsesAbstractContent(t *testing.T) {
 			PDFURL:      "https://arxiv.org/pdf/1234.5678",
 		}},
 	}
-	reader := &arxivReaderMock{
+	reader := &readerMock{
 		pages: map[string]string{
 			"https://arxiv.org/html/1234.5678": "full paper content",
 		},
@@ -83,8 +82,8 @@ func TestArxivProcessor_DefaultModeFetchesFullText(t *testing.T) {
 		Query:       "llm security",
 		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
-	fetcher := &arxivFetcherMock{
-		papers: []arxiv.Paper{{
+	fetcher := &fetcherMock{
+		papers: []Paper{{
 			ID:          "1234.5678",
 			Title:       "Paper",
 			Abstract:    "short abstract",
@@ -94,7 +93,7 @@ func TestArxivProcessor_DefaultModeFetchesFullText(t *testing.T) {
 			HTMLURL:     "https://arxiv.org/html/1234.5678",
 		}},
 	}
-	reader := &arxivReaderMock{
+	reader := &readerMock{
 		pages: map[string]string{
 			"https://arxiv.org/html/1234.5678": "full paper content",
 		},
@@ -119,4 +118,3 @@ func TestArxivProcessor_DefaultModeFetchesFullText(t *testing.T) {
 		t.Fatalf("expected 1 Jina fetch in default mode, got %d calls", len(reader.calls))
 	}
 }
-
