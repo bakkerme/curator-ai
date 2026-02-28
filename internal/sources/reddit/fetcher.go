@@ -267,8 +267,6 @@ func (f *RedditFetcher) doWithRetry(ctx context.Context, operation string, fn fu
 
 		lastErr = err
 
-		// Before retrying, rewrite HTML error pages into readable Markdown so logs
-		// do not surface a raw HTML blob when Reddit blocks a request.
 		var apiErr *goreddit.ErrorResponse
 		if errors.As(err, &apiErr) {
 			if apiErr.Response.StatusCode == http.StatusForbidden {
