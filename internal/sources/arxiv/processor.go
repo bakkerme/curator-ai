@@ -10,6 +10,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
+	"github.com/bakkerme/curator-ai/internal/sources"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 )
 
@@ -132,7 +133,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			Content:     content,
 			Author:      strings.Join(paper.Authors, ", "),
 			CreatedAt:   paper.PublishedAt,
-			SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+			SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 			Chunks:      chunks,
 			ProcessedAt: time.Now().UTC(),
 		}

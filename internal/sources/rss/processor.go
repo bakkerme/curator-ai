@@ -1,4 +1,4 @@
-package source
+package rss
 
 import (
 	"context"
@@ -9,17 +9,17 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
-	"github.com/bakkerme/curator-ai/internal/sources/rss"
+	"github.com/bakkerme/curator-ai/internal/sources"
 )
 
 type RSSProcessor struct {
 	name    string
 	config  config.RSSSource
-	fetcher rss.Fetcher
+	fetcher Fetcher
 	store   dedupe.SeenStore
 }
 
-func NewRSSProcessor(cfg *config.RSSSource, fetcher rss.Fetcher, store dedupe.SeenStore) (*RSSProcessor, error) {
+func NewRSSProcessor(cfg *config.RSSSource, fetcher Fetcher, store dedupe.SeenStore) (*RSSProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("rss config is required")
 	}
@@ -66,7 +66,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 	blocks := []*core.PostBlock{}
 	seen := map[string]bool{}
 
-	options := rss.FetchOptions{
+	options := FetchOptions{
 		Limit:     p.config.Limit,
 		UserAgent: p.config.UserAgent,
 	}
@@ -110,7 +110,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			// Extract embedded data: images into ImageBlocks and replace the <img> src
 			// with a small placeholder URL so the base64 doesn't burn tokens downstream.
 			placeholderBase := "curator-image://post/" + url.PathEscape(id)
-			scrubbed, images, err := rss.ExtractDataURIImagesFromHTML(content, placeholderBase)
+			scrubbed, images, err := ExtractDataURIImagesFromHTML(content, placeholderBase)
 			if err == nil {
 				content = scrubbed
 			}
@@ -131,7 +131,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 
 			// Convert to markdown if needed
 			if convertSourceToMarkdown {
-				mdContent, err := rss.ConvertHTMLToMarkdown(content)
+				mdContent, err := sources.ConvertHTMLToMarkdown(content)
 				if err == nil && mdContent != "" {
 					content = mdContent
 				}
@@ -158,7 +158,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				Content:     content,
 				Author:      item.Author,
 				CreatedAt:   item.PublishedAt,
-				SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+				SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 			}
 			if len(images) > 0 {
 				block.ImageBlocks = append(block.ImageBlocks, images...)

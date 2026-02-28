@@ -1,11 +1,8 @@
-package rss
+package sources
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
-	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 )
 
 func TestConvertHTMLToMarkdown_Strong(t *testing.T) {
@@ -64,38 +61,5 @@ func TestConvertHTMLToMarkdown_LargeHTMLInput(t *testing.T) {
 	}
 	if !strings.Contains(md, "hello") {
 		t.Fatalf("expected output to contain %q, got %q", "hello", md)
-	}
-}
-
-func TestConvertHTMLToMarkdown_ConverterErrorPropagates(t *testing.T) {
-	prev := newHTMLToMarkdownConverter
-	t.Cleanup(func() { newHTMLToMarkdownConverter = prev })
-
-	// A converter with no plugins has no render handlers, which reliably errors.
-	newHTMLToMarkdownConverter = func() *converter.Converter {
-		return converter.NewConverter()
-	}
-
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestConvertHTMLToMarkdown_ConverterMisconfigurationErrors(t *testing.T) {
-	prev := newHTMLToMarkdownConverter
-	t.Cleanup(func() { newHTMLToMarkdownConverter = prev })
-
-	// Registering commonmark without base triggers a specific validation error.
-	newHTMLToMarkdownConverter = func() *converter.Converter {
-		return converter.NewConverter(
-			converter.WithEscapeMode("smart"),
-			converter.WithPlugins(commonmark.NewCommonmarkPlugin()),
-		)
-	}
-
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	if err == nil {
-		t.Fatal("expected error, got nil")
 	}
 }

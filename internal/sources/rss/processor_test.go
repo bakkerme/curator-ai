@@ -1,4 +1,4 @@
-package source
+package rss
 
 import (
 	"context"
@@ -8,17 +8,55 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
-	"github.com/bakkerme/curator-ai/internal/sources/rss"
 )
 
 type rssFetcherMock struct {
-	items []rss.Item
+	items []Item
 }
 
-func (m *rssFetcherMock) Fetch(ctx context.Context, feedURL string, options rss.FetchOptions) ([]rss.Item, error) {
+func (m *rssFetcherMock) Fetch(ctx context.Context, feedURL string, options FetchOptions) ([]Item, error) {
 	_ = ctx
 	_ = feedURL
 	return m.items, nil
+}
+
+type fakeSeenStore struct {
+	seen map[string]bool
+	has  []string
+	mark []string
+	err  error
+}
+
+func (s *fakeSeenStore) HasSeen(ctx context.Context, id string) (bool, error) {
+	_ = ctx
+	s.has = append(s.has, id)
+	if s.err != nil {
+		return false, s.err
+	}
+	return s.seen[id], nil
+}
+
+func (s *fakeSeenStore) MarkSeen(ctx context.Context, id string) error {
+	_ = ctx
+	s.mark = append(s.mark, id)
+	if s.err != nil {
+		return s.err
+	}
+	s.seen[id] = true
+	return nil
+}
+
+func (s *fakeSeenStore) MarkSeenBatch(ctx context.Context, ids []string) error {
+	for _, id := range ids {
+		if err := s.MarkSeen(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *fakeSeenStore) Close() error {
+	return nil
 }
 
 func TestRSSProcessorPrefersContentByDefault(t *testing.T) {
@@ -27,7 +65,7 @@ func TestRSSProcessorPrefersContentByDefault(t *testing.T) {
 		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &rssFetcherMock{
-		items: []rss.Item{
+		items: []Item{
 			{
 				ID:          "1",
 				Title:       "Test",
@@ -61,7 +99,7 @@ func TestRSSProcessorConvertsHTMLToMarkdownWhenEnabled(t *testing.T) {
 		SummaryPlan:             &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
 	fetcher := &rssFetcherMock{
-		items: []rss.Item{
+		items: []Item{
 			{
 				ID:          "1",
 				Title:       "Test",
@@ -97,7 +135,7 @@ func TestRSSProcessorExtractsDataURIImagesIntoImageBlocks(t *testing.T) {
 		ConvertSourceToMarkdown: true,
 		SummaryPlan:             &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
 	}
-	fetcher := &rssFetcherMock{items: []rss.Item{{
+	fetcher := &rssFetcherMock{items: []Item{{
 		ID:          "1",
 		Title:       "Test",
 		Link:        "https://example.com/post",
@@ -128,5 +166,35 @@ func TestRSSProcessorExtractsDataURIImagesIntoImageBlocks(t *testing.T) {
 	}
 	if !strings.Contains(blocks[0].Content, "curator-image://post/1/0") {
 		t.Fatalf("expected placeholder URL in content, got %q", blocks[0].Content)
+	}
+}
+
+func TestRSSProcessorFiltersSeenPosts(t *testing.T) {
+	cfg := &config.RSSSource{
+		Feeds:       []string{"https://example.com/feed.xml"},
+		SummaryPlan: &config.SummaryPlanConfig{Mode: core.SummaryModeFull},
+	}
+	fetcher := &rssFetcherMock{
+		items: []Item{
+			{ID: "a", Title: "seen", Link: "https://example.com/a"},
+			{ID: "b", Title: "new", Link: "https://example.com/b"},
+		},
+	}
+	store := &fakeSeenStore{seen: map[string]bool{"a": true}}
+
+	processor, err := NewRSSProcessor(cfg, fetcher, store)
+	if err != nil {
+		t.Fatalf("failed to create processor: %v", err)
+	}
+
+	blocks, err := processor.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("fetch failed: %v", err)
+	}
+	if len(blocks) != 1 || blocks[0].ID != "b" {
+		t.Fatalf("expected only new post to be emitted")
+	}
+	if len(store.mark) != 1 || store.mark[0] != "b" {
+		t.Fatalf("expected to mark only new post as seen")
 	}
 }

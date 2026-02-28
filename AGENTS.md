@@ -38,7 +38,7 @@ This file is intentionally a short index. The authoritative behavior and design 
 ## Processors (Where To Implement Things)
 
 - Triggers (cron): [internal/processors/trigger](internal/processors/trigger)
-- Sources (Reddit, RSS): [internal/processors/source](internal/processors/source)
+- Sources (Reddit, RSS, TestFile): [internal/sources](internal/sources)
 - Quality gates (rule/expr + LLM): [internal/processors/quality](internal/processors/quality)
 - Summaries (post + run, including markdown → HTML): [internal/processors/summary](internal/processors/summary)
 - Outputs (email): [internal/processors/output](internal/processors/output)

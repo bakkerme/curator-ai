@@ -2,8 +2,10 @@ package reddit
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -101,7 +103,7 @@ func TestNewSurfHTTPClient_WithProxyURL(t *testing.T) {
 		t.Fatalf("parse proxy URL: %v", err)
 	}
 
-	client := newSurfHTTPClient(nil, 5*time.Second, nil, proxyURL)
+	client := newSurfHTTPClient(slog.Default(), 5*time.Second, new(atomic.Uint64), proxyURL)
 	if client == nil {
 		t.Fatalf("expected client, got nil")
 	}
@@ -113,7 +115,7 @@ func TestNewSurfHTTPClient_WithProxyURL(t *testing.T) {
 func TestNewHTTPClient_WrapsObservabilityTransport(t *testing.T) {
 	t.Parallel()
 
-	client := newHTTPClient(nil, 5*time.Second, nil, nil)
+	client := newSurfHTTPClient(slog.Default(), 5*time.Second, new(atomic.Uint64), nil)
 	if client.Timeout != 5*time.Second {
 		t.Fatalf("unexpected timeout: %s", client.Timeout)
 	}

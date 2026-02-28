@@ -72,12 +72,10 @@ func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID,
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if userAgent == "" {
-		userAgent = "curator-ai/0.1"
-	}
 
 	fetcher := &RedditFetcher{logger: logger}
-	httpClient := newHTTPClient(logger, timeout, &fetcher.requestCounter, proxyURL)
+	httpClient := newSurfHTTPClient(logger, timeout, &fetcher.requestCounter, proxyURL)
+
 	var (
 		client *goreddit.Client
 		err    error
@@ -98,12 +96,6 @@ func NewFetcher(logger *slog.Logger, timeout time.Duration, userAgent, clientID,
 	fetcher.client = client
 	fetcher.initErr = err
 	return fetcher
-}
-
-// This wrapper mainly exists since I'm thinking we might want to allow a standard http client in the future.
-// Use surf's HTTP client builder to get a client with impersonation and optional proxy support, then wrap it with our observabilityRoundTripper to track requests and log details.
-func newHTTPClient(logger *slog.Logger, timeout time.Duration, counter *atomic.Uint64, proxyURL *url.URL) *http.Client {
-	return newSurfHTTPClient(logger, timeout, counter, proxyURL)
 }
 
 func (f *RedditFetcher) Fetch(ctx context.Context, config Config) ([]Item, error) {
@@ -274,6 +266,14 @@ func (f *RedditFetcher) doWithRetry(ctx context.Context, operation string, fn fu
 		}
 
 		lastErr = err
+
+		var apiErr *goreddit.ErrorResponse
+		if errors.As(err, &apiErr) {
+			if apiErr.Response.StatusCode == http.StatusForbidden {
+				lastErr = fmt.Errorf("reddit returned 403 forbidden")
+			}
+		}
+
 		if attempt == redditRetryAttempts {
 			break
 		}
