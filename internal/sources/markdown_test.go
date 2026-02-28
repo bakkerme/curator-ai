@@ -63,19 +63,3 @@ func TestConvertHTMLToMarkdown_LargeHTMLInput(t *testing.T) {
 		t.Fatalf("expected output to contain %q, got %q", "hello", md)
 	}
 }
-
-func TestConvertHTMLToMarkdown_ConverterErrorPropagates(t *testing.T) {
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	// We can't easily mock the internal converter anymore without exporting it,
-	// but the functional tests above should suffice.
-	if err != nil {
-		t.Fatalf("expected no error for simple HTML, got %v", err)
-	}
-}
-
-func TestConvertHTMLToMarkdown_ConverterMisconfigurationErrors(t *testing.T) {
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	if err != nil {
-		t.Fatalf("expected no error for simple HTML, got %v", err)
-	}
-}
