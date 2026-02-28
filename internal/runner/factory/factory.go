@@ -3,6 +3,7 @@ package factory
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/bakkerme/curator-ai/internal/config"
@@ -28,39 +29,74 @@ import (
 )
 
 type Factory struct {
-	Logger             *slog.Logger
-	LLMClient          llm.Client
-	DefaultModel       string
-	DefaultTemperature *float64
-	SMTPDefaults       config.SMTPEnvConfig
-	JinaReader         jina.Reader
-	ArxivFetcher       arxiv.Fetcher
-	RedditFetcher      reddit.Fetcher
-	RSSFetcher         rss.Fetcher
-	EmailSender        email.Sender
-	SeenStore          dedupe.SeenStore
+	Logger                  *slog.Logger
+	LLMClient               llm.Client
+	DefaultModel            string
+	DefaultTemperature      *float64
+	SMTPDefaults            config.SMTPEnvConfig
+	JinaReader              jina.Reader
+	ArxivFetcher            arxiv.Fetcher
+	RedditFetcher           reddit.Fetcher
+	RedditPublicJSONFetcher reddit.Fetcher
+	RSSFetcher              rss.Fetcher
+	EmailSender             email.Sender
+	SeenStore               dedupe.SeenStore
 }
 
-func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) *Factory {
+func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	redditProxyURL, err := parseRedditProxyURL(env.Reddit)
+	if err != nil {
+		return nil, err
+	}
+	if redditProxyURL != nil {
+		logger.Info(
+			"Reddit proxy enabled",
+			slog.String("scheme", redditProxyURL.Scheme),
+			slog.String("host", redditProxyURL.Host),
+		)
+	}
 	llmClient := llmopenai.NewClient(env.OpenAI)
 	return &Factory{
-		Logger:             logger,
-		LLMClient:          llmClient,
-		DefaultModel:       env.OpenAI.Model,
-		DefaultTemperature: env.OpenAI.Temperature,
-		SMTPDefaults:       env.SMTP,
-		JinaReader:         jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
-		ArxivFetcher:       arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
-		RedditFetcher:      reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password),
-		RSSFetcher:         rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
+		Logger:                  logger,
+		LLMClient:               llmClient,
+		DefaultModel:            env.OpenAI.Model,
+		DefaultTemperature:      env.OpenAI.Temperature,
+		SMTPDefaults:            env.SMTP,
+		JinaReader:              jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
+		ArxivFetcher:            arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
+		RedditFetcher:           reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password, redditProxyURL),
+		RSSFetcher:              rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
 		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
 		// Document to take effect.
 		EmailSender: nil,
+	}, nil
+}
+
+// parseRedditProxyURL validates env-driven Reddit proxy settings and returns
+// a parsed URL when proxying is enabled.
+func parseRedditProxyURL(cfg config.RedditEnvConfig) (*url.URL, error) {
+	if !cfg.ProxyEnabled {
+		return nil, nil
 	}
+	raw := strings.TrimSpace(cfg.ProxyURL)
+	if raw == "" {
+		return nil, fmt.Errorf("reddit proxy enabled but REDDIT_PROXY_URL is empty")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse REDDIT_PROXY_URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("REDDIT_PROXY_URL must use http or https scheme")
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return nil, fmt.Errorf("REDDIT_PROXY_URL must include a host")
+	}
+	return parsed, nil
 }
 
 func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor, error) {
@@ -69,6 +105,14 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
 	processor, err := source.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
+}
+
+func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
+	processor, err := source.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +128,7 @@ func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, err
 }
 
 func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
-	processor, err := source.NewArxivProcessor(cfg, f.ArxivFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := arxiv.NewArxivProcessor(cfg, f.ArxivFetcher, f.JinaReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}

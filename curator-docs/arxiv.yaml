@@ -91,7 +91,7 @@ workflow:
     - email:
         template: emailTemplate
         to: brandon@bdmd.com.au
-        subject: "Paper Test"
+        subject: "AI Security Papers"
 
 templates:
   - id: isRelevantTemplate

@@ -45,7 +45,10 @@ func main() {
 		log.Panicf("failed to load curator documents: %v", err)
 	}
 
-	factory := factory.NewFromEnvConfig(logger, env)
+	factory, err := factory.NewFromEnvConfig(logger, env)
+	if err != nil {
+		log.Panicf("failed to build runtime factory from environment: %v", err)
+	}
 
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}

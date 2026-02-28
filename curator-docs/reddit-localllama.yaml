@@ -24,8 +24,8 @@ workflow:
         time_filter: "day" # optional
         min_score: 10      # optional
         snapshot:
-          # snapshot: true
-          restore: true
+          snapshot: true
+          # restore: true
           path: "snapshots/reddit.json"
 
   quality:
