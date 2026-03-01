@@ -1,22 +1,18 @@
 package summary
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
+	rendermarkdown "github.com/bakkerme/curator-ai/internal/render/markdown"
 )
 
 type PostMarkdownProcessor struct {
-	name      string
-	config    config.MarkdownSummary
-	converter goldmark.Markdown
+	name   string
+	config config.MarkdownSummary
 }
 
 func NewPostMarkdownProcessor(cfg *config.MarkdownSummary) (*PostMarkdownProcessor, error) {
@@ -27,9 +23,8 @@ func NewPostMarkdownProcessor(cfg *config.MarkdownSummary) (*PostMarkdownProcess
 		return nil, fmt.Errorf("markdown summary name is required")
 	}
 	return &PostMarkdownProcessor{
-		name:      cfg.Name,
-		config:    *cfg,
-		converter: newMarkdownConverter(),
+		name:   cfg.Name,
+		config: *cfg,
 	}, nil
 }
 
@@ -56,7 +51,7 @@ func (p *PostMarkdownProcessor) Summarize(ctx context.Context, blocks []*core.Po
 		if block.Summary == nil {
 			return nil, fmt.Errorf("markdown summary requires existing post summary")
 		}
-		html, err := renderMarkdown(p.converter, block.Summary.Summary)
+		html, err := rendermarkdown.Render(block.Summary.Summary)
 		if err != nil {
 			return nil, err
 		}
@@ -68,9 +63,8 @@ func (p *PostMarkdownProcessor) Summarize(ctx context.Context, blocks []*core.Po
 }
 
 type RunMarkdownProcessor struct {
-	name      string
-	config    config.MarkdownSummary
-	converter goldmark.Markdown
+	name   string
+	config config.MarkdownSummary
 }
 
 func NewRunMarkdownProcessor(cfg *config.MarkdownSummary) (*RunMarkdownProcessor, error) {
@@ -81,9 +75,8 @@ func NewRunMarkdownProcessor(cfg *config.MarkdownSummary) (*RunMarkdownProcessor
 		return nil, fmt.Errorf("run markdown summary name is required")
 	}
 	return &RunMarkdownProcessor{
-		name:      cfg.Name,
-		config:    *cfg,
-		converter: newMarkdownConverter(),
+		name:   cfg.Name,
+		config: *cfg,
 	}, nil
 }
 
@@ -109,7 +102,7 @@ func (p *RunMarkdownProcessor) SummarizeRun(ctx context.Context, blocks []*core.
 	if current == nil {
 		return nil, fmt.Errorf("markdown run summary requires an existing run summary")
 	}
-	html, err := renderMarkdown(p.converter, current.Summary)
+	html, err := rendermarkdown.Render(current.Summary)
 	if err != nil {
 		return nil, err
 	}
@@ -118,19 +111,4 @@ func (p *RunMarkdownProcessor) SummarizeRun(ctx context.Context, blocks []*core.
 	updated.ProcessorName = p.name
 	updated.ProcessedAt = time.Now().UTC()
 	return &updated, nil
-}
-
-func renderMarkdown(converter goldmark.Markdown, input string) (string, error) {
-	var buf bytes.Buffer
-	if err := converter.Convert([]byte(input), &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-func newMarkdownConverter() goldmark.Markdown {
-	return goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
-	)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources"
+	"github.com/bakkerme/curator-ai/internal/sources/htmlconv"
 )
 
 type RSSProcessor struct {
@@ -131,7 +132,7 @@ func (p *RSSProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 
 			// Convert to markdown if needed
 			if convertSourceToMarkdown {
-				mdContent, err := sources.ConvertHTMLToMarkdown(content)
+				mdContent, err := htmlconv.ConvertHTMLToMarkdown(content)
 				if err == nil && mdContent != "" {
 					content = mdContent
 				}

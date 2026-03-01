@@ -9,12 +9,12 @@ import (
 	"unicode/utf8"
 )
 
-// parseDurationExtended parses Go-style duration strings and adds support for:
+// ParseDurationExtended parses Go-style duration strings and adds support for:
 // - d (days) where 1d = 24h
 // - w (weeks) where 1w = 7d
 //
 // Examples: "168h", "7d", "1w2d", "1.5d", "-2w".
-func parseDurationExtended(raw string) (time.Duration, error) {
+func ParseDurationExtended(raw string) (time.Duration, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, fmt.Errorf("duration is required")

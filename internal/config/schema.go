@@ -51,10 +51,55 @@ type CronTrigger struct {
 
 // SourceConfig wraps different source types
 type SourceConfig struct {
-	Reddit           *RedditSource   `yaml:"reddit,omitempty"`
-	RSS              *RSSSource      `yaml:"rss,omitempty"`
-	Arxiv            *ArxivSource    `yaml:"arxiv,omitempty"`
-	TestFile         *TestFileSource `yaml:"testfile,omitempty"`
+	Reddit   *RedditSource   `yaml:"reddit,omitempty"`
+	RSS      *RSSSource      `yaml:"rss,omitempty"`
+	Arxiv    *ArxivSource    `yaml:"arxiv,omitempty"`
+	Scrape   *ScrapeSource   `yaml:"scrape,omitempty"`
+	TestFile *TestFileSource `yaml:"testfile,omitempty"`
+}
+
+// ScrapeSource defines generic web scraping source configuration.
+type ScrapeSource struct {
+	URL         string                 `yaml:"url"`
+	PostLimit   int                    `yaml:"post_limit,omitempty"`
+	Lookback    string                 `yaml:"lookback,omitempty"`
+	Discovery   ScrapeDiscoveryConfig  `yaml:"discovery"`
+	Extraction  ScrapeExtractionConfig `yaml:"extraction"`
+	Markdown    ScrapeMarkdownConfig   `yaml:"markdown,omitempty"`
+	Request     ScrapeRequestConfig    `yaml:"request,omitempty"`
+	SummaryPlan *SummaryPlanConfig     `yaml:"summary_plan,omitempty"`
+	Snapshot    *core.SnapshotConfig   `yaml:"snapshot,omitempty"`
+}
+
+// ScrapeDiscoveryConfig controls discovery of candidate post URLs from index pages.
+type ScrapeDiscoveryConfig struct {
+	ItemSelector     string `yaml:"item_selector"`
+	LinkAttr         string `yaml:"link_attr,omitempty"`
+	NextPageSelector string `yaml:"next_page_selector,omitempty"`
+	MaxPages         int    `yaml:"max_pages,omitempty"`
+}
+
+// ScrapeExtractionConfig controls field extraction from each discovered post page.
+type ScrapeExtractionConfig struct {
+	TitleSelector   string   `yaml:"title_selector,omitempty"`
+	TitleAttr       string   `yaml:"title_attr,omitempty"`
+	AuthorSelector  string   `yaml:"author_selector,omitempty"`
+	AuthorAttr      string   `yaml:"author_attr,omitempty"`
+	DateSelector    string   `yaml:"date_selector,omitempty"`
+	DateAttr        string   `yaml:"date_attr,omitempty"`
+	ContentSelector string   `yaml:"content_selector"`
+	RemoveSelectors []string `yaml:"remove_selectors,omitempty"`
+}
+
+// ScrapeMarkdownConfig controls optional HTML-to-Markdown conversion for extracted content.
+type ScrapeMarkdownConfig struct {
+	Enabled bool `yaml:"enabled,omitempty"`
+}
+
+// ScrapeRequestConfig controls HTTP behavior for scrape source requests.
+type ScrapeRequestConfig struct {
+	UserAgent string `yaml:"user_agent,omitempty"`
+	Timeout   string `yaml:"timeout,omitempty"`
 }
 
 // RedditSource defines Reddit data source configuration
@@ -263,7 +308,7 @@ func (c *DedupeStoreConfig) UnmarshalYAML(value *yaml.Node) error {
 		c.TTL = 0
 		return nil
 	}
-	d, err := parseDurationExtended(s)
+	d, err := ParseDurationExtended(s)
 	if err != nil {
 		return fmt.Errorf("dedupe_store ttl: %w", err)
 	}
@@ -290,18 +335,19 @@ type EmailOutput struct {
 type ProcessorType string
 
 const (
-	ProcessorTriggerCron            ProcessorType = "trigger_cron"
-	ProcessorSourceReddit           ProcessorType = "source_reddit"
-	ProcessorSourceRSS              ProcessorType = "source_rss"
-	ProcessorSourceArxiv            ProcessorType = "source_arxiv"
-	ProcessorSourceTest             ProcessorType = "source_testfile"
-	ProcessorQualityRule            ProcessorType = "quality_rule"
-	ProcessorQualityLLM             ProcessorType = "quality_llm"
-	ProcessorSummaryLLM             ProcessorType = "summary_llm"
-	ProcessorRunSummaryLLM          ProcessorType = "run_summary_llm"
-	ProcessorSummaryMD              ProcessorType = "summary_markdown"
-	ProcessorRunSummaryMD           ProcessorType = "run_summary_markdown"
-	ProcessorOutputEmail            ProcessorType = "output_email"
+	ProcessorTriggerCron   ProcessorType = "trigger_cron"
+	ProcessorSourceReddit  ProcessorType = "source_reddit"
+	ProcessorSourceRSS     ProcessorType = "source_rss"
+	ProcessorSourceArxiv   ProcessorType = "source_arxiv"
+	ProcessorSourceScrape  ProcessorType = "source_scrape"
+	ProcessorSourceTest    ProcessorType = "source_testfile"
+	ProcessorQualityRule   ProcessorType = "quality_rule"
+	ProcessorQualityLLM    ProcessorType = "quality_llm"
+	ProcessorSummaryLLM    ProcessorType = "summary_llm"
+	ProcessorRunSummaryLLM ProcessorType = "run_summary_llm"
+	ProcessorSummaryMD     ProcessorType = "summary_markdown"
+	ProcessorRunSummaryMD  ProcessorType = "run_summary_markdown"
+	ProcessorOutputEmail   ProcessorType = "output_email"
 )
 
 // ParsedFlow represents the internal structure after parsing
@@ -327,6 +373,7 @@ type ProcessorFactory interface {
 	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
 	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
 	NewArxivSource(config *ArxivSource) (core.SourceProcessor, error)
+	NewScrapeSource(config *ScrapeSource) (core.SourceProcessor, error)
 	NewTestFileSource(config *TestFileSource) (core.SourceProcessor, error)
 	NewQualityRule(config *QualityRule) (core.QualityProcessor, error)
 	NewLLMQuality(config *LLMQuality) (core.QualityProcessor, error)
@@ -412,7 +459,7 @@ func (d *CuratorDocument) Validate() error {
 
 	// Validate sources
 	for i, source := range d.Workflow.Sources {
-		if source.Reddit == nil && source.RSS == nil && source.Arxiv == nil && source.TestFile == nil {
+		if source.Reddit == nil && source.RSS == nil && source.Arxiv == nil && source.Scrape == nil && source.TestFile == nil {
 			return fmt.Errorf("source %d: unsupported source type", i)
 		}
 		if source.Reddit != nil && len(source.Reddit.Subreddits) == 0 {
@@ -426,6 +473,28 @@ func (d *CuratorDocument) Validate() error {
 		}
 		if source.TestFile != nil && strings.TrimSpace(source.TestFile.Path) == "" {
 			return fmt.Errorf("source %d: testfile path is required", i)
+		}
+		if source.Scrape != nil {
+			if strings.TrimSpace(source.Scrape.URL) == "" {
+				return fmt.Errorf("source %d: scrape url is required", i)
+			}
+			if strings.TrimSpace(source.Scrape.Discovery.ItemSelector) == "" {
+				return fmt.Errorf("source %d: scrape discovery.item_selector is required", i)
+			}
+			if strings.TrimSpace(source.Scrape.Extraction.ContentSelector) == "" {
+				return fmt.Errorf("source %d: scrape extraction.content_selector is required", i)
+			}
+			if source.Scrape.Discovery.MaxPages < 0 {
+				return fmt.Errorf("source %d: scrape discovery.max_pages must be >= 0", i)
+			}
+			if source.Scrape.PostLimit < 0 {
+				return fmt.Errorf("source %d: scrape post_limit must be >= 0", i)
+			}
+			if strings.TrimSpace(source.Scrape.Lookback) != "" {
+				if _, err := ParseDurationExtended(source.Scrape.Lookback); err != nil {
+					return fmt.Errorf("source %d: scrape lookback: %w", i, err)
+				}
+			}
 		}
 		if source.Reddit != nil {
 			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d reddit", i), source.Reddit.SummaryPlan); err != nil {
@@ -456,6 +525,14 @@ func (d *CuratorDocument) Validate() error {
 				return err
 			}
 			if err := validateSnapshotConfig(fmt.Sprintf("source %d testfile", i), source.TestFile.Snapshot); err != nil {
+				return err
+			}
+		}
+		if source.Scrape != nil {
+			if err := validateSummaryPlanConfig(fmt.Sprintf("source %d scrape", i), source.Scrape.SummaryPlan); err != nil {
+				return err
+			}
+			if err := validateSnapshotConfig(fmt.Sprintf("source %d scrape", i), source.Scrape.Snapshot); err != nil {
 				return err
 			}
 		}
@@ -825,6 +902,13 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 				Config: source.Arxiv,
 			})
 		}
+		if source.Scrape != nil {
+			flow.Sources = append(flow.Sources, ParsedProcessor{
+				Type:   ProcessorSourceScrape,
+				Name:   "scrape",
+				Config: source.Scrape,
+			})
+		}
 		if source.TestFile != nil {
 			flow.Sources = append(flow.Sources, ParsedProcessor{
 				Type:   ProcessorSourceTest,
@@ -989,6 +1073,12 @@ func buildSources(flow *core.Flow, sources []SourceConfig, factory ProcessorFact
 			buildSourceProcessor(flow, "arxiv", core.SourceProcessorType, source.Arxiv,
 				func(f ProcessorFactory, c *ArxivSource) (core.SourceProcessor, error) {
 					return f.NewArxivSource(c)
+				}, factory)
+		}
+		if source.Scrape != nil {
+			buildSourceProcessor(flow, "scrape", core.SourceProcessorType, source.Scrape,
+				func(f ProcessorFactory, c *ScrapeSource) (core.SourceProcessor, error) {
+					return f.NewScrapeSource(c)
 				}, factory)
 		}
 		if source.TestFile != nil {

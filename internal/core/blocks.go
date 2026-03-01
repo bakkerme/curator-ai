@@ -8,22 +8,23 @@ import (
 // PostBlock contains the data and metadata of a Post, including everything
 // needed to represent and operate on the Post as it flows through the pipeline
 type PostBlock struct {
-	FlowID      string         `json:"flow_id" yaml:"flow_id"`
-	ID          string         `json:"id" yaml:"id"`
-	URL         string         `json:"url" yaml:"url"`
-	Title       string         `json:"title" yaml:"title"`
-	Content     string         `json:"content" yaml:"content"`
-	Author      string         `json:"author" yaml:"author"`
-	CreatedAt   time.Time      `json:"created_at" yaml:"created_at"`
-	Comments    []CommentBlock `json:"comments,omitempty" yaml:"comments,omitempty"`
-	WebBlocks   []WebBlock     `json:"web_blocks,omitempty" yaml:"web_blocks,omitempty"`
-	ImageBlocks []ImageBlock   `json:"image_blocks,omitempty" yaml:"image_blocks,omitempty"`
-	Chunks      []ContentChunk `json:"chunks,omitempty" yaml:"chunks,omitempty"`
-	SummaryPlan *SummaryPlan   `json:"summary_plan,omitempty" yaml:"summary_plan,omitempty"`
-	Summary     *SummaryResult `json:"summary,omitempty" yaml:"summary,omitempty"`
-	Quality     *QualityResult `json:"quality,omitempty" yaml:"quality,omitempty"`
-	ProcessedAt time.Time      `json:"processed_at" yaml:"processed_at"`
-	Errors      []ProcessError `json:"errors,omitempty" yaml:"errors,omitempty"`
+	FlowID      string            `json:"flow_id" yaml:"flow_id"`
+	ID          string            `json:"id" yaml:"id"`
+	URL         string            `json:"url" yaml:"url"`
+	Title       string            `json:"title" yaml:"title"`
+	Content     string            `json:"content" yaml:"content"`
+	Author      string            `json:"author" yaml:"author"`
+	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
+	Comments    []CommentBlock    `json:"comments,omitempty" yaml:"comments,omitempty"`
+	WebBlocks   []WebBlock        `json:"web_blocks,omitempty" yaml:"web_blocks,omitempty"`
+	ImageBlocks []ImageBlock      `json:"image_blocks,omitempty" yaml:"image_blocks,omitempty"`
+	Chunks      []ContentChunk    `json:"chunks,omitempty" yaml:"chunks,omitempty"`
+	SummaryPlan *SummaryPlan      `json:"summary_plan,omitempty" yaml:"summary_plan,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Summary     *SummaryResult    `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Quality     *QualityResult    `json:"quality,omitempty" yaml:"quality,omitempty"`
+	ProcessedAt time.Time         `json:"processed_at" yaml:"processed_at"`
+	Errors      []ProcessError    `json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
 // SummaryMode describes how summarization processors should interpret a PostBlock.

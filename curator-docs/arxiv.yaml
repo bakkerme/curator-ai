@@ -28,8 +28,8 @@ workflow:
         # summary_plan:
         #   mode: map_reduce
         snapshot:
-          snapshot: true
-          # restore: true
+          # snapshot: true
+          restore: true
           path: "snapshots/arxiv.json"
 
   quality:
@@ -45,8 +45,8 @@ workflow:
         # block_error_policy: drop
         block_error_policy: fail
         snapshot:
-          snapshot: true
-          # restore: true
+          # snapshot: true
+          restore: true
           path: "snapshots/arxiv-quality-llm.json"
 
   post_summary:
@@ -59,13 +59,9 @@ workflow:
           interests:
             - "AI and Large Language Model Security"
         snapshot:
-          snapshot: true
-          # restore: true
+          # snapshot: true
+          restore: true
           path: "snapshots/arxiv-post-summary.json"
-    - markdown:
-        name: markdown_to_html_post_sum
-        type: markdown
-        context: post
 
   run_summary:
     - llm:
@@ -79,13 +75,9 @@ workflow:
             - "LLM use in security research, penetration testing or defence"
         block_error_policy: fail
         snapshot:
-          snapshot: true
-          # restore: true
+          # snapshot: true
+          restore: true
           path: "snapshots/arxiv-run-summary.json"
-    - markdown:
-        name: markdown_to_html_sum
-        type: markdown
-        context: "flow"
 
   output:
     - email:
@@ -214,7 +206,7 @@ templates:
               <h1 style="margin:0 0 12px 0;font-size:22px;">LLM Research Papers</h1>
 
               {{- if .RunSummary }}
-              {{- .RunSummary.HTML }}
+              {{- toHTML .RunSummary.Summary }}
               {{- end }}
 
               <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
@@ -231,7 +223,7 @@ templates:
 
                 <div style="font-size:13px;margin:0;">
                   {{- if .Summary }}
-                  {{ .Summary.HTML }}
+                  {{ toHTML .Summary.Summary }}
                   {{- else }}
                   (no summary)
                   {{- end }}
@@ -241,5 +233,4 @@ templates:
             </div>
           </body>
         </html>
-
 

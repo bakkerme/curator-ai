@@ -25,6 +25,8 @@ import (
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssimpl "github.com/bakkerme/curator-ai/internal/sources/rss/impl"
+	"github.com/bakkerme/curator-ai/internal/sources/scrape"
+	scrapeimpl "github.com/bakkerme/curator-ai/internal/sources/scrape/impl"
 	"github.com/bakkerme/curator-ai/internal/sources/testfile"
 )
 
@@ -39,6 +41,7 @@ type Factory struct {
 	RedditFetcher           reddit.Fetcher
 	RedditPublicJSONFetcher reddit.Fetcher
 	RSSFetcher              rss.Fetcher
+	ScrapeFetcher           scrape.Fetcher
 	EmailSender             email.Sender
 	SeenStore               dedupe.SeenStore
 }
@@ -68,7 +71,9 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 		JinaReader:              jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
 		ArxivFetcher:            arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
 		RedditFetcher:           reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password, redditProxyURL),
+		RedditPublicJSONFetcher: reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, "", "", "", "", redditProxyURL),
 		RSSFetcher:              rssimpl.NewFetcher(env.RSS.HTTPTimeout, env.RSS.UserAgent),
+		ScrapeFetcher:           scrapeimpl.NewFetcher(env.Scrape.HTTPTimeout, env.Scrape.UserAgent),
 		// Leave EmailSender nil so the output processor can build it from the merged
 		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
 		// Document to take effect.
@@ -129,6 +134,14 @@ func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, err
 
 func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
 	processor, err := arxiv.NewArxivProcessor(cfg, f.ArxivFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.WrapSource(processor, cfg.Snapshot), nil
+}
+
+func (f *Factory) NewScrapeSource(cfg *config.ScrapeSource) (core.SourceProcessor, error) {
+	processor, err := scrape.NewScrapeProcessor(cfg, f.ScrapeFetcher, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}

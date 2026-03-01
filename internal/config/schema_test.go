@@ -996,6 +996,114 @@ func TestParseEmailOutputConfig(t *testing.T) {
 	}
 }
 
+func TestParseEmailOutputTemplate_AllowsToHTMLHelper(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Email Template Helper Test"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["test"]
+        summary_plan:
+          mode: full
+  output:
+    - email:
+        template: "{{ if .RunSummary }}{{ toHTML .RunSummary.Summary }}{{ end }}"
+        to: "test@test.com"
+        from: "noreply@test.com"
+        subject: "Test Subject"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+	if _, err := doc.Parse(); err != nil {
+		t.Fatalf("Failed to parse document with toHTML helper: %v", err)
+	}
+}
+
+func TestValidate_ScrapeRequiresSelectors(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - scrape:
+        url: "https://example.com/blog"
+        discovery:
+          item_selector: ".post"
+        extraction:
+          content_selector: ""
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err == nil {
+		t.Fatalf("expected validation error for missing scrape extraction.content_selector")
+	}
+}
+
+func TestValidate_AllowsScrapeSource(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Test Flow"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - scrape:
+        url: "https://example.com/blog"
+        lookback: "7d"
+        discovery:
+          item_selector: "a.post"
+          max_pages: 2
+        extraction:
+          title_selector: "h1"
+          content_selector: "article"
+  output:
+    - email:
+        template: "Hello"
+        to: "test@example.com"
+        from: "noreply@example.com"
+        subject: "Daily Report"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+
+	flow, err := doc.Parse()
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if len(flow.Sources) != 1 {
+		t.Fatalf("expected one parsed source, got %d", len(flow.Sources))
+	}
+	if flow.Sources[0].Type != ProcessorSourceScrape {
+		t.Fatalf("expected source type %q, got %q", ProcessorSourceScrape, flow.Sources[0].Type)
+	}
+}
+
 type mockFactory struct{}
 
 func (m *mockFactory) NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error) {
@@ -1011,6 +1119,10 @@ func (m *mockFactory) NewRSSSource(config *RSSSource) (core.SourceProcessor, err
 }
 
 func (m *mockFactory) NewArxivSource(config *ArxivSource) (core.SourceProcessor, error) {
+	return &mockSource{}, nil
+}
+
+func (m *mockFactory) NewScrapeSource(config *ScrapeSource) (core.SourceProcessor, error) {
 	return &mockSource{}, nil
 }
 

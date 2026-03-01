@@ -109,6 +109,34 @@ arxiv:
     min_section_chars: number           # Optional: merge tiny sections below this size
 ```
 
+#### Scrape Source
+Fetches blog posts from index pages when no RSS feed is available.
+
+```yaml
+scrape:
+  url: string                           # Required: a single index/listing URL to begin discovery
+  post_limit: number                    # Optional: max emitted posts across this source run
+  lookback: string                      # Optional: duration (e.g. "7d", "2w", "72h")
+  discovery:
+    item_selector: string               # Required: CSS selector for link elements on index pages
+    link_attr: string                   # Optional: link attribute to read (default: "href")
+    next_page_selector: string          # Optional: CSS selector for pagination link
+    max_pages: number                   # Optional: hard cap on index pages to crawl
+  extraction:
+    title_selector: string              # Optional: CSS selector for title
+    title_attr: string                  # Optional: attribute for title value
+    author_selector: string             # Optional: CSS selector for author
+    author_attr: string                 # Optional: attribute for author value
+    date_selector: string               # Optional: CSS selector for date value
+    date_attr: string                   # Optional: attribute for date value
+    content_selector: string            # Required: CSS selector for post body
+    remove_selectors: [string]          # Optional: selectors removed before extraction
+  markdown:
+    enabled: boolean                    # Optional: convert extracted HTML to markdown
+  request:
+    user_agent: string                  # Optional: override User-Agent for scrape requests
+```
+
 ### Quality Processors
 
 #### Quality Rule
@@ -376,12 +404,17 @@ Email templates are rendered as HTML bodies.
 Root object contains:
 - `.Blocks []*PostBlock`
 - `.RunSummary *RunSummary`
-- `PostBlock.Summary.HTML` and `RunSummary.HTML` when markdown summary processors are used (inserted as raw HTML, not escaped)
+- Template helper: `toHTML string -> safe HTML` for rendering markdown at display time
+- `PostBlock.Summary.HTML` and `RunSummary.HTML` when markdown summary processors are used (inserted as raw HTML, not escaped, kept for compatibility)
 
 Example:
 
 ```gotemplate
-Daily Digest\n\n{{.RunSummary.Summary}}\n\n{{range .Blocks}}- {{.Title}} ({{.URL}})\n{{end}}
+{{ if .RunSummary }}{{ toHTML .RunSummary.Summary }}{{ end }}
+{{ range .Blocks }}
+  <p><a href="{{ .URL }}">{{ .Title }}</a></p>
+  {{ if .Summary }}{{ toHTML .Summary.Summary }}{{ end }}
+{{ end }}
 ```
 
 ## Extensibility

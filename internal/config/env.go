@@ -20,6 +20,7 @@ type EnvConfig struct {
 	Arxiv                    ArxivEnvConfig
 	Reddit                   RedditEnvConfig
 	RSS                      RSSEnvConfig
+	Scrape                   ScrapeEnvConfig
 	SMTP                     SMTPEnvConfig
 }
 
@@ -72,6 +73,11 @@ type RedditEnvConfig struct {
 }
 
 type RSSEnvConfig struct {
+	HTTPTimeout time.Duration
+	UserAgent   string
+}
+
+type ScrapeEnvConfig struct {
 	HTTPTimeout time.Duration
 	UserAgent   string
 }
@@ -147,6 +153,10 @@ func LoadEnv() EnvConfig {
 			HTTPTimeout: envDuration("RSS_HTTP_TIMEOUT", 10*time.Second),
 			UserAgent:   envString("RSS_USER_AGENT", "curator-ai/0.1"),
 		},
+		Scrape: ScrapeEnvConfig{
+			HTTPTimeout: envDuration("SCRAPE_HTTP_TIMEOUT", 10*time.Second),
+			UserAgent:   envString("SCRAPE_USER_AGENT", "curator-ai/0.1"),
+		},
 		SMTP: SMTPEnvConfig{
 			Host:               envString("SMTP_HOST", ""),
 			Port:               envInt("SMTP_PORT", 587),
@@ -219,7 +229,7 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	if v == "" {
 		return fallback
 	}
-	d, err := parseDurationExtended(v)
+	d, err := ParseDurationExtended(v)
 	if err != nil {
 		return fallback
 	}

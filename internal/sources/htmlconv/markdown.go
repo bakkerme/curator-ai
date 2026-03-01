@@ -1,4 +1,4 @@
-package sources
+package htmlconv
 
 import (
 	"strings"
@@ -8,7 +8,7 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 )
 
-// ConvertHTMLToMarkdown translates HTML content into Markdown.
+// ConvertHTMLToMarkdown converts HTML snippets into markdown for downstream processing.
 func ConvertHTMLToMarkdown(html string) (string, error) {
 	if html == "" {
 		return "", nil

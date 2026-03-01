@@ -38,6 +38,8 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `REDDIT_PROXY_URL` (required when `REDDIT_PROXY_ENABLED=true`; example: `http://user:pass@proxy.example.com:12321`)
 - `RSS_HTTP_TIMEOUT` (optional, e.g. `10s`)
 - `RSS_USER_AGENT` (optional, default: `curator-ai/0.1`)
+- `SCRAPE_HTTP_TIMEOUT` (optional, e.g. `10s`)
+- `SCRAPE_USER_AGENT` (optional, default: `curator-ai/0.1`)
 - `ARXIV_BASE_URL` (optional, default: `https://export.arxiv.org/api/query`)
 - `ARXIV_HTTP_TIMEOUT` (optional, e.g. `10s`)
 - `ARXIV_USER_AGENT` (optional, default: `curator-ai/0.1`)

@@ -1,4 +1,4 @@
-package sources
+package htmlconv
 
 import (
 	"strings"
@@ -37,7 +37,6 @@ func TestConvertHTMLToMarkdown_EmptyString(t *testing.T) {
 }
 
 func TestConvertHTMLToMarkdown_InvalidHTML_Graceful(t *testing.T) {
-	// Deliberately malformed HTML: missing closing tags.
 	md, err := ConvertHTMLToMarkdown(`<p><strong>Bold Text`)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
