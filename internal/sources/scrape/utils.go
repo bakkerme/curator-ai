@@ -1,4 +1,4 @@
-package source
+package scrape
 
 import (
 	"net/url"
@@ -51,15 +51,11 @@ func parseLookbackWindow(value string) (time.Time, bool, error) {
 	if value == "" {
 		return time.Time{}, false, nil
 	}
-	d, err := parseExtendedDuration(value)
+	d, err := config.ParseDurationExtended(value)
 	if err != nil {
 		return time.Time{}, false, err
 	}
 	return time.Now().UTC().Add(-d), true, nil
-}
-
-func parseExtendedDuration(value string) (time.Duration, error) {
-	return config.ParseDurationExtended(value)
 }
 
 func parseTimeFlexible(s string) (time.Time, bool) {

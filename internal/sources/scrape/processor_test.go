@@ -1,4 +1,4 @@
-package source
+package scrape
 
 import (
 	"context"
@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/config"
-	"github.com/bakkerme/curator-ai/internal/sources/scrape"
 )
 
 type scrapeFetcherMock struct {
 	pages map[string]string
 }
 
-func (m *scrapeFetcherMock) Fetch(ctx context.Context, url string, options scrape.FetchOptions) (string, error) {
+func (m *scrapeFetcherMock) Fetch(ctx context.Context, url string, options FetchOptions) (string, error) {
 	_ = ctx
 	_ = options
 	return m.pages[url], nil

@@ -1,4 +1,4 @@
-package source
+package arxiv
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
-	"github.com/bakkerme/curator-ai/internal/sources/arxiv"
+	"github.com/bakkerme/curator-ai/internal/sources"
 	"github.com/bakkerme/curator-ai/internal/sources/jina"
 )
 
@@ -18,14 +18,14 @@ import (
 type ArxivProcessor struct {
 	name    string
 	config  config.ArxivSource
-	fetcher arxiv.Fetcher
+	fetcher Fetcher
 	reader  jina.Reader
 	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
 // NewArxivProcessor wires a new arXiv source processor.
-func NewArxivProcessor(cfg *config.ArxivSource, fetcher arxiv.Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*ArxivProcessor, error) {
+func NewArxivProcessor(cfg *config.ArxivSource, fetcher Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*ArxivProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("arxiv config is required")
 	}
@@ -69,7 +69,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 	}
 
 	logger := core.LoggerFromContext(ctx).With("stage", "source", "processor", p.name)
-	options := arxiv.SearchOptions{
+	options := SearchOptions{
 		Query:      p.config.Query,
 		Categories: p.config.Categories,
 		MaxResults: p.config.MaxResults,
@@ -133,7 +133,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 			Content:     content,
 			Author:      strings.Join(paper.Authors, ", "),
 			CreatedAt:   paper.PublishedAt,
-			SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+			SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 			Chunks:      chunks,
 			ProcessedAt: time.Now().UTC(),
 		}
@@ -152,7 +152,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 	return blocks, nil
 }
 
-func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Logger, paper arxiv.Paper) (string, []core.ProcessError) {
+func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Logger, paper Paper) (string, []core.ProcessError) {
 	jinaReadOptions := jina.ReadOptions{
 		RetainImages: "none",
 		TokenBudget:  250000, // default to 250k tokens for arXiv papers

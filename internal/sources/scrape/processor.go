@@ -1,4 +1,4 @@
-package source
+package scrape
 
 import (
 	"context"
@@ -11,20 +11,20 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
+	"github.com/bakkerme/curator-ai/internal/sources"
 	"github.com/bakkerme/curator-ai/internal/sources/htmlconv"
-	"github.com/bakkerme/curator-ai/internal/sources/scrape"
 )
 
 // ScrapeProcessor discovers post URLs from index pages and extracts content from post pages.
 type ScrapeProcessor struct {
 	name    string
 	config  config.ScrapeSource
-	fetcher scrape.Fetcher
+	fetcher Fetcher
 	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
-func NewScrapeProcessor(cfg *config.ScrapeSource, fetcher scrape.Fetcher, store dedupe.SeenStore, logger *slog.Logger) (*ScrapeProcessor, error) {
+func NewScrapeProcessor(cfg *config.ScrapeSource, fetcher Fetcher, store dedupe.SeenStore, logger *slog.Logger) (*ScrapeProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("scrape config is required")
 	}
@@ -66,7 +66,7 @@ func (p *ScrapeProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 		return nil, err
 	}
 	// Build request options for the scrape fetcher.
-	options := scrape.FetchOptions{UserAgent: p.config.Request.UserAgent}
+	options := FetchOptions{UserAgent: p.config.Request.UserAgent}
 	// Max pages is a hard stop for index traversal; default to 1 when omitted.
 	maxPages := p.config.Discovery.MaxPages
 	if maxPages <= 0 {
@@ -187,7 +187,7 @@ func (p *ScrapeProcessor) discoverLinks(doc *goquery.Document, baseURL string) [
 	return urls
 }
 
-func (p *ScrapeProcessor) extractPost(ctx context.Context, postURL string, page int, cutoff time.Time, hasLookback bool, options scrape.FetchOptions) (*core.PostBlock, bool, error) {
+func (p *ScrapeProcessor) extractPost(ctx context.Context, postURL string, page int, cutoff time.Time, hasLookback bool, options FetchOptions) (*core.PostBlock, bool, error) {
 	html, err := p.fetcher.Fetch(ctx, postURL, options)
 	if err != nil {
 		return nil, false, err
@@ -240,7 +240,7 @@ func (p *ScrapeProcessor) extractPost(ctx context.Context, postURL string, page 
 		Content:     content,
 		CreatedAt:   createdAt,
 		ProcessedAt: time.Now().UTC(),
-		SummaryPlan: summaryPlanFromConfig(p.config.SummaryPlan),
+		SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
 		Metadata: map[string]string{
 			"source_processor":  p.name,
 			"source_page_index": fmt.Sprintf("%d", page),

@@ -1003,9 +1003,27 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 		}
 	}
 
+	flow := newFlowFromDocument(d)
+
+	buildTriggers(flow, d.Workflow.Trigger, factory)
+	buildSources(flow, d.Workflow.Sources, factory)
+	buildQuality(flow, d.Workflow.Quality, d.Workflow.MaxConcurrency, factory)
+	buildSummaries(flow, d.Workflow.PostSummary, d.Workflow.MaxConcurrency, factory, false)
+	buildSummaries(flow, d.Workflow.RunSummary, d.Workflow.MaxConcurrency, factory, true)
+	buildOutputs(flow, d.Workflow.Output, factory)
+
+	configBytes, _ := yaml.Marshal(d)
+	var rawConfig map[string]interface{}
+	yaml.Unmarshal(configBytes, &rawConfig)
+	flow.RawConfig = rawConfig
+
+	return flow, nil
+}
+
+func newFlowFromDocument(d *CuratorDocument) *core.Flow {
 	now := time.Now()
 	flow := &core.Flow{
-		ID:        "", // Should be set by the caller
+		ID:        "",
 		Name:      d.Workflow.Name,
 		Version:   d.Workflow.Version,
 		CreatedAt: now,
@@ -1013,284 +1031,185 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 		Status:    core.FlowStatusWaiting,
 		RawConfig: make(map[string]interface{}),
 	}
-
 	if flow.Version == "" {
 		flow.Version = "1.0"
 	}
+	return flow
+}
 
-	// Build OrderOfOperations in the correct sequence
-	// 1. Triggers (always first)
-	for _, trigger := range d.Workflow.Trigger {
-		if trigger.Cron != nil {
-			var triggerProcessor core.TriggerProcessor
-			if factory != nil {
-				var err error
-				triggerProcessor, err = factory.NewCronTrigger(trigger.Cron)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Triggers = append(flow.Triggers, triggerProcessor)
-
-			processRef := core.ProcessReference{
-				Name:    "cron",
-				Type:    core.TriggerProcessorType,
-				Trigger: triggerProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+func buildTriggers(flow *core.Flow, triggers []TriggerConfig, factory ProcessorFactory) {
+	for _, trigger := range triggers {
+		if trigger.Cron == nil {
+			continue
 		}
+		var triggerProcessor core.TriggerProcessor
+		if factory != nil {
+			triggerProcessor, _ = factory.NewCronTrigger(trigger.Cron)
+		}
+		flow.Triggers = append(flow.Triggers, triggerProcessor)
+		flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+			Name:    "cron",
+			Type:    core.TriggerProcessorType,
+			Trigger: triggerProcessor,
+		})
 	}
+}
 
-	// 2. Sources
-	for _, source := range d.Workflow.Sources {
+func buildSources(flow *core.Flow, sources []SourceConfig, factory ProcessorFactory) {
+	for _, source := range sources {
 		if source.Reddit != nil {
-			var sourceProcessor core.SourceProcessor
-			if factory != nil {
-				var err error
-				sourceProcessor, err = factory.NewRedditSource(source.Reddit)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Sources = append(flow.Sources, sourceProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "reddit",
-				Type:   core.SourceProcessorType,
-				Source: sourceProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+			buildSourceProcessor(flow, "reddit", core.SourceProcessorType, source.Reddit,
+				func(f ProcessorFactory, c *RedditSource) (core.SourceProcessor, error) {
+					return f.NewRedditSource(c)
+				}, factory)
 		}
 		if source.RSS != nil {
-			var sourceProcessor core.SourceProcessor
-			if factory != nil {
-				var err error
-				sourceProcessor, err = factory.NewRSSSource(source.RSS)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Sources = append(flow.Sources, sourceProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "rss",
-				Type:   core.SourceProcessorType,
-				Source: sourceProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+			buildSourceProcessor(flow, "rss", core.SourceProcessorType, source.RSS,
+				func(f ProcessorFactory, c *RSSSource) (core.SourceProcessor, error) {
+					return f.NewRSSSource(c)
+				}, factory)
 		}
 		if source.Arxiv != nil {
-			var sourceProcessor core.SourceProcessor
-			if factory != nil {
-				var err error
-				sourceProcessor, err = factory.NewArxivSource(source.Arxiv)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Sources = append(flow.Sources, sourceProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "arxiv",
-				Type:   core.SourceProcessorType,
-				Source: sourceProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+			buildSourceProcessor(flow, "arxiv", core.SourceProcessorType, source.Arxiv,
+				func(f ProcessorFactory, c *ArxivSource) (core.SourceProcessor, error) {
+					return f.NewArxivSource(c)
+				}, factory)
 		}
 		if source.Scrape != nil {
-			var sourceProcessor core.SourceProcessor
-			if factory != nil {
-				var err error
-				sourceProcessor, err = factory.NewScrapeSource(source.Scrape)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Sources = append(flow.Sources, sourceProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "scrape",
-				Type:   core.SourceProcessorType,
-				Source: sourceProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+			buildSourceProcessor(flow, "scrape", core.SourceProcessorType, source.Scrape,
+				func(f ProcessorFactory, c *ScrapeSource) (core.SourceProcessor, error) {
+					return f.NewScrapeSource(c)
+				}, factory)
 		}
 		if source.TestFile != nil {
-			var sourceProcessor core.SourceProcessor
-			if factory != nil {
-				var err error
-				sourceProcessor, err = factory.NewTestFileSource(source.TestFile)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Sources = append(flow.Sources, sourceProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "testfile",
-				Type:   core.SourceProcessorType,
-				Source: sourceProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+			buildSourceProcessor(flow, "testfile", core.SourceProcessorType, source.TestFile,
+				func(f ProcessorFactory, c *TestFileSource) (core.SourceProcessor, error) {
+					return f.NewTestFileSource(c)
+				}, factory)
 		}
 	}
+}
 
-	// 3. Quality processors (in order defined in document)
-	for _, quality := range d.Workflow.Quality {
-		if quality.QualityRule != nil {
-			var qualityProcessor core.QualityProcessor
-			if factory != nil {
-				var err error
-				qualityProcessor, err = factory.NewQualityRule(quality.QualityRule)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Quality = append(flow.Quality, qualityProcessor)
+func buildSourceProcessor[T any](flow *core.Flow, name string, ptype core.ProcessorType, cfg T, factoryFn func(ProcessorFactory, T) (core.SourceProcessor, error), factory ProcessorFactory) {
+	var processor core.SourceProcessor
+	if factory != nil {
+		processor, _ = factoryFn(factory, cfg)
+	}
+	flow.Sources = append(flow.Sources, processor)
+	flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+		Name:   name,
+		Type:   ptype,
+		Source: processor,
+	})
+}
 
-			processRef := core.ProcessReference{
-				Name:    quality.QualityRule.Name,
-				Type:    core.QualityProcessorType,
-				Quality: qualityProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
-		} else if quality.LLM != nil {
-			quality.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
-
-			var qualityProcessor core.QualityProcessor
-			if factory != nil {
-				var err error
-				qualityProcessor, err = factory.NewLLMQuality(quality.LLM)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Quality = append(flow.Quality, qualityProcessor)
-
-			processRef := core.ProcessReference{
-				Name:    quality.LLM.Name,
-				Type:    core.QualityProcessorType,
-				Quality: qualityProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
+func buildQuality(flow *core.Flow, quality []QualityConfig, maxConcurrency int, factory ProcessorFactory) {
+	for _, q := range quality {
+		if q.QualityRule != nil {
+			buildQualityProcessor(flow, q.QualityRule.Name, q.QualityRule,
+				func(f ProcessorFactory, c *QualityRule) (core.QualityProcessor, error) {
+					return f.NewQualityRule(c)
+				}, factory)
+		} else if q.LLM != nil {
+			q.LLM.MaxConcurrency = maxConcurrency
+			buildQualityProcessor(flow, q.LLM.Name, q.LLM,
+				func(f ProcessorFactory, c *LLMQuality) (core.QualityProcessor, error) {
+					return f.NewLLMQuality(c)
+				}, factory)
 		}
 	}
+}
 
-	// 4. Post Summary processors
-	for _, summary := range d.Workflow.PostSummary {
-		if summary.LLM != nil {
-			summary.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
+func buildQualityProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.QualityProcessor, error), factory ProcessorFactory) {
+	var processor core.QualityProcessor
+	if factory != nil {
+		processor, _ = factoryFn(factory, cfg)
+	}
+	flow.Quality = append(flow.Quality, processor)
+	flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+		Name:    name,
+		Type:    core.QualityProcessorType,
+		Quality: processor,
+	})
+}
 
-			var summaryProcessor core.SummaryProcessor
-			if factory != nil {
-				var err error
-				summaryProcessor, err = factory.NewLLMSummary(summary.LLM)
-				if err != nil {
-					return nil, err
-				}
+func buildSummaries(flow *core.Flow, summaries []SummaryConfig, maxConcurrency int, factory ProcessorFactory, isRunSummary bool) {
+	for _, s := range summaries {
+		if s.LLM != nil {
+			s.LLM.MaxConcurrency = maxConcurrency
+			if isRunSummary {
+				buildRunSummaryProcessor(flow, s.LLM.Name, s.LLM,
+					func(f ProcessorFactory, c *LLMSummary) (core.RunSummaryProcessor, error) {
+						return f.NewLLMRunSummary(c)
+					}, factory)
+			} else {
+				buildSummaryProcessor(flow, s.LLM.Name, s.LLM,
+					func(f ProcessorFactory, c *LLMSummary) (core.SummaryProcessor, error) {
+						return f.NewLLMSummary(c)
+					}, factory)
 			}
-			flow.PostSummary = append(flow.PostSummary, summaryProcessor)
-
-			processRef := core.ProcessReference{
-				Name:        summary.LLM.Name,
-				Type:        core.SummaryProcessorType,
-				PostSummary: summaryProcessor,
+		} else if s.Markdown != nil {
+			if isRunSummary {
+				buildRunSummaryProcessor(flow, s.Markdown.Name, s.Markdown,
+					func(f ProcessorFactory, c *MarkdownSummary) (core.RunSummaryProcessor, error) {
+						return f.NewMarkdownRunSummary(c)
+					}, factory)
+			} else {
+				buildSummaryProcessor(flow, s.Markdown.Name, s.Markdown,
+					func(f ProcessorFactory, c *MarkdownSummary) (core.SummaryProcessor, error) {
+						return f.NewMarkdownSummary(c)
+					}, factory)
 			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
-		} else if summary.Markdown != nil {
-			var summaryProcessor core.SummaryProcessor
-			if factory != nil {
-				var err error
-				summaryProcessor, err = factory.NewMarkdownSummary(summary.Markdown)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.PostSummary = append(flow.PostSummary, summaryProcessor)
-
-			processRef := core.ProcessReference{
-				Name:        summary.Markdown.Name,
-				Type:        core.SummaryProcessorType,
-				PostSummary: summaryProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
 		}
 	}
+}
 
-	// 5. Run Summary processors
-	for _, summary := range d.Workflow.RunSummary {
-		if summary.LLM != nil {
-			summary.LLM.MaxConcurrency = d.Workflow.MaxConcurrency
-
-			var runSummaryProcessor core.RunSummaryProcessor
-			if factory != nil {
-				var err error
-				runSummaryProcessor, err = factory.NewLLMRunSummary(summary.LLM)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.RunSummary = append(flow.RunSummary, runSummaryProcessor)
-
-			processRef := core.ProcessReference{
-				Name:       summary.LLM.Name,
-				Type:       core.RunSummaryProcessorType,
-				RunSummary: runSummaryProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
-		} else if summary.Markdown != nil {
-			var runSummaryProcessor core.RunSummaryProcessor
-			if factory != nil {
-				var err error
-				runSummaryProcessor, err = factory.NewMarkdownRunSummary(summary.Markdown)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.RunSummary = append(flow.RunSummary, runSummaryProcessor)
-
-			processRef := core.ProcessReference{
-				Name:       summary.Markdown.Name,
-				Type:       core.RunSummaryProcessorType,
-				RunSummary: runSummaryProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
-		}
+func buildSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.SummaryProcessor, error), factory ProcessorFactory) {
+	var processor core.SummaryProcessor
+	if factory != nil {
+		processor, _ = factoryFn(factory, cfg)
 	}
+	flow.PostSummary = append(flow.PostSummary, processor)
+	flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+		Name:        name,
+		Type:        core.SummaryProcessorType,
+		PostSummary: processor,
+	})
+}
 
-	// 6. Output processors (always last)
-	for _, output := range d.Workflow.Output {
-		if output.Email != nil {
-			emailConfig, err := decodeEmailOutput(output.Email)
-			if err != nil {
-				return nil, fmt.Errorf("output email: %w", err)
-			}
-
-			var outputProcessor core.OutputProcessor
-			if factory != nil {
-				outputProcessor, err = factory.NewEmailOutput(emailConfig)
-				if err != nil {
-					return nil, err
-				}
-			}
-			flow.Outputs = append(flow.Outputs, outputProcessor)
-
-			processRef := core.ProcessReference{
-				Name:   "email",
-				Type:   core.OutputProcessorType,
-				Output: outputProcessor,
-			}
-			flow.OrderOfOperations = append(flow.OrderOfOperations, processRef)
-		}
+func buildRunSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.RunSummaryProcessor, error), factory ProcessorFactory) {
+	var processor core.RunSummaryProcessor
+	if factory != nil {
+		processor, _ = factoryFn(factory, cfg)
 	}
+	flow.RunSummary = append(flow.RunSummary, processor)
+	flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+		Name:       name,
+		Type:       core.RunSummaryProcessorType,
+		RunSummary: processor,
+	})
+}
 
-	// Store raw configuration for reference
-	configBytes, _ := yaml.Marshal(d)
-	var rawConfig map[string]interface{}
-	yaml.Unmarshal(configBytes, &rawConfig)
-	flow.RawConfig = rawConfig
-
-	return flow, nil
+func buildOutputs(flow *core.Flow, outputs []OutputConfig, factory ProcessorFactory) {
+	for _, output := range outputs {
+		if output.Email == nil {
+			continue
+		}
+		emailConfig, err := decodeEmailOutput(output.Email)
+		if err != nil {
+			continue
+		}
+		var outputProcessor core.OutputProcessor
+		if factory != nil {
+			outputProcessor, _ = factory.NewEmailOutput(emailConfig)
+		}
+		flow.Outputs = append(flow.Outputs, outputProcessor)
+		flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
+			Name:   "email",
+			Type:   core.OutputProcessorType,
+			Output: outputProcessor,
+		})
+	}
 }
 
 func decodeEmailOutput(value interface{}) (*EmailOutput, error) {

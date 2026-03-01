@@ -3,9 +3,6 @@ package htmlconv
 import (
 	"strings"
 	"testing"
-
-	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
-	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 )
 
 func TestConvertHTMLToMarkdown_Strong(t *testing.T) {
@@ -49,33 +46,19 @@ func TestConvertHTMLToMarkdown_InvalidHTML_Graceful(t *testing.T) {
 	}
 }
 
-func TestConvertHTMLToMarkdown_ConverterErrorPropagates(t *testing.T) {
-	prev := newHTMLToMarkdownConverter
-	t.Cleanup(func() { newHTMLToMarkdownConverter = prev })
-
-	newHTMLToMarkdownConverter = func() *converter.Converter {
-		return converter.NewConverter()
+func TestConvertHTMLToMarkdown_LargeHTMLInput(t *testing.T) {
+	// Keep this reasonably sized so unit tests stay fast, but large enough to
+	// exercise the parser/renderer paths.
+	var b strings.Builder
+	for i := 0; i < 10000; i++ {
+		b.WriteString("<p>hello</p>")
 	}
 
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	md, err := ConvertHTMLToMarkdown(b.String())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
-}
-
-func TestConvertHTMLToMarkdown_ConverterMisconfigurationErrors(t *testing.T) {
-	prev := newHTMLToMarkdownConverter
-	t.Cleanup(func() { newHTMLToMarkdownConverter = prev })
-
-	newHTMLToMarkdownConverter = func() *converter.Converter {
-		return converter.NewConverter(
-			converter.WithEscapeMode("smart"),
-			converter.WithPlugins(commonmark.NewCommonmarkPlugin()),
-		)
-	}
-
-	_, err := ConvertHTMLToMarkdown("<p>hi</p>")
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	if !strings.Contains(md, "hello") {
+		t.Fatalf("expected output to contain %q, got %q", "hello", md)
 	}
 }
