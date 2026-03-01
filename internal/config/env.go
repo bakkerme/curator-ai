@@ -16,7 +16,6 @@ type EnvConfig struct {
 	SessionID                string
 	OpenAI                   OpenAIEnvConfig
 	OTel                     OTelEnvConfig
-	Jina                     JinaEnvConfig
 	Crawl4AI                 Crawl4AIEnvConfig
 	Docling                  DoclingEnvConfig
 	Arxiv                    ArxivEnvConfig
@@ -48,13 +47,6 @@ type OTelEnvConfig struct {
 	Headers     map[string]string
 	Insecure    bool
 	SampleRatio float64
-}
-
-type JinaEnvConfig struct {
-	APIKey      string
-	BaseURL     string
-	HTTPTimeout time.Duration
-	UserAgent   string
 }
 
 type Crawl4AIEnvConfig struct {
@@ -139,12 +131,6 @@ func LoadEnv() EnvConfig {
 			Headers:     parseHeaders(envString("OTEL_EXPORTER_OTLP_HEADERS", "")),
 			Insecure:    envBool("OTEL_EXPORTER_OTLP_INSECURE", defaultInsecure(otlpEndpoint)),
 			SampleRatio: clamp01(envFloat("OTEL_TRACES_SAMPLE_RATIO", 1.0)),
-		},
-		Jina: JinaEnvConfig{
-			APIKey:      strings.TrimSpace(envString("JINA_API_KEY", "")),
-			BaseURL:     strings.TrimSpace(envString("JINA_BASE_URL", "")),
-			HTTPTimeout: envDuration("JINA_HTTP_TIMEOUT", 15*time.Second),
-			UserAgent:   envString("JINA_USER_AGENT", "curator-ai/0.1"),
 		},
 		Crawl4AI: Crawl4AIEnvConfig{
 			BaseURL:     strings.TrimSpace(envString("CRAWL4AI_BASE_URL", "")),

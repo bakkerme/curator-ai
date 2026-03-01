@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -42,19 +41,11 @@ func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 		return "", fmt.Errorf("crawl4ai: url is required")
 	}
 
-	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
-		return "", fmt.Errorf("crawl4ai: invalid url: %w", err)
-	}
-	if isBlocklistedURL(parsedURL) {
-		return "", fmt.Errorf("crawl4ai: url is blocklisted")
-	}
-
 	var (
 		lastStatus int
 		respBody   []byte
 	)
-	err = retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
 		payload, err := json.Marshal(map[string][]string{"urls": {urlStr}})
 		if err != nil {
 			return err
@@ -115,14 +106,26 @@ type crawlResponse struct {
 }
 
 type crawlResult struct {
-	URL      string          `json:"url"`
-	Markdown json.RawMessage `json:"markdown"`
-	Success  bool            `json:"success"`
+	URL      string         `json:"url"`
+	Markdown markdownObject `json:"markdown"`
+	Success  bool           `json:"success"`
 }
 
 type markdownObject struct {
 	FitMarkdown string `json:"fit_markdown"`
 	RawMarkdown string `json:"raw_markdown"`
+}
+
+func (m *markdownObject) UnmarshalJSON(data []byte) error {
+	// Try object first
+	type alias markdownObject
+	var obj alias
+	if err := json.Unmarshal(data, &obj); err == nil && (obj.FitMarkdown != "" || obj.RawMarkdown != "") {
+		*m = markdownObject(obj)
+		return nil
+	}
+
+	return fmt.Errorf("unrecognised markdown field format")
 }
 
 func extractMarkdown(body []byte) (string, error) {
@@ -134,38 +137,9 @@ func extractMarkdown(body []byte) (string, error) {
 		return "", fmt.Errorf("no results in response")
 	}
 
-	raw := cr.Results[0].Markdown
-
-	// Try plain string first
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s, nil
+	res := cr.Results[0]
+	if res.Markdown.FitMarkdown != "" {
+		return res.Markdown.FitMarkdown, nil
 	}
-
-	// Try object with fit_markdown / raw_markdown
-	var obj markdownObject
-	if err := json.Unmarshal(raw, &obj); err == nil {
-		if obj.FitMarkdown != "" {
-			return obj.FitMarkdown, nil
-		}
-		if obj.RawMarkdown != "" {
-			return obj.RawMarkdown, nil
-		}
-		return "", fmt.Errorf("markdown object has no content")
-	}
-
-	return "", fmt.Errorf("unrecognised markdown field format")
-}
-
-func isBlocklistedURL(u *url.URL) bool {
-	if u == nil {
-		return false
-	}
-	host := strings.ToLower(u.Host)
-	for _, b := range []string{"localhost"} {
-		if host == b {
-			return true
-		}
-	}
-	return false
+	return res.Markdown.RawMarkdown, nil
 }

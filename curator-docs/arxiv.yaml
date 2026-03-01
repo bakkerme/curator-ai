@@ -124,7 +124,7 @@ templates:
       CreatedAt: {{ .CreatedAt }}
 
       Abstract:
-      {{ index .Chunks 0 }}
+      {{ (index .Chunks 0).Content }}
       -----USER CONTENT END-----
 
   - id: postSummaryTemplate

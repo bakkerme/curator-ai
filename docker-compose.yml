@@ -14,7 +14,7 @@ services:
     environment:
       CURATOR_CONFIG: /app/curator.yaml
       CRAWL4AI_BASE_URL: http://crawl4ai:11235
-      DOCLING_BASE_URL: ${DOCLING_BASE_URL}
+      DOCLING_BASE_URL: ${DOCLING_BASE_URL:?DOCLING_BASE_URL must be set when running via docker-compose}
       DOCLING_HTTP_TIMEOUT: ${DOCLING_HTTP_TIMEOUT}
 
     volumes:
