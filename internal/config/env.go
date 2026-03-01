@@ -17,6 +17,8 @@ type EnvConfig struct {
 	OpenAI                   OpenAIEnvConfig
 	OTel                     OTelEnvConfig
 	Jina                     JinaEnvConfig
+	Crawl4AI                 Crawl4AIEnvConfig
+	Docling                  DoclingEnvConfig
 	Arxiv                    ArxivEnvConfig
 	Reddit                   RedditEnvConfig
 	RSS                      RSSEnvConfig
@@ -53,6 +55,16 @@ type JinaEnvConfig struct {
 	BaseURL     string
 	HTTPTimeout time.Duration
 	UserAgent   string
+}
+
+type Crawl4AIEnvConfig struct {
+	BaseURL     string        // CRAWL4AI_BASE_URL (e.g. http://crawl4ai:11235)
+	HTTPTimeout time.Duration // CRAWL4AI_HTTP_TIMEOUT, default 60s
+}
+
+type DoclingEnvConfig struct {
+	BaseURL     string        // DOCLING_BASE_URL (e.g. http://docling:8000)
+	HTTPTimeout time.Duration // DOCLING_HTTP_TIMEOUT, default 60s
 }
 
 type ArxivEnvConfig struct {
@@ -133,6 +145,14 @@ func LoadEnv() EnvConfig {
 			BaseURL:     strings.TrimSpace(envString("JINA_BASE_URL", "")),
 			HTTPTimeout: envDuration("JINA_HTTP_TIMEOUT", 15*time.Second),
 			UserAgent:   envString("JINA_USER_AGENT", "curator-ai/0.1"),
+		},
+		Crawl4AI: Crawl4AIEnvConfig{
+			BaseURL:     strings.TrimSpace(envString("CRAWL4AI_BASE_URL", "")),
+			HTTPTimeout: envDuration("CRAWL4AI_HTTP_TIMEOUT", 60*time.Second),
+		},
+		Docling: DoclingEnvConfig{
+			BaseURL:     strings.TrimSpace(envString("DOCLING_BASE_URL", "")),
+			HTTPTimeout: envDuration("DOCLING_HTTP_TIMEOUT", 60*time.Second),
 		},
 		Arxiv: ArxivEnvConfig{
 			BaseURL:     strings.TrimSpace(envString("ARXIV_BASE_URL", "")),
