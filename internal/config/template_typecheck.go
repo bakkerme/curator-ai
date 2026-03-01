@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bakkerme/curator-ai/internal/core"
+	outputemail "github.com/bakkerme/curator-ai/internal/outputs/email"
 )
 
 // validateTemplateTypes checks all templates in the CuratorDocument for type correctness
@@ -202,7 +203,7 @@ func typeCheckTextTemplate(name, templateText string, data any) error {
 }
 
 func typeCheckHTMLTemplate(name, templateText string, data any) error {
-	tmpl, err := htmltmpl.New(name).Option("missingkey=error").Parse(templateText)
+	tmpl, err := htmltmpl.New(name).Funcs(outputemail.TemplateFuncs()).Option("missingkey=error").Parse(templateText)
 	if err != nil {
 		return err
 	}

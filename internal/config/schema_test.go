@@ -996,6 +996,38 @@ func TestParseEmailOutputConfig(t *testing.T) {
 	}
 }
 
+func TestParseEmailOutputTemplate_AllowsToHTMLHelper(t *testing.T) {
+	data := []byte(`
+workflow:
+  name: "Email Template Helper Test"
+  trigger:
+    - cron:
+        schedule: "0 0 * * *"
+  sources:
+    - reddit:
+        subreddits: ["test"]
+        summary_plan:
+          mode: full
+  output:
+    - email:
+        template: "{{ if .RunSummary }}{{ toHTML .RunSummary.Summary }}{{ end }}"
+        to: "test@test.com"
+        from: "noreply@test.com"
+        subject: "Test Subject"
+`)
+
+	var doc CuratorDocument
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal YAML: %v", err)
+	}
+	if err := doc.Validate(); err != nil {
+		t.Fatalf("Document validation failed: %v", err)
+	}
+	if _, err := doc.Parse(); err != nil {
+		t.Fatalf("Failed to parse document with toHTML helper: %v", err)
+	}
+}
+
 func TestValidate_ScrapeRequiresSelectors(t *testing.T) {
 	data := []byte(`
 workflow:

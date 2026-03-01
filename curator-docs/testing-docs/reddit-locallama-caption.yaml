@@ -287,7 +287,7 @@ templates:
             <h1 style="margin:0 0 12px 0;font-size:22px;">Daily AI Research Digest</h1>
 
             {{- if .RunSummary }}
-            {{- .RunSummary.HTML }}
+            {{- toHTML .RunSummary.Summary }}
             {{- end }}
 
             <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
@@ -308,7 +308,7 @@ templates:
 
               <div style="font-size:13px;margin:0;">
                 {{- if .Summary }}
-                {{ .Summary.HTML }}
+                {{ toHTML .Summary.Summary }}
                 {{- else }}
                 (no summary)
                 {{- end }}

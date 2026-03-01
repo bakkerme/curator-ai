@@ -404,12 +404,17 @@ Email templates are rendered as HTML bodies.
 Root object contains:
 - `.Blocks []*PostBlock`
 - `.RunSummary *RunSummary`
-- `PostBlock.Summary.HTML` and `RunSummary.HTML` when markdown summary processors are used (inserted as raw HTML, not escaped)
+- Template helper: `toHTML string -> safe HTML` for rendering markdown at display time
+- `PostBlock.Summary.HTML` and `RunSummary.HTML` when markdown summary processors are used (inserted as raw HTML, not escaped, kept for compatibility)
 
 Example:
 
 ```gotemplate
-Daily Digest\n\n{{.RunSummary.Summary}}\n\n{{range .Blocks}}- {{.Title}} ({{.URL}})\n{{end}}
+{{ if .RunSummary }}{{ toHTML .RunSummary.Summary }}{{ end }}
+{{ range .Blocks }}
+  <p><a href="{{ .URL }}">{{ .Title }}</a></p>
+  {{ if .Summary }}{{ toHTML .Summary.Summary }}{{ end }}
+{{ end }}
 ```
 
 ## Extensibility

@@ -57,19 +57,20 @@ workflow:
         request:
           user_agent: "curator-ai/0.1"
         snapshot:
-          snapshot: true
+          # snapshot: true
+          restore: true
           path: "snapshots/oxylabs-scrape-source.json"
 
   output:
     - email:
         template: |-
           {{range .Blocks}}
-          ## {{.Title}}
+          <h1>{{.Title}}</h1>
           URL: {{.URL}}
           Author: {{.Author}}
           Published: {{.CreatedAt}}
 
-          {{.Summary}}
+          {{ toHTML .Content }}
 
           {{end}}
         to: brandon@bdmd.com.au
