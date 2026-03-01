@@ -32,7 +32,7 @@ func TestScrapeProcessor_Fetch_WithLookbackAndPostLimit(t *testing.T) {
 	}}
 
 	proc, err := NewScrapeProcessor(&config.ScrapeSource{
-		URLs:      []string{"https://example.com/blog"},
+		URL:       "https://example.com/blog",
 		PostLimit: 2,
 		Lookback:  "7d",
 		Discovery: config.ScrapeDiscoveryConfig{ItemSelector: ".post", MaxPages: 1},

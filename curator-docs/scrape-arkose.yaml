@@ -1,5 +1,5 @@
 workflow:
-  name: "Arkose Labs Scrape Test"
+  name: "Scrape Sources Test"
   version: "1.0"
 
   trigger:
@@ -9,19 +9,16 @@ workflow:
 
   sources:
     - scrape:
-        urls:
-          - https://www.arkoselabs.com/blog/
+        url: "https://www.arkoselabs.com/blog/"
         post_limit: 15 
         lookback: "365d"
         discovery:
-          # Verified with Playwright on 2026-03-01. The listing page renders
-          # blog cards as links inside article.blog-card containers.
+          # Verified with Playwright on 2026-03-01.
           item_selector: "article.blog-card a.blog-card__link"
           # The visible pagination on this page is rendered as non-link controls,
           # so we intentionally keep this to a single page crawl for now.
           max_pages: 1
         extraction:
-          # Verified against a live Arkose Labs blog post page.
           title_selector: "article.h-entry h1.p-name"
           author_selector: "article.h-entry .author-name a.p-author"
           date_selector: "article.h-entry .entry-meta time.dt-published"
@@ -36,6 +33,33 @@ workflow:
           restore: true
           path: "snapshots/arkose-scrape-source.json"
 
+    - scrape:
+        url: "https://oxylabs.io/blog"
+        post_limit: 15
+        lookback: "365d"
+        discovery:
+          # Verified with Playwright on 2026-03-01.
+          # Oxylabs feed cards expose article links inside paragraph wrappers.
+          item_selector: "p > a[href^='/blog/']:not([href*='/category/']):not([href*='/authors/'])"
+          # Pagination exists, but we only need the first page to validate
+          # multiple scrape sources in the same workflow.
+          max_pages: 1
+        extraction:
+          title_selector: "h1"
+          author_selector: "h1 + img + div p"
+          date_selector: "h1 + img + div div p:nth-of-type(2)"
+          # The article body is split across multiple sibling sections in the
+          # current Oxylabs template, so we capture those content sections
+          # explicitly for this test document.
+          content_selector: "#bodyContainer > section:nth-child(5), #bodyContainer > section:nth-child(7), #bodyContainer > section:nth-child(9), #bodyContainer > div:nth-child(10), #bodyContainer > section:nth-child(11)"
+        markdown:
+          enabled: true
+        request:
+          user_agent: "curator-ai/0.1"
+        snapshot:
+          snapshot: true
+          path: "snapshots/oxylabs-scrape-source.json"
+
   output:
     - email:
         template: |-
@@ -49,4 +73,4 @@ workflow:
 
           {{end}}
         to: brandon@bdmd.com.au
-        subject: "Arkose Labs Scrape Test"
+        subject: "Scrape Source Test"

@@ -1005,7 +1005,7 @@ workflow:
         schedule: "0 0 * * *"
   sources:
     - scrape:
-        urls: ["https://example.com/blog"]
+        url: "https://example.com/blog"
         discovery:
           item_selector: ".post"
         extraction:
@@ -1036,7 +1036,7 @@ workflow:
         schedule: "0 0 * * *"
   sources:
     - scrape:
-        urls: ["https://example.com/blog"]
+        url: "https://example.com/blog"
         lookback: "7d"
         discovery:
           item_selector: "a.post"

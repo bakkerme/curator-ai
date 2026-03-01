@@ -41,8 +41,8 @@ func (p *ScrapeProcessor) Validate() error {
 	if p.fetcher == nil {
 		return fmt.Errorf("scrape fetcher is required")
 	}
-	if len(p.config.URLs) == 0 {
-		return fmt.Errorf("at least one scrape url is required")
+	if strings.TrimSpace(p.config.URL) == "" {
+		return fmt.Errorf("scrape url is required")
 	}
 	if strings.TrimSpace(p.config.Discovery.ItemSelector) == "" {
 		return fmt.Errorf("scrape discovery.item_selector is required")
@@ -80,78 +80,73 @@ func (p *ScrapeProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 	discovered := map[string]struct{}{}
 	stopReason := ""
 
-	// Crawl each configured index URL until we hit pagination exhaustion or a stop condition.
-	for _, startURL := range p.config.URLs {
-		if stopReason != "" {
+	// Crawl the configured index URL until we hit pagination exhaustion or a stop condition.
+	nextPageURL := strings.TrimSpace(p.config.URL)
+	for page := 1; page <= maxPages && nextPageURL != ""; page++ {
+		if postLimit > 0 && len(blocks) >= postLimit {
+			stopReason = "post_limit"
 			break
 		}
-		nextPageURL := startURL
-		for page := 1; page <= maxPages && nextPageURL != ""; page++ {
+		indexHTML, err := p.fetcher.Fetch(ctx, nextPageURL, options)
+		if err != nil {
+			return nil, fmt.Errorf("fetch index page %s: %w", nextPageURL, err)
+		}
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(indexHTML))
+		if err != nil {
+			return nil, fmt.Errorf("parse index page %s: %w", nextPageURL, err)
+		}
+
+		links := p.discoverLinks(doc, nextPageURL)
+		for _, postURL := range links {
+			if _, ok := discovered[postURL]; ok {
+				continue
+			}
+			discovered[postURL] = struct{}{}
+
+			if p.store != nil {
+				seen, err := p.store.HasSeen(ctx, postURL)
+				if err != nil {
+					logger.Warn("failed to check dedupe store", "post_url", postURL, "error", err)
+				} else if seen {
+					continue
+				}
+			}
+
+			block, skip, err := p.extractPost(ctx, postURL, page, cutoff, hasLookback, options)
+			if err != nil {
+				logger.Warn("failed to extract scraped post", "post_url", postURL, "error", err)
+				continue
+			}
+			if skip || block == nil {
+				continue
+			}
+
+			blocks = append(blocks, block)
+			if p.store != nil {
+				if err := p.store.MarkSeen(ctx, postURL); err != nil {
+					logger.Warn("failed to mark scraped post as seen", "post_url", postURL, "error", err)
+				}
+			}
 			if postLimit > 0 && len(blocks) >= postLimit {
 				stopReason = "post_limit"
 				break
 			}
-			indexHTML, err := p.fetcher.Fetch(ctx, nextPageURL, options)
-			if err != nil {
-				return nil, fmt.Errorf("fetch index page %s: %w", nextPageURL, err)
-			}
-			doc, err := goquery.NewDocumentFromReader(strings.NewReader(indexHTML))
-			if err != nil {
-				return nil, fmt.Errorf("parse index page %s: %w", nextPageURL, err)
-			}
-
-			links := p.discoverLinks(doc, nextPageURL)
-			for _, postURL := range links {
-				if _, ok := discovered[postURL]; ok {
-					continue
-				}
-				discovered[postURL] = struct{}{}
-
-				if p.store != nil {
-					seen, err := p.store.HasSeen(ctx, postURL)
-					if err != nil {
-						logger.Warn("failed to check dedupe store", "post_url", postURL, "error", err)
-					} else if seen {
-						continue
-					}
-				}
-
-				block, skip, err := p.extractPost(ctx, postURL, page, cutoff, hasLookback, options)
-				if err != nil {
-					logger.Warn("failed to extract scraped post", "post_url", postURL, "error", err)
-					continue
-				}
-				if skip || block == nil {
-					continue
-				}
-
-				blocks = append(blocks, block)
-				if p.store != nil {
-					if err := p.store.MarkSeen(ctx, postURL); err != nil {
-						logger.Warn("failed to mark scraped post as seen", "post_url", postURL, "error", err)
-					}
-				}
-				if postLimit > 0 && len(blocks) >= postLimit {
-					stopReason = "post_limit"
-					break
-				}
-			}
-
-			if stopReason != "" {
-				break
-			}
-
-			next := strings.TrimSpace(p.config.Discovery.NextPageSelector)
-			if next == "" {
-				nextPageURL = ""
-			} else {
-				href, _ := doc.Find(next).First().Attr("href")
-				nextPageURL = resolveURL(nextPageURL, href)
-			}
 		}
-		if stopReason == "" && maxPages > 0 {
-			stopReason = "max_pages"
+
+		if stopReason != "" {
+			break
 		}
+
+		next := strings.TrimSpace(p.config.Discovery.NextPageSelector)
+		if next == "" {
+			nextPageURL = ""
+		} else {
+			href, _ := doc.Find(next).First().Attr("href")
+			nextPageURL = resolveURL(nextPageURL, href)
+		}
+	}
+	if stopReason == "" && maxPages > 0 {
+		stopReason = "max_pages"
 	}
 
 	for _, block := range blocks {

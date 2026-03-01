@@ -114,7 +114,7 @@ Fetches blog posts from index pages when no RSS feed is available.
 
 ```yaml
 scrape:
-  urls: [string]                        # Required: index/listing URLs to begin discovery
+  url: string                           # Required: a single index/listing URL to begin discovery
   post_limit: number                    # Optional: max emitted posts across this source run
   lookback: string                      # Optional: duration (e.g. "7d", "2w", "72h")
   discovery:

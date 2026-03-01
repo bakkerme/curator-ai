@@ -60,7 +60,7 @@ type SourceConfig struct {
 
 // ScrapeSource defines generic web scraping source configuration.
 type ScrapeSource struct {
-	URLs        []string               `yaml:"urls"`
+	URL         string                 `yaml:"url"`
 	PostLimit   int                    `yaml:"post_limit,omitempty"`
 	Lookback    string                 `yaml:"lookback,omitempty"`
 	Discovery   ScrapeDiscoveryConfig  `yaml:"discovery"`
@@ -475,8 +475,8 @@ func (d *CuratorDocument) Validate() error {
 			return fmt.Errorf("source %d: testfile path is required", i)
 		}
 		if source.Scrape != nil {
-			if len(source.Scrape.URLs) == 0 {
-				return fmt.Errorf("source %d: at least one scrape url is required", i)
+			if strings.TrimSpace(source.Scrape.URL) == "" {
+				return fmt.Errorf("source %d: scrape url is required", i)
 			}
 			if strings.TrimSpace(source.Scrape.Discovery.ItemSelector) == "" {
 				return fmt.Errorf("source %d: scrape discovery.item_selector is required", i)
