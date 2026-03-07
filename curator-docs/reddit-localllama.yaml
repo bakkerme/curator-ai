@@ -19,7 +19,7 @@ workflow:
         include_comments: true
         include_web: true
         include_images: true
-        limit: 50          # optional
+        limit: 10          # optional
         sort: "hot"        # optional
         time_filter: "day" # optional
         min_score: 10      # optional
@@ -63,8 +63,8 @@ workflow:
         block_error_policy: drop
         # block_error_policy: fail
         snapshot:
-          # snapshot: true
-          restore: true
+          snapshot: true
+          # restore: true
           path: "snapshots/quality-llm.json"
 
   post_summary:
@@ -84,8 +84,8 @@ workflow:
           max_images: 4
           include_comment_images: false
         snapshot:
-          # snapshot: true
-          restore: true
+          snapshot: true
+          # restore: true
           path: "snapshots/post-summary.json"
 
   run_summary:
@@ -102,8 +102,8 @@ workflow:
             - "Industry impact and adoption patterns"
         block_error_policy: fail
         snapshot:
-          # snapshot: true
-          restore: true
+          snapshot: true
+          # restore: true
           path: "snapshots/run-summary.json"
 
   output:

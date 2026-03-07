@@ -7,7 +7,6 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
-	"github.com/bakkerme/curator-ai/internal/sources/jina"
 )
 
 type fetcherMock struct {
@@ -25,9 +24,8 @@ type readerMock struct {
 	calls []string
 }
 
-func (m *readerMock) Read(ctx context.Context, url string, options jina.ReadOptions) (string, error) {
+func (m *readerMock) Read(ctx context.Context, url string) (string, error) {
 	_ = ctx
-	_ = options
 	m.calls = append(m.calls, url)
 	return m.pages[url], nil
 }
@@ -73,7 +71,7 @@ func TestArxivProcessor_AbstractOnlyUsesAbstractContent(t *testing.T) {
 		t.Fatalf("expected abstract-only content, got %q", blocks[0].Content)
 	}
 	if len(reader.calls) != 0 {
-		t.Fatalf("expected no Jina fetches in abstract_only mode, got %d calls", len(reader.calls))
+		t.Fatalf("expected no PDF fetches in abstract_only mode, got %d calls", len(reader.calls))
 	}
 }
 
@@ -90,12 +88,12 @@ func TestArxivProcessor_DefaultModeFetchesFullText(t *testing.T) {
 			Authors:     []string{"A"},
 			PublishedAt: time.Now().UTC(),
 			AbsURL:      "https://arxiv.org/abs/1234.5678",
-			HTMLURL:     "https://arxiv.org/html/1234.5678",
+			PDFURL:      "https://arxiv.org/pdf/1234.5678",
 		}},
 	}
 	reader := &readerMock{
 		pages: map[string]string{
-			"https://arxiv.org/html/1234.5678": "full paper content",
+			"https://arxiv.org/pdf/1234.5678": "full paper content",
 		},
 	}
 
@@ -115,6 +113,6 @@ func TestArxivProcessor_DefaultModeFetchesFullText(t *testing.T) {
 		t.Fatalf("expected full text content, got %q", blocks[0].Content)
 	}
 	if len(reader.calls) != 1 {
-		t.Fatalf("expected 1 Jina fetch in default mode, got %d calls", len(reader.calls))
+		t.Fatalf("expected 1 PDF fetch in default mode, got %d calls", len(reader.calls))
 	}
 }

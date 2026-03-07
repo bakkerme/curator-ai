@@ -1,4 +1,12 @@
 services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: curator-crawl4ai
+    shm_size: 3g
+    ports: 
+      - 11235:11235
+    restart: unless-stopped
+
   mailpit:
     image: axllent/mailpit:latest
     container_name: curator-mailpit
@@ -51,9 +59,13 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_CAPTURE_OPENAI_BODIES: ${OTEL_CAPTURE_OPENAI_BODIES}
 
-      JINA_API_KEY: ${JINA_API_KEY}
+      CRAWL4AI_BASE_URL: http://crawl4ai:11235
+      DOCLING_BASE_URL: ${DOCLING_BASE_URL:?DOCLING_BASE_URL must be set when running via docker-compose}
+      DOCLING_HTTP_TIMEOUT: ${DOCLING_HTTP_TIMEOUT}
     volumes:
       - ./:/app
+    depends_on:
+      - crawl4ai
 
 volumes:
   mailpit-data:

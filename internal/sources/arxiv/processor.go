@@ -11,21 +11,22 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources"
-	"github.com/bakkerme/curator-ai/internal/sources/jina"
+	"github.com/bakkerme/curator-ai/internal/sources/reader"
 )
 
 // ArxivProcessor fetches papers from arXiv and emits PostBlocks with chunked content.
+// Full text is loaded from the paper PDF through the configured reader.
 type ArxivProcessor struct {
 	name    string
 	config  config.ArxivSource
 	fetcher Fetcher
-	reader  jina.Reader
+	reader  reader.Reader
 	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
 // NewArxivProcessor wires a new arXiv source processor.
-func NewArxivProcessor(cfg *config.ArxivSource, fetcher Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*ArxivProcessor, error) {
+func NewArxivProcessor(cfg *config.ArxivSource, fetcher Fetcher, r reader.Reader, store dedupe.SeenStore, logger *slog.Logger) (*ArxivProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("arxiv config is required")
 	}
@@ -36,7 +37,7 @@ func NewArxivProcessor(cfg *config.ArxivSource, fetcher Fetcher, reader jina.Rea
 		name:    "arxiv",
 		config:  *cfg,
 		fetcher: fetcher,
-		reader:  reader,
+		reader:  r,
 		store:   store,
 		logger:  logger,
 	}, nil
@@ -58,7 +59,7 @@ func (p *ArxivProcessor) Validate() error {
 		return fmt.Errorf("arxiv fetcher is required")
 	}
 	if p.reader == nil {
-		return fmt.Errorf("jina reader is required")
+		return fmt.Errorf("arxiv reader is required")
 	}
 	return nil
 }
@@ -84,9 +85,9 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 		return nil, err
 	}
 
-	includeAbstract := true
+	includeAbstractInChunks := true
 	if p.config.IncludeAbstractInChunks != nil {
-		includeAbstract = *p.config.IncludeAbstractInChunks
+		includeAbstractInChunks = *p.config.IncludeAbstractInChunks
 	}
 	abstractOnly := p.config.AbstractOnly != nil && *p.config.AbstractOnly
 	chunking := defaultArxivChunkingConfig(p.config.Chunking)
@@ -122,7 +123,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 				chunks = chunkArxivContent(content, paper.Abstract, false, chunking)
 				logger.Error("Failed to fetch full text content; using abstract only", "paper_id", paper.ID)
 			} else {
-				chunks = chunkArxivContent(content, paper.Abstract, includeAbstract, chunking)
+				chunks = chunkArxivContent(content, paper.Abstract, includeAbstractInChunks, chunking)
 			}
 		}
 
@@ -153,21 +154,7 @@ func (p *ArxivProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
 }
 
 func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Logger, paper Paper) (string, []core.ProcessError) {
-	jinaReadOptions := jina.ReadOptions{
-		RetainImages: "none",
-		TokenBudget:  250000, // default to 250k tokens for arXiv papers
-	}
-
 	var errors []core.ProcessError
-	if paper.HTMLURL != "" {
-		logger.Info("Fetching arXiv HTML via Jina", "paper_id", paper.ID, "url", paper.HTMLURL)
-		if content, err := p.reader.Read(ctx, paper.HTMLURL, jinaReadOptions); err == nil && strings.TrimSpace(content) != "" {
-			return content, nil
-		} else if err != nil {
-			logger.Info("arXiv HTML fetch failed, falling back to PDF", "paper_id", paper.ID, "error", err)
-		}
-	}
-
 	if paper.PDFURL == "" {
 		errors = append(errors, core.ProcessError{
 			ProcessorName: p.name,
@@ -178,8 +165,8 @@ func (p *ArxivProcessor) fetchPaperContent(ctx context.Context, logger *slog.Log
 		return "", errors
 	}
 
-	logger.Info("Fetching arXiv PDF via Jina", "paper_id", paper.ID, "url", paper.PDFURL)
-	content, err := p.reader.Read(ctx, paper.PDFURL, jinaReadOptions)
+	logger.Info("Fetching arXiv PDF via reader", "paper_id", paper.ID, "url", paper.PDFURL)
+	content, err := p.reader.Read(ctx, paper.PDFURL)
 	if err != nil || strings.TrimSpace(content) == "" {
 		msg := "arxiv pdf fetch failed"
 		if err != nil {

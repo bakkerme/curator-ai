@@ -45,27 +45,38 @@ func defaultArxivChunkingConfig(cfg *config.ArxivChunkingConfig) arxivChunkingCo
 	return chunking
 }
 
-func chunkArxivContent(content string, abstract string, includeAbstract bool, cfg arxivChunkingConfig) []core.ContentChunk {
+func chunkArxivContent(content string, abstract string, includeAbstractInChunks bool, cfg arxivChunkingConfig) []core.ContentChunk {
 	content = strings.TrimSpace(content)
-	if content == "" && strings.TrimSpace(abstract) != "" {
+	abstract = strings.TrimSpace(abstract)
+
+	if content == "" && abstract != "" {
 		// When no full content is available, emit the abstract exactly once.
-		// We force includeAbstract=false here so abstract text is treated as primary content.
-		return []core.ContentChunk{{Content: buildChunkText("", abstract, abstract, false)}}
+		return []core.ContentChunk{{Content: buildChunkText("Abstract", abstract)}}
 	}
+
+	var chunks []core.ContentChunk
+	if includeAbstractInChunks && abstract != "" {
+		chunks = append(chunks, core.ContentChunk{Content: buildChunkText("Abstract", abstract)})
+	}
+
+	var contentChunks []core.ContentChunk
 	if strings.EqualFold(cfg.mode, "size") {
-		return chunkBySize(content, abstract, includeAbstract, cfg.fallbackMaxChars)
+		contentChunks = chunkBySize(content, cfg.fallbackMaxChars)
+	} else {
+		sections, headingsFound := splitSections(content)
+		if !headingsFound {
+			contentChunks = chunkBySize(content, cfg.fallbackMaxChars)
+		} else {
+			merged := mergeSmallSections(sections, cfg.minSectionChars)
+			contentChunks = make([]core.ContentChunk, 0, len(merged))
+			for _, section := range merged {
+				text := buildChunkText(section.title, section.content)
+				contentChunks = append(contentChunks, core.ContentChunk{Content: text})
+			}
+		}
 	}
-	sections, headingsFound := splitSections(content)
-	if !headingsFound {
-		return chunkBySize(content, abstract, includeAbstract, cfg.fallbackMaxChars)
-	}
-	merged := mergeSmallSections(sections, cfg.minSectionChars)
-	chunks := make([]core.ContentChunk, 0, len(merged))
-	for _, section := range merged {
-		text := buildChunkText(section.title, section.content, abstract, includeAbstract)
-		chunks = append(chunks, core.ContentChunk{Content: text})
-	}
-	return chunks
+
+	return append(chunks, contentChunks...)
 }
 
 type section struct {
@@ -159,7 +170,7 @@ func mergeSmallSections(sections []section, minChars int) []section {
 	return merged
 }
 
-func chunkBySize(content string, abstract string, includeAbstract bool, maxChars int) []core.ContentChunk {
+func chunkBySize(content string, maxChars int) []core.ContentChunk {
 	if maxChars <= 0 {
 		maxChars = 4000
 	}
@@ -171,20 +182,19 @@ func chunkBySize(content string, abstract string, includeAbstract bool, maxChars
 			end = len(runes)
 		}
 		segment := string(runes[start:end])
-		text := buildChunkText("", segment, abstract, includeAbstract)
+		text := buildChunkText("", segment)
 		chunks = append(chunks, core.ContentChunk{Content: text})
 	}
 	return chunks
 }
 
-func buildChunkText(sectionTitle string, content string, abstract string, includeAbstract bool) string {
+func buildChunkText(sectionTitle string, content string) string {
 	var builder strings.Builder
-	if includeAbstract && strings.TrimSpace(abstract) != "" {
-		builder.WriteString("Abstract:\n")
-		builder.WriteString(strings.TrimSpace(abstract))
-		builder.WriteString("\n\n")
-	}
 	if strings.TrimSpace(sectionTitle) != "" {
+		if strings.EqualFold(sectionTitle, "Abstract") {
+			builder.WriteString(strings.TrimSpace(content))
+			return builder.String()
+		}
 		builder.WriteString("Section: ")
 		builder.WriteString(strings.TrimSpace(sectionTitle))
 		builder.WriteString("\n")
