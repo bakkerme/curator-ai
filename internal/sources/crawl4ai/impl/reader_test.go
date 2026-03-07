@@ -3,120 +3,92 @@ package impl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
-
-
 )
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
+func TestBuildCrawlRequest(t *testing.T) {
+	t.Parallel()
 
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+	req, err := buildCrawlRequest(context.Background(), "http://crawl4ai.test/", "https://example.com/page")
+	if err != nil {
+		t.Fatalf("buildCrawlRequest() error = %v", err)
+	}
 
-func jsonBody(v any) io.ReadCloser {
-	b, _ := json.Marshal(v)
-	return io.NopCloser(strings.NewReader(string(b)))
+	if req.Method != http.MethodPost {
+		t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+	}
+	if req.URL.String() != "http://crawl4ai.test/crawl" {
+		t.Fatalf("url = %q, want %q", req.URL.String(), "http://crawl4ai.test/crawl")
+	}
+	if got := req.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", got, "application/json")
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("ReadAll(req.Body) error = %v", err)
+	}
+
+	var payload map[string][]string
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got := payload["urls"]; len(got) != 1 || got[0] != "https://example.com/page" {
+		t.Fatalf("payload urls = %#v, want %#v", got, []string{"https://example.com/page"})
+	}
 }
 
-func crawlResponseBody(markdown string) io.ReadCloser {
-	return jsonBody(map[string]any{
-		"success": true,
-		"results": []map[string]any{
-			{"url": "https://example.com/page", "markdown": markdown, "success": true},
+func TestExtractMarkdown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "markdown object prefers fit",
+			body: `{"success":true,"results":[{"url":"https://example.com/page","markdown":{"raw_markdown":"# raw","fit_markdown":"# fit"},"success":true}]}`,
+			want: "# fit",
 		},
-	})
-}
+		{
+			name: "markdown object falls back to raw",
+			body: `{"success":true,"results":[{"url":"https://example.com/page","markdown":{"raw_markdown":"# raw","fit_markdown":""},"success":true}]}`,
+			want: "# raw",
+		},
+	}
 
-func TestReader_Read(t *testing.T) {
-	t.Parallel()
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	reader := NewReader(2*time.Second, "http://crawl4ai.test")
-	reader.client = &http.Client{
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			if r.Method != http.MethodPost {
-				return nil, fmt.Errorf("method = %s, want %s", r.Method, http.MethodPost)
-			}
-			if got := r.URL.Path; got != "/crawl" {
-				return nil, fmt.Errorf("path = %q, want %q", got, "/crawl")
-			}
-			if got := r.Header.Get("Content-Type"); got != "application/json" {
-				return nil, fmt.Errorf("Content-Type = %q, want %q", got, "application/json")
-			}
-
-			body, err := io.ReadAll(r.Body)
+			got, err := extractMarkdown([]byte(tt.body))
 			if err != nil {
-				return nil, fmt.Errorf("read body: %w", err)
+				t.Fatalf("extractMarkdown() error = %v", err)
 			}
-			var payload map[string][]string
-			if err := json.Unmarshal(body, &payload); err != nil {
-				return nil, fmt.Errorf("unmarshal: %w", err)
+			if got != tt.want {
+				t.Fatalf("extractMarkdown() = %q, want %q", got, tt.want)
 			}
-			if len(payload["urls"]) == 0 || payload["urls"][0] != "https://example.com/page" {
-				return nil, fmt.Errorf("payload urls[0] = %q, want %q", payload["urls"][0], "https://example.com/page")
-			}
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     make(http.Header),
-				Body:       crawlResponseBody("# hello"),
-				Request:    r,
-			}, nil
-		}),
-	}
-
-	got, err := reader.Read(context.Background(), "https://example.com/page")
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-	if got != "# hello" {
-		t.Fatalf("Read() = %q, want %q", got, "# hello")
+		})
 	}
 }
 
-func TestReader_Read_MarkdownObject(t *testing.T) {
+func TestExtractMarkdownRejectsUnexpectedMarkdownShape(t *testing.T) {
 	t.Parallel()
 
-	reader := NewReader(2*time.Second, "http://crawl4ai.test")
-	reader.client = &http.Client{
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			body := jsonBody(map[string]any{
-				"success": true,
-				"results": []map[string]any{
-					{
-						"url": "https://example.com/page",
-						"markdown": map[string]string{
-							"raw_markdown": "# raw",
-							"fit_markdown": "# fit",
-						},
-						"success": true,
-					},
-				},
-			})
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Header:     make(http.Header),
-				Body:       body,
-				Request:    r,
-			}, nil
-		}),
-	}
-
-	got, err := reader.Read(context.Background(), "https://example.com/page")
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-	if got != "# fit" {
-		t.Fatalf("Read() = %q, want %q", got, "# fit")
+	_, err := extractMarkdown([]byte(`{"success":true,"results":[{"url":"https://example.com/page","markdown":"# hello","success":true}]}`))
+	if err == nil {
+		t.Fatalf("expected error for string markdown shape")
 	}
 }
 
-func TestReader_Read_MissingURL(t *testing.T) {
+func TestReaderReadMissingURL(t *testing.T) {
 	t.Parallel()
 
 	reader := NewReader(2*time.Second, "http://crawl4ai.test")
@@ -126,29 +98,22 @@ func TestReader_Read_MissingURL(t *testing.T) {
 	}
 }
 
-func TestReader_Read_ErrorResponse(t *testing.T) {
+func TestReaderReadRetriesOnServerError(t *testing.T) {
 	t.Parallel()
 
-	calls := 0
-	reader := NewReader(2*time.Second, "http://crawl4ai.test")
-	reader.client = &http.Client{
-		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			calls++
-			return &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Status:     "500 Internal Server Error",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("server error")),
-				Request:    r,
-			}, nil
-		}),
-	}
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	defer server.Close()
 
+	reader := NewReader(2*time.Second, server.URL)
 	_, err := reader.Read(context.Background(), "https://example.com/page")
 	if err == nil {
 		t.Fatalf("expected error on 500 response")
 	}
-	if calls < 2 {
-		t.Fatalf("expected retry, got %d calls", calls)
+	if got := calls.Load(); got < 2 {
+		t.Fatalf("expected retry, got %d calls", got)
 	}
 }

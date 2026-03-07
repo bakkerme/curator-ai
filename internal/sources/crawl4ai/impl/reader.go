@@ -35,6 +35,22 @@ func NewReader(timeout time.Duration, baseURL string) *Reader {
 	}
 }
 
+// buildCrawlRequest creates the Crawl4AI `/crawl` request body so request
+// construction can be tested separately from transport behavior.
+func buildCrawlRequest(ctx context.Context, baseURL string, targetURL string) (*http.Request, error) {
+	payload, err := json.Marshal(map[string][]string{"urls": {targetURL}})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/crawl", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return req, nil
+}
+
 func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 	urlStr = strings.TrimSpace(urlStr)
 	if urlStr == "" {
@@ -46,15 +62,10 @@ func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 		respBody   []byte
 	)
 	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
-		payload, err := json.Marshal(map[string][]string{"urls": {urlStr}})
+		req, err := buildCrawlRequest(ctx, r.baseURL, urlStr)
 		if err != nil {
-			return err
+			return retry.Permanent(err)
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.baseURL+"/crawl", bytes.NewReader(payload))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := r.client.Do(req)
 		if err != nil {
@@ -116,18 +127,8 @@ type markdownObject struct {
 	RawMarkdown string `json:"raw_markdown"`
 }
 
-func (m *markdownObject) UnmarshalJSON(data []byte) error {
-	// Try object first
-	type alias markdownObject
-	var obj alias
-	if err := json.Unmarshal(data, &obj); err == nil && (obj.FitMarkdown != "" || obj.RawMarkdown != "") {
-		*m = markdownObject(obj)
-		return nil
-	}
-
-	return fmt.Errorf("unrecognised markdown field format")
-}
-
+// extractMarkdown returns the best markdown field from the first Crawl4AI
+// result, preferring fit_markdown over raw_markdown when both are present.
 func extractMarkdown(body []byte) (string, error) {
 	var cr crawlResponse
 	if err := json.Unmarshal(body, &cr); err != nil {
@@ -141,5 +142,8 @@ func extractMarkdown(body []byte) (string, error) {
 	if res.Markdown.FitMarkdown != "" {
 		return res.Markdown.FitMarkdown, nil
 	}
-	return res.Markdown.RawMarkdown, nil
+	if res.Markdown.RawMarkdown != "" {
+		return res.Markdown.RawMarkdown, nil
+	}
+	return "", fmt.Errorf("no markdown in response")
 }
