@@ -10,19 +10,19 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/sources"
-	"github.com/bakkerme/curator-ai/internal/sources/jina"
+	"github.com/bakkerme/curator-ai/internal/sources/reader"
 )
 
 type RedditProcessor struct {
 	name    string
 	config  config.RedditSource
 	fetcher Fetcher
-	reader  jina.Reader
+	reader  reader.Reader
 	store   dedupe.SeenStore
 	logger  *slog.Logger
 }
 
-func NewRedditProcessor(cfg *config.RedditSource, fetcher Fetcher, reader jina.Reader, store dedupe.SeenStore, logger *slog.Logger) (*RedditProcessor, error) {
+func NewRedditProcessor(cfg *config.RedditSource, fetcher Fetcher, r reader.Reader, store dedupe.SeenStore, logger *slog.Logger) (*RedditProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("reddit config is required")
 	}
@@ -33,7 +33,7 @@ func NewRedditProcessor(cfg *config.RedditSource, fetcher Fetcher, reader jina.R
 		name:    "reddit",
 		config:  *cfg,
 		fetcher: fetcher,
-		reader:  reader,
+		reader:  r,
 		store:   store,
 		logger:  logger,
 	}, nil
@@ -114,24 +114,24 @@ func (p *RedditProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 		}
 
 		if p.config.IncludeWeb && len(item.WebURLs) > 0 {
-			p.logger.Info("Fetching web URLs via Jina", slog.String("post_id", item.ID), slog.Int("urls", len(item.WebURLs)))
+			p.logger.Info("Fetching web URLs via reader", slog.String("post_id", item.ID), slog.Int("urls", len(item.WebURLs)))
 			block.WebBlocks = make([]core.WebBlock, 0, len(item.WebURLs))
 			for _, u := range item.WebURLs {
 				wb := core.WebBlock{URL: u}
 				started := time.Now()
-				p.logger.Info("Fetching URL via Jina", slog.String("post_id", item.ID), slog.String("url", u))
+				p.logger.Info("Fetching URL via reader", slog.String("post_id", item.ID), slog.String("url", u))
 
-				page, err := p.reader.Read(ctx, u, jina.ReadOptions{})
+				page, err := p.reader.Read(ctx, u)
 				if err != nil {
-					p.logger.Warn("Failed to fetch URL via Jina", slog.String("post_id", item.ID), slog.String("url", u), slog.Duration("elapsed", time.Since(started)), slog.String("error", err.Error()))
+					p.logger.Warn("Failed to fetch URL via reader", slog.String("post_id", item.ID), slog.String("url", u), slog.Duration("elapsed", time.Since(started)), slog.String("error", err.Error()))
 					block.Errors = append(block.Errors, core.ProcessError{
 						ProcessorName: p.name,
 						Stage:         "source",
-						Error:         fmt.Sprintf("jina fetch %s: %v", u, err),
+						Error:         fmt.Sprintf("reader fetch %s: %v", u, err),
 						OccurredAt:    time.Now().UTC(),
 					})
 				} else {
-					p.logger.Info("Fetched URL via Jina", slog.String("post_id", item.ID), slog.String("url", u), slog.Duration("elapsed", time.Since(started)))
+					p.logger.Info("Fetched URL via reader", slog.String("post_id", item.ID), slog.String("url", u), slog.Duration("elapsed", time.Since(started)))
 					wb.WasFetched = true
 					wb.Page = page
 				}

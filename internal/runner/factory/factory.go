@@ -20,8 +20,9 @@ import (
 	"github.com/bakkerme/curator-ai/internal/runner/snapshot"
 	"github.com/bakkerme/curator-ai/internal/sources/arxiv"
 	arxivimpl "github.com/bakkerme/curator-ai/internal/sources/arxiv/impl"
-	"github.com/bakkerme/curator-ai/internal/sources/jina"
-	jinaimpl "github.com/bakkerme/curator-ai/internal/sources/jina/impl"
+	crawl4aiimpl "github.com/bakkerme/curator-ai/internal/sources/crawl4ai/impl"
+	doclingimpl "github.com/bakkerme/curator-ai/internal/sources/docling/impl"
+	"github.com/bakkerme/curator-ai/internal/sources/reader"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssimpl "github.com/bakkerme/curator-ai/internal/sources/rss/impl"
@@ -36,7 +37,8 @@ type Factory struct {
 	DefaultModel            string
 	DefaultTemperature      *float64
 	SMTPDefaults            config.SMTPEnvConfig
-	JinaReader              jina.Reader
+	WebReader               reader.Reader
+	ArxivReader             reader.Reader
 	ArxivFetcher            arxiv.Fetcher
 	RedditFetcher           reddit.Fetcher
 	RedditPublicJSONFetcher reddit.Fetcher
@@ -68,7 +70,8 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 		DefaultModel:            env.OpenAI.Model,
 		DefaultTemperature:      env.OpenAI.Temperature,
 		SMTPDefaults:            env.SMTP,
-		JinaReader:              jinaimpl.NewReader(env.Jina.HTTPTimeout, env.Jina.UserAgent, env.Jina.BaseURL, env.Jina.APIKey),
+		WebReader:               crawl4aiimpl.NewReader(env.Crawl4AI.HTTPTimeout, env.Crawl4AI.BaseURL),
+		ArxivReader:             doclingimpl.NewReader(env.Docling.HTTPTimeout, env.Docling.BaseURL),
 		ArxivFetcher:            arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
 		RedditFetcher:           reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password, redditProxyURL),
 		RedditPublicJSONFetcher: reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, "", "", "", "", redditProxyURL),
@@ -109,7 +112,7 @@ func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor
 }
 
 func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	processor, err := reddit.NewRedditProcessor(cfg, f.RedditFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := reddit.NewRedditProcessor(cfg, f.RedditFetcher, f.WebReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +120,7 @@ func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcesso
 }
 
 func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
-	processor, err := reddit.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := reddit.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.WebReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +136,7 @@ func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, err
 }
 
 func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
-	processor, err := arxiv.NewArxivProcessor(cfg, f.ArxivFetcher, f.JinaReader, f.SeenStore, f.Logger)
+	processor, err := arxiv.NewArxivProcessor(cfg, f.ArxivFetcher, f.ArxivReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
 	}

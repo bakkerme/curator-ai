@@ -1,4 +1,10 @@
 services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: curator-crawl4ai
+    shm_size: 3g
+    restart: unless-stopped
+
   curator:
     image: curator-ai:latest
     build:
@@ -7,7 +13,12 @@ services:
       target: runtime
     environment:
       CURATOR_CONFIG: /app/curator.yaml
+      CRAWL4AI_BASE_URL: http://crawl4ai:11235
+      DOCLING_BASE_URL: ${DOCLING_BASE_URL:?DOCLING_BASE_URL must be set when running via docker-compose}
+      DOCLING_HTTP_TIMEOUT: ${DOCLING_HTTP_TIMEOUT}
 
     volumes:
       - ./curator.yaml:/app/curator.yaml:ro
     restart: unless-stopped
+    depends_on:
+      - crawl4ai

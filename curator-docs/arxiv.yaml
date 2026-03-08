@@ -19,8 +19,8 @@ workflow:
         sort_by: "lastUpdatedDate"
         sort_order: "descending"
         # When true, PostBlock.Content is only the abstract (no full-text fetch).
-        abstract_only: true
-        # include_abstract_in_chunks: true
+        # abstract_only: true
+        include_abstract_in_chunks: true
         # chunking:
         #   mode: "section"
         #   fallback_max_chars: 3500
@@ -124,7 +124,7 @@ templates:
       CreatedAt: {{ .CreatedAt }}
 
       Abstract:
-      {{ .Content }}
+      {{ if .Chunks }}{{ (index .Chunks 0).Content }}{{ else }}{{ .Content }}{{ end }}  
       -----USER CONTENT END-----
 
   - id: postSummaryTemplate

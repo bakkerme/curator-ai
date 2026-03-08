@@ -3,6 +3,8 @@ package arxiv
 import (
 	"strings"
 	"testing"
+
+	"github.com/bakkerme/curator-ai/internal/config"
 )
 
 func TestChunkArxivContent_SplitsBySectionAndIncludesAbstract(t *testing.T) {
@@ -20,14 +22,14 @@ func TestChunkArxivContent_SplitsBySectionAndIncludesAbstract(t *testing.T) {
 		minSectionChars:  1,
 	})
 
-	if len(chunks) != 2 {
-		t.Fatalf("expected 2 chunks, got %d", len(chunks))
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks (Abstract + 2 sections), got %d", len(chunks))
 	}
-	if !strings.Contains(chunks[0].Content, "Abstract text.") {
-		t.Fatalf("expected abstract context in first chunk")
+	if chunks[0].Content != "Abstract text." {
+		t.Fatalf("expected abstract as first chunk")
 	}
-	if !strings.Contains(chunks[0].Content, "Section: Introduction") {
-		t.Fatalf("expected section title in first chunk")
+	if !strings.Contains(chunks[1].Content, "Section: Introduction") {
+		t.Fatalf("expected section title in second chunk")
 	}
 }
 
@@ -86,5 +88,47 @@ func TestMergeSmallSections_UsesRuneCountForUTF8Threshold(t *testing.T) {
 	}
 	if !strings.Contains(merged[0].content, "Method") {
 		t.Fatalf("expected merged content to include next section title, got %q", merged[0].content)
+	}
+}
+
+func TestPreviewChunking_ReportsSectionFallback(t *testing.T) {
+	preview := PreviewChunking("plain body text", "", false, &config.ArxivChunkingConfig{
+		Mode:             "section",
+		FallbackMaxChars: 5,
+		MinSectionChars:  1,
+	})
+
+	if preview.Mode != "section" {
+		t.Fatalf("expected section mode, got %q", preview.Mode)
+	}
+	if preview.HeadingsFound {
+		t.Fatalf("expected no headings to be found")
+	}
+	if !preview.UsedFallback {
+		t.Fatalf("expected fallback to size chunking")
+	}
+	if len(preview.Chunks) < 2 {
+		t.Fatalf("expected size-based fallback chunks, got %d", len(preview.Chunks))
+	}
+}
+
+func TestPreviewChunking_ReportsDetectedHeadings(t *testing.T) {
+	preview := PreviewChunking(strings.Join([]string{
+		"# Intro",
+		"body",
+	}, "\n"), "", false, &config.ArxivChunkingConfig{
+		Mode:             "section",
+		FallbackMaxChars: 100,
+		MinSectionChars:  1,
+	})
+
+	if !preview.HeadingsFound {
+		t.Fatalf("expected headings to be found")
+	}
+	if preview.UsedFallback {
+		t.Fatalf("did not expect fallback when headings are present")
+	}
+	if len(preview.Chunks) != 1 {
+		t.Fatalf("expected 1 section chunk, got %d", len(preview.Chunks))
 	}
 }

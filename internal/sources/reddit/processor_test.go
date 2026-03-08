@@ -9,20 +9,18 @@ import (
 
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
-	"github.com/bakkerme/curator-ai/internal/sources/jina"
 	"github.com/bakkerme/curator-ai/internal/sources/reddit"
 	redditmock "github.com/bakkerme/curator-ai/internal/sources/reddit/mock"
 )
 
-type jinaReaderMock struct {
+type readerMock struct {
 	pages map[string]string
 	err   error
 	calls []string
 }
 
-func (m *jinaReaderMock) Read(ctx context.Context, url string, options jina.ReadOptions) (string, error) {
+func (m *readerMock) Read(ctx context.Context, url string) (string, error) {
 	_ = ctx
-	_ = options
 	m.calls = append(m.calls, url)
 	if m.err != nil {
 		return "", m.err
@@ -69,7 +67,7 @@ func (s *fakeSeenStore) Close() error {
 	return nil
 }
 
-func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
+func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaReader(t *testing.T) {
 	cfg := &config.RedditSource{
 		Subreddits:  []string{"golang"},
 		IncludeWeb:  true,
@@ -86,7 +84,7 @@ func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
 			},
 		},
 	}
-	reader := &jinaReaderMock{
+	reader := &readerMock{
 		pages: map[string]string{"https://example.com/page": "# md"},
 	}
 
@@ -118,7 +116,7 @@ func TestRedditProcessor_IncludeWeb_FetchesWebBlocksViaJina(t *testing.T) {
 	}
 }
 
-func TestRedditProcessor_IncludeWeb_JinaErrorRecordedOnPost(t *testing.T) {
+func TestRedditProcessor_IncludeWeb_ReaderErrorRecordedOnPost(t *testing.T) {
 	cfg := &config.RedditSource{
 		Subreddits:  []string{"golang"},
 		IncludeWeb:  true,
@@ -135,7 +133,7 @@ func TestRedditProcessor_IncludeWeb_JinaErrorRecordedOnPost(t *testing.T) {
 			},
 		},
 	}
-	reader := &jinaReaderMock{err: fmt.Errorf("boom")}
+	reader := &readerMock{err: fmt.Errorf("boom")}
 
 	processor, err := reddit.NewRedditProcessor(cfg, fetcher, reader, nil, nil)
 	if err != nil {
