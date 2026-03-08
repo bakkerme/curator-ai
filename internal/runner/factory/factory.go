@@ -70,7 +70,7 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 		DefaultModel:            env.OpenAI.Model,
 		DefaultTemperature:      env.OpenAI.Temperature,
 		SMTPDefaults:            env.SMTP,
-		WebReader:              crawl4aiimpl.NewReader(env.Crawl4AI.HTTPTimeout, env.Crawl4AI.BaseURL),
+		WebReader:               crawl4aiimpl.NewReader(env.Crawl4AI.HTTPTimeout, env.Crawl4AI.BaseURL),
 		ArxivReader:             doclingimpl.NewReader(env.Docling.HTTPTimeout, env.Docling.BaseURL),
 		ArxivFetcher:            arxivimpl.NewFetcher(env.Arxiv.HTTPTimeout, env.Arxiv.UserAgent, env.Arxiv.BaseURL),
 		RedditFetcher:           reddit.NewFetcher(logger, env.Reddit.HTTPTimeout, env.Reddit.UserAgent, env.Reddit.ClientID, env.Reddit.ClientSecret, env.Reddit.Username, env.Reddit.Password, redditProxyURL),
