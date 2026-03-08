@@ -3,7 +3,7 @@ services:
     image: unclecode/crawl4ai:latest
     container_name: curator-crawl4ai
     shm_size: 3g
-    ports: 
+    ports:
       - 11235:11235
     restart: unless-stopped
 
@@ -21,6 +21,12 @@ services:
       - mailpit-data:/data
     restart: unless-stopped
 
+  docling:
+    image: unclecode/docling:latest
+    container_name: curator-docling
+    ports:
+      - 8000:8000
+    restart: unless-stopped
 
   curator:
     image: curator-ai:dev
@@ -60,7 +66,7 @@ services:
       OTEL_CAPTURE_OPENAI_BODIES: ${OTEL_CAPTURE_OPENAI_BODIES}
 
       CRAWL4AI_BASE_URL: http://crawl4ai:11235
-      DOCLING_BASE_URL: ${DOCLING_BASE_URL:?DOCLING_BASE_URL must be set when running via docker-compose}
+      DOCLING_BASE_URL: ${DOCLING_BASE_URL|http://curator-docling:8000}
       DOCLING_HTTP_TIMEOUT: ${DOCLING_HTTP_TIMEOUT}
     volumes:
       - ./:/app
