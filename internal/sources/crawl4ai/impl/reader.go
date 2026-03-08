@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,12 +16,14 @@ import (
 
 const defaultBaseURL = "http://localhost:11235"
 
+// Reader implements the reader.Reader interface for Crawl4AI, which provides a simple API for fetching webpage content as markdown.
 type Reader struct {
 	client      *http.Client
 	baseURL     string
 	maxBodySize int64
 }
 
+// NewReader creates a new Crawl4AI Reader with the given HTTP timeout and base URL. If timeout is zero or negative, a default of 60 seconds is used. If baseURL is empty, a default of "http://localhost:11235" is used.
 func NewReader(timeout time.Duration, baseURL string) *Reader {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -57,11 +60,19 @@ func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 		return "", fmt.Errorf("crawl4ai: url is required")
 	}
 
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("crawl4ai: invalid url: %w", err)
+	}
+	if isBlocklistedURL(parsedURL) {
+		return "", fmt.Errorf("crawl4ai: url is blocklisted")
+	}
+
 	var (
 		lastStatus int
 		respBody   []byte
 	)
-	err := retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
+	err = retry.Do(ctx, retry.Config{Attempts: 3, BaseDelay: 200 * time.Millisecond}, func() error {
 		req, err := buildCrawlRequest(ctx, r.baseURL, urlStr)
 		if err != nil {
 			return retry.Permanent(err)
@@ -134,8 +145,13 @@ func extractMarkdown(body []byte) (string, error) {
 	if err := json.Unmarshal(body, &cr); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
+
+	if cr.Success == false {
+		return "", fmt.Errorf("crawl4ai: crawl failed")
+	}
+
 	if len(cr.Results) == 0 {
-		return "", fmt.Errorf("no results in response")
+		return "", fmt.Errorf("crawl4ai: no results in response")
 	}
 
 	res := cr.Results[0]
@@ -145,5 +161,18 @@ func extractMarkdown(body []byte) (string, error) {
 	if res.Markdown.RawMarkdown != "" {
 		return res.Markdown.RawMarkdown, nil
 	}
-	return "", fmt.Errorf("no markdown in response")
+	return "", fmt.Errorf("crawl4ai: no markdown in response")
+}
+
+func isBlocklistedURL(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, blocked := range []string{"localhost"} {
+		if host == blocked {
+			return true
+		}
+	}
+	return false
 }
