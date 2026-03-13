@@ -36,6 +36,9 @@ type ChatRequest struct {
 	Messages    []Message
 	Temperature *float64
 	MaxTokens   int
+	// EnableThinking controls provider-specific reasoning/thinking mode toggles
+	// for OpenAI-compatible chat completion endpoints.
+	EnableThinking *bool
 }
 
 type ChatResponse struct {

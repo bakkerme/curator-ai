@@ -27,3 +27,21 @@ func TestLoadEnv_RedditProxyConfigured(t *testing.T) {
 		t.Fatalf("unexpected REDDIT_PROXY_URL: %q", env.Reddit.ProxyURL)
 	}
 }
+
+func TestLoadEnv_OpenAIEnableThinkingDefault(t *testing.T) {
+	t.Setenv("OPENAI_ENABLE_THINKING", "")
+
+	env := LoadEnv()
+	if !env.OpenAI.EnableThinking {
+		t.Fatalf("expected OPENAI_ENABLE_THINKING default to be true")
+	}
+}
+
+func TestLoadEnv_OpenAIEnableThinkingConfigured(t *testing.T) {
+	t.Setenv("OPENAI_ENABLE_THINKING", "false")
+
+	env := LoadEnv()
+	if env.OpenAI.EnableThinking {
+		t.Fatalf("expected OPENAI_ENABLE_THINKING to be false")
+	}
+}

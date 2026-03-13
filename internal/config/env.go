@@ -30,7 +30,10 @@ type OpenAIEnvConfig struct {
 	BaseURL     string
 	Model       string
 	Temperature *float64
-	OTel        OpenAIOTelEnvConfig
+	// EnableThinking toggles provider-specific reasoning/thinking features for
+	// OpenAI-compatible endpoints that support chat_template_kwargs.enable_thinking.
+	EnableThinking bool
+	OTel           OpenAIOTelEnvConfig
 }
 
 type OpenAIOTelEnvConfig struct {
@@ -113,10 +116,11 @@ func LoadEnv() EnvConfig {
 		AllowPartialSourceErrors: envBool("ALLOW_PARTIAL_SOURCE_ERRORS", false),
 		SessionID:                strings.TrimSpace(envString("SESSION_ID", "")),
 		OpenAI: OpenAIEnvConfig{
-			APIKey:      strings.TrimSpace(envString("OPENAI_API_KEY", "")),
-			BaseURL:     strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
-			Model:       openAIModel,
-			Temperature: envFloatPtr("OPENAI_TEMPERATURE"),
+			APIKey:         strings.TrimSpace(envString("OPENAI_API_KEY", "")),
+			BaseURL:        strings.TrimSpace(envString("OPENAI_BASE_URL", "")),
+			Model:          openAIModel,
+			Temperature:    envFloatPtr("OPENAI_TEMPERATURE"),
+			EnableThinking: envBool("OPENAI_ENABLE_THINKING", true),
 			OTel: OpenAIOTelEnvConfig{
 				Enabled:       envBool("OTEL_OPENAI_ENABLED", true),
 				CaptureBodies: envBool("OTEL_CAPTURE_OPENAI_BODIES", false),

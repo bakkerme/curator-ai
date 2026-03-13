@@ -16,7 +16,9 @@ import (
 )
 
 type Client struct {
-	client openai.Client
+	client              openai.Client
+	enableThinking      bool
+	hasCustomBaseURL    bool
 }
 
 func NewClient(cfg config.OpenAIEnvConfig, opts ...option.RequestOption) *Client {
@@ -31,7 +33,11 @@ func NewClient(cfg config.OpenAIEnvConfig, opts ...option.RequestOption) *Client
 		options = append(options, option.WithMiddleware(openAIMiddleware(cfg.OTel)))
 	}
 	options = append(options, opts...)
-	return &Client{client: openai.NewClient(options...)}
+	return &Client{
+		client:           openai.NewClient(options...),
+		enableThinking:   cfg.EnableThinking,
+		hasCustomBaseURL: cfg.BaseURL != "",
+	}
 }
 
 func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
@@ -97,7 +103,19 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 		params.MaxTokens = openai.Int(int64(request.MaxTokens))
 	}
 
-	response, err := c.client.Chat.Completions.New(ctx, params)
+	requestOptions := []option.RequestOption{}
+	enableThinking := c.enableThinking
+	if request.EnableThinking != nil {
+		enableThinking = *request.EnableThinking
+	}
+	// Only include chat_template_kwargs when using a custom OpenAI base URL.
+	if c.hasCustomBaseURL {
+		requestOptions = append(requestOptions,
+			option.WithJSONSet("chat_template_kwargs", map[string]bool{"enable_thinking": enableThinking}),
+		)
+	}
+
+	response, err := c.client.Chat.Completions.New(ctx, params, requestOptions...)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
