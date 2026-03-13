@@ -3,7 +3,6 @@ package openai
 import (
 	"context"
 	"fmt"
-	"os"
 
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -17,8 +16,9 @@ import (
 )
 
 type Client struct {
-	client         openai.Client
-	enableThinking bool
+	client              openai.Client
+	enableThinking      bool
+	hasCustomBaseURL    bool
 }
 
 func NewClient(cfg config.OpenAIEnvConfig, opts ...option.RequestOption) *Client {
@@ -33,7 +33,11 @@ func NewClient(cfg config.OpenAIEnvConfig, opts ...option.RequestOption) *Client
 		options = append(options, option.WithMiddleware(openAIMiddleware(cfg.OTel)))
 	}
 	options = append(options, opts...)
-	return &Client{client: openai.NewClient(options...), enableThinking: cfg.EnableThinking}
+	return &Client{
+		client:           openai.NewClient(options...),
+		enableThinking:   cfg.EnableThinking,
+		hasCustomBaseURL: cfg.BaseURL != "",
+	}
 }
 
 func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
@@ -105,7 +109,7 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 		enableThinking = *request.EnableThinking
 	}
 	// Only include chat_template_kwargs when using a custom OpenAI base URL.
-	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+	if c.hasCustomBaseURL {
 		requestOptions = append(requestOptions,
 			option.WithJSONSet("chat_template_kwargs", map[string]bool{"enable_thinking": enableThinking}),
 		)
