@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"fmt"
+	"os"
 
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -103,9 +104,12 @@ func (c *Client) ChatCompletion(ctx context.Context, request llm.ChatRequest) (l
 	if request.EnableThinking != nil {
 		enableThinking = *request.EnableThinking
 	}
-	requestOptions = append(requestOptions,
-		option.WithJSONSet("chat_template_kwargs", map[string]bool{"enable_thinking": enableThinking}),
-	)
+	// Only include chat_template_kwargs when using a custom OpenAI base URL.
+	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+		requestOptions = append(requestOptions,
+			option.WithJSONSet("chat_template_kwargs", map[string]bool{"enable_thinking": enableThinking}),
+		)
+	}
 
 	response, err := c.client.Chat.Completions.New(ctx, params, requestOptions...)
 	if err != nil {
