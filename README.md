@@ -19,6 +19,7 @@ go run ./cmd/curator -config curator.yaml -run-once
 - `OPENAI_BASE_URL` (optional for OpenAI-compatible endpoints)
 - `OPENAI_MODEL` (optional, default: `gpt-4o-mini`)
 - `OPENAI_TEMPERATURE` (optional, default: provider default; overridden by per-processor YAML `temperature`)
+- `OPENAI_ENABLE_THINKING` (optional, default: `true`; set `false` for providers/models such as Qwen 3.5 when you want to disable thinking/reasoning mode)
 
 ### Email Output (SMTP)
 - `SMTP_HOST` (required unless set in YAML)
