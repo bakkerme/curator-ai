@@ -102,13 +102,13 @@ const (
 
 // Interaction captures a single ChatCompletion call.
 type Interaction struct {
-    Index    int              `json:"index"`
+    Key      string           `json:"key"`      // stable lookup key (hash of request messages)
     Request  llm.ChatRequest  `json:"request"`
     Response llm.ChatResponse `json:"response"`
     Error    string           `json:"error,omitempty"`
 }
 
-// Tape is the serialized sequence of interactions.
+// Tape is the serialized collection of interactions, keyed for concurrent-safe lookup.
 type Tape struct {
     Interactions []Interaction `json:"interactions"`
     RecordedAt   time.Time     `json:"recorded_at"`
@@ -117,22 +117,58 @@ type Tape struct {
 
 // Client wraps an llm.Client and records/replays interactions.
 type Client struct {
-    inner llm.Client // nil in replay mode
-    mode  Mode
-    tape  *Tape
-    mu    sync.Mutex
-    idx   int       // current replay position
+    inner  llm.Client // nil in replay mode
+    mode   Mode
+    tape   *Tape
+    mu     sync.Mutex
+    index  map[string][]int // key -> indices into tape.Interactions
+    used   map[int]bool     // tracks which interactions have been consumed
 }
 
 func NewClient(inner llm.Client, mode Mode, tape *Tape) *Client
 func NewReplayClient(tape *Tape) *Client
 func (c *Client) ChatCompletion(ctx context.Context, req llm.ChatRequest) (llm.ChatResponse, error)
 func (c *Client) Close() error  // writes tape to disk in record mode
+func interactionKey(req llm.ChatRequest) string  // deterministic hash of request messages
 ```
 
-**Record mode**: Proxies every `ChatCompletion` call to `inner`, appends the request/response pair to `tape.Interactions`, and writes the tape to disk via `Close()`.
+**Record mode**: Proxies every `ChatCompletion` call to `inner`, computes a stable key from the request, appends the keyed interaction to `tape.Interactions`, and writes the tape to disk via `Close()`.
 
-**Replay mode**: On each `ChatCompletion` call, returns `tape.Interactions[idx]` and increments `idx`. No real LLM call is made. If the request diverges from the recorded request (optional strict mode), it logs a warning or fails the test.
+**Replay mode**: On each `ChatCompletion` call, computes the same key from the incoming request and looks up a matching interaction in the tape. Returns the recorded response. No real LLM call is made. If no match is found, the test fails with a descriptive error.
+
+#### Concurrency-safe replay via key-based matching
+
+The quality, summary, and image-captioning processors all support `MaxConcurrency > 1`, dispatching LLM calls from goroutines. This means the *order* of `ChatCompletion` calls is non-deterministic between runs. A simple FIFO index would break.
+
+Instead, the recording client uses **key-based matching**:
+
+1. **Key computation**: `interactionKey(req)` produces a deterministic hash from the full request content (model + all message roles and contents, concatenated and hashed with SHA-256). Since each block has a unique ID and content, the rendered prompts are naturally distinct, producing unique keys.
+
+2. **Record mode**: Each interaction is stored with its computed key. If two requests happen to produce the same key (e.g., retries with identical content), they are stored as separate entries under the same key and replayed in FIFO order within that key.
+
+3. **Replay mode**: On each `ChatCompletion` call, the client computes the key, looks up the next unconsumed interaction with that key, marks it consumed, and returns the recorded response. This is safe regardless of goroutine scheduling order.
+
+```go
+func interactionKey(req llm.ChatRequest) string {
+    h := sha256.New()
+    h.Write([]byte(req.Model))
+    for _, msg := range req.Messages {
+        h.Write([]byte(msg.Role))
+        h.Write([]byte(msg.Content))
+        for _, part := range msg.Parts {
+            h.Write([]byte(part.Type))
+            h.Write([]byte(part.Text))
+            h.Write([]byte(part.ImageURL))
+        }
+    }
+    return hex.EncodeToString(h.Sum(nil))
+}
+```
+
+This approach means:
+- Tests exercise the same concurrent code paths as production (no need to force `MaxConcurrency=1`).
+- Replay is deterministic regardless of goroutine scheduling.
+- Retries with identical prompts (e.g., JSON parse failures) are handled correctly via per-key FIFO ordering.
 
 #### Configuration
 
@@ -188,7 +224,7 @@ client := recording.NewReplayClient(tape)
   "model": "gpt-4o-mini",
   "interactions": [
     {
-      "index": 0,
+      "key": "a1b2c3d4e5f6..."  ,
       "request": {
         "model": "gpt-4o-mini",
         "messages": [
@@ -581,6 +617,12 @@ Using `go test` keeps the eval system integrated with the existing test infrastr
 ### Temperature handling for determinism
 
 When recording tapes, the recording client should force `temperature: 0` (or the lowest supported value) to maximize reproducibility of recorded responses. In replay mode, temperature is irrelevant since no real LLM call is made.
+
+### Concurrency in record/replay
+
+The quality, summary, and image-captioning processors all support `MaxConcurrency > 1`, dispatching LLM calls from concurrent goroutines. A naive FIFO replay (returning `tape[idx++]`) would be non-deterministic because goroutine scheduling varies between runs.
+
+The recording client solves this with **key-based matching**: each interaction is keyed by a SHA-256 hash of the full request content (model + messages). Since each block produces a unique rendered prompt, keys are naturally distinct. In replay, the client looks up the matching interaction by key rather than by position, so the result is correct regardless of call order. See Section 4.1 for details.
 
 ## 9. Future Extensions
 
