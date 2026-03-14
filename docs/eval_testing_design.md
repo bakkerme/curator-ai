@@ -17,52 +17,36 @@ Curator AI currently lacks a system for:
 | E2E test (Mailpit) | `internal/e2e/mailpit_test.go` -- RSS source -> email output only (no LLM stages) |
 | Unit tests | Individual processor tests with mock LLM client |
 
-These primitives are useful but disconnected. There is no harness that ties them together into a full pipeline test that exercises prompt rendering, LLM interaction, response parsing, and output validation in a single run.
+These primitives are useful but disconnected. There is no way to run the full pipeline with LLM stages included in a deterministic, repeatable way.
 
 ## 2. Design Goals
 
 1. **Deterministic CI tests**: Full-pipeline tests that run in CI without a live LLM endpoint, using recorded LLM interactions.
 2. **Prompt iteration workflow**: Run the full pipeline against a real LLM with fixture data, record the interactions, and replay them deterministically afterward.
 3. **Minimal new abstractions**: Build on existing types (`core.PostBlock`, `core.RunSummary`, `llm.Client`, snapshot JSON) rather than introducing new frameworks.
-4. **Go-native**: Everything runs via `go test` with build tags; no external test runners.
+4. **Simple**: No custom test spec format or assertion engine. Tests are written in Go using standard `go test` and existing assertion libraries.
 
 ## 3. Architecture Overview
 
 ```
-                                    +--------------------+
-                                    |  Eval Spec (YAML)  |
-                                    |  curator doc ref,  |
-                                    |  tape ref,         |
-                                    |  assertions        |
-                                    +---------+----------+
-                                              |
-                                 +------------v-----------+
-                                 |    Eval Test Runner     |
-                                 |  go test -tags=eval     |
-                                 |                         |
-                                 |  1. Load eval spec      |
-                                 |  2. Parse curator doc   |
-                                 |  3. Build pipeline via  |
-                                 |     factory             |
-                                 |  4. Inject recording    |
-                                 |     LLM client          |
-                                 |  5. Run pipeline        |
-                                 |  6. Capture stage state |
-                                 |     via observer        |
-                                 |  7. Check assertions    |
-                                 |  8. Write report        |
-                                 +---+-------------+------+
-                                     |             |
-                          +----------+             +----------+
-                          v                                   v
-                 +--------+---------+              +----------+----------+
-                 | Recording Client |              | Stage Observer      |
-                 | record: proxy to |              | (wraps processors,  |
-                 |   real LLM, save |              |  captures blocks    |
-                 |   tape to disk   |              |  after each stage)  |
-                 | replay: return   |              +---------------------+
-                 |   saved tape     |
-                 +------------------+
+                 +----------------------------+
+                 |      Curator Pipeline      |
+                 |  (sources, quality,        |
+                 |   summary, run_summary,    |
+                 |   output)                  |
+                 +-------------+--------------+
+                               |
+                    uses llm.Client interface
+                               |
+                 +-------------v--------------+
+                 |    Recording LLM Client    |
+                 |                            |
+                 |  record: proxy to real LLM |
+                 |    + save tape to disk     |
+                 |                            |
+                 |  replay: return saved tape |
+                 |    (no real LLM calls)     |
+                 +----------------------------+
 ```
 
 ### How the recording client relates to snapshots
@@ -75,18 +59,7 @@ Snapshots and the recording client operate at **different levels** and compose t
 
 Together, they enable a complete e2e test: restore fixture data from a source snapshot, then replay recorded LLM interactions for quality/summary/run_summary stages. No live source or live LLM required.
 
-### Key components
-
-| Component | Location | Purpose |
-|---|---|---|
-| **Recording LLM Client** | `internal/llm/recording/` | Wraps any `llm.Client`; records all `ChatCompletion` calls to a JSON tape file (record mode) or replays them (replay mode). |
-| **Eval Spec** | `testdata/eval/*.yml` | YAML files defining test cases: which curator document to use, which tape file, and what assertions to check. |
-| **Eval Runner** | `internal/eval/` | Test harness that loads eval specs, builds the pipeline with the recording client injected, executes it, and checks assertions. |
-| **Stage Observer** | `internal/eval/observer.go` | Thin wrapper processors (same pattern as `snapshot.Wrap*`) that capture `[]*PostBlock` after each stage for assertion. |
-
-## 4. Component Details
-
-### 4.1 Recording LLM Client
+## 4. Recording LLM Client
 
 A new `llm.Client` implementation that supports two modes:
 
@@ -136,7 +109,7 @@ func interactionKey(req llm.ChatRequest) string  // deterministic hash of reques
 
 **Replay mode**: On each `ChatCompletion` call, computes the same key from the incoming request and looks up a matching interaction in the tape. Returns the recorded response. No real LLM call is made. If no match is found, the test fails with a descriptive error.
 
-#### Concurrency-safe replay via key-based matching
+### Concurrency-safe replay via key-based matching
 
 The quality, summary, and image-captioning processors all support `MaxConcurrency > 1`, dispatching LLM calls from goroutines. This means the *order* of `ChatCompletion` calls is non-deterministic between runs. A simple FIFO index would break.
 
@@ -170,7 +143,7 @@ This approach means:
 - Replay is deterministic regardless of goroutine scheduling.
 - Retries with identical prompts (e.g., JSON parse failures) are handled correctly via per-key FIFO ordering.
 
-#### Configuration
+### Configuration
 
 The recording client is configured at two levels:
 
@@ -214,22 +187,22 @@ if path := envCfg.LLMReplayPath; path != "" {
 }
 ```
 
-**2. Programmatic (for eval tests)**
+**2. Programmatic (for Go tests)**
 
 ```go
 // Record against real LLM
 tape := recording.NewTape()
 client := recording.NewClient(realLLMClient, recording.ModeRecord, tape)
 // ... run pipeline ...
-tape.SaveTo("testdata/eval/tapes/my_test.json")
+tape.SaveTo("testdata/tapes/my_test.json")
 
 // Replay for deterministic CI
-tape, _ := recording.LoadTape("testdata/eval/tapes/my_test.json")
+tape, _ := recording.LoadTape("testdata/tapes/my_test.json")
 client := recording.NewReplayClient(tape)
 // ... run pipeline -- no real LLM calls ...
 ```
 
-#### Tape file format
+### Tape file format
 
 ```json
 {
@@ -237,7 +210,7 @@ client := recording.NewReplayClient(tape)
   "model": "gpt-4o-mini",
   "interactions": [
     {
-      "key": "a1b2c3d4e5f6..."  ,
+      "key": "a1b2c3d4e5f6...",
       "request": {
         "model": "gpt-4o-mini",
         "messages": [
@@ -254,191 +227,62 @@ client := recording.NewReplayClient(tape)
 }
 ```
 
-### 4.2 Eval Spec Format
+## 5. Writing E2E Tests
 
-Each eval spec is a YAML file defining a single test scenario:
+With the recording client available, full-pipeline e2e tests are written as standard Go test functions. No special spec format or assertion engine is needed.
 
-```yaml
-# testdata/eval/reddit_quality_summary.yml
-name: "Reddit quality + summary full flow"
-description: "Tests quality filtering and post summarization with Reddit-style fixture data"
-
-# The curator document to use for this eval (file reference)
-curator_document: testdata/eval/fixtures/reddit_flow.yml
-
-# LLM tape file for deterministic replay.
-# When EVAL_LLM_RECORD=1 is set, a new tape is recorded to this path.
-# When absent and no env var is set, the test is skipped.
-llm_tape: testdata/eval/tapes/reddit_quality_summary.json
-
-# Assertions on the pipeline output
-assertions:
-  # Stage-level assertions
-  after_source:
-    block_count:
-      min: 3
-      max: 10
-
-  after_quality:
-    block_count:
-      min: 1
-    blocks:
-      - match: { title_contains: "benchmark" }
-        quality:
-          result: "pass"
-          score_min: 0.5
-
-  after_post_summary:
-    blocks:
-      - match: { quality_result: "pass" }
-        summary:
-          not_empty: true
-          max_length: 2000
-
-  after_run_summary:
-    run_summary:
-      not_empty: true
-      contains_any:
-        - "benchmark"
-        - "performance"
-
-  after_output:
-    email:
-      subject_contains: "Curator"
-      body_contains:
-        - "benchmark"
-```
-
-### 4.3 Eval Runner
-
-The eval runner is a Go test file that:
-
-1. Discovers eval spec YAML files in `testdata/eval/`
-2. For each spec, builds a `core.Flow` from the referenced curator document
-3. Injects the recording LLM client (replay or record mode based on env vars)
-4. Wraps processors with stage observers to capture intermediate state
-5. Runs the pipeline via `runner.RunOnce()`
-6. Checks assertions against captured state
-7. Writes a JSON result report
+### Example: E2E test with recorded LLM interactions
 
 ```go
-// internal/eval/eval_test.go
-//go:build eval
+//go:build e2e
 
-func TestEval(t *testing.T) {
-    specs, err := LoadSpecs("../../testdata/eval")
+func TestFullPipelineWithLLM(t *testing.T) {
+    if os.Getenv("CURATOR_E2E") == "" {
+        t.Skip("set CURATOR_E2E=1 to enable e2e tests")
+    }
+
+    // Load a recorded tape for deterministic replay
+    tape, err := recording.LoadTape("testdata/tapes/quality_summary.json")
     require.NoError(t, err)
 
-    for _, spec := range specs {
-        t.Run(spec.Name, func(t *testing.T) {
-            result := RunEval(t, spec)
-            WriteReport(t, spec, result)
-        })
+    client := recording.NewReplayClient(tape)
+
+    // Build pipeline from a curator document using the replay client
+    doc, err := config.LoadCuratorDocument("testdata/fixtures/test_flow.yml")
+    require.NoError(t, err)
+
+    flow, err := factory.NewFromDocument(doc, client, envCfg)
+    require.NoError(t, err)
+
+    // Run the pipeline
+    result, err := runner.RunOnce(context.Background(), flow)
+    require.NoError(t, err)
+
+    // Assert on the output using standard Go test assertions
+    assert.GreaterOrEqual(t, len(result.Blocks), 1)
+    for _, block := range result.Blocks {
+        assert.NotNil(t, block.Quality)
+        assert.NotNil(t, block.Summary)
+        assert.NotEmpty(t, block.Summary.Summary)
     }
+    assert.NotNil(t, result.RunSummary)
 }
 ```
 
-**Running modes**:
+### Composing with snapshot restore
 
-```bash
-# CI: replay recorded tapes (deterministic, no LLM needed)
-go test -tags=eval ./internal/eval/...
-
-# Local dev: record new tapes against a real LLM
-EVAL_LLM_RECORD=1 OPENAI_API_KEY=... go test -tags=eval ./internal/eval/... -run TestEval/reddit_quality
-
-# Local dev: run against real LLM without recording (one-off)
-EVAL_LLM_LIVE=1 OPENAI_API_KEY=... go test -tags=eval ./internal/eval/... -run TestEval/reddit_quality
-```
-
-### 4.4 Stage Observer
-
-To capture intermediate pipeline state without modifying the runner, wrap each processor with a thin observer:
-
-```go
-package eval
-
-// ObservedStage captures the state of blocks after a processor runs.
-type ObservedStage struct {
-    Name       string            `json:"name"`
-    Type       string            `json:"type"`       // "source", "quality", "post_summary", "run_summary", "output"
-    BlockCount int               `json:"block_count"`
-    Blocks     []*core.PostBlock `json:"blocks"`
-    RunSummary *core.RunSummary  `json:"run_summary,omitempty"`
-    Duration   time.Duration     `json:"duration"`
-}
-
-// Observer collects stage snapshots during a pipeline run.
-type Observer struct {
-    Stages []ObservedStage
-}
-```
-
-This uses the same wrapper pattern as the existing `snapshot.Wrap*` functions -- it wraps each processor type and captures blocks after the inner processor completes.
-
-### 4.5 Eval Report
-
-After each eval run, the runner writes a structured JSON report:
-
-```json
-{
-  "spec_name": "reddit_quality_summary",
-  "timestamp": "2025-03-14T08:01:00Z",
-  "duration_ms": 1234,
-  "llm_mode": "replay",
-  "stages": [
-    {
-      "name": "reddit-source",
-      "type": "source",
-      "block_count": 5,
-      "duration_ms": 100
-    },
-    {
-      "name": "is_relevant",
-      "type": "quality",
-      "block_count": 3,
-      "duration_ms": 450
-    }
-  ],
-  "assertions": {
-    "total": 8,
-    "passed": 7,
-    "failed": 1,
-    "results": [
-      {
-        "path": "after_quality.block_count.min",
-        "expected": ">=1",
-        "actual": "3",
-        "passed": true
-      },
-      {
-        "path": "after_post_summary.blocks[0].summary.max_length",
-        "expected": "<=2000",
-        "actual": "2150",
-        "passed": false
-      }
-    ]
-  },
-  "llm_interactions": 8
-}
-```
-
-## 5. Fixture Data Strategy
-
-### Fixture Curator Documents
-
-Store purpose-built curator documents in `testdata/eval/fixtures/`. These use the `testfile` source (or inline RSS fixtures like the existing e2e test) to load controlled input data, and include full prompt templates for all LLM stages.
+For tests that need controlled source data without a live source, use the existing snapshot `restore` feature in the fixture curator document:
 
 ```yaml
-# testdata/eval/fixtures/reddit_flow.yml
+# testdata/fixtures/test_flow.yml
 workflow:
-  name: "Eval - Reddit Quality + Summary"
+  name: "E2E Test Flow"
   trigger:
     - cron:
         schedule: "* * * * *"
   sources:
     - testfile:
-        path: "testdata/eval/fixtures/reddit_posts.json"
+        path: "testdata/fixtures/test_posts.md"
   quality:
     - llm:
         name: "is_relevant"
@@ -449,7 +293,6 @@ workflow:
           Content: {{.Content}}
         evaluations:
           - "Technical depth"
-          - "Novel insights"
         action_type: "pass_drop"
         threshold: 0.5
   post_summary:
@@ -476,138 +319,89 @@ workflow:
     - email:
         to: "test@example.com"
         from: "curator@example.com"
-        subject: "Eval Test Digest"
-        template: |
-          <html><body>
-          {{ range .Blocks }}<p>{{ .Title }}</p>{{ end }}
-          </body></html>
+        subject: "Test Digest"
 ```
-
-### Fixture Post Data
-
-Extend the `testfile` source to also accept JSON files containing pre-built `PostBlock` arrays (not just single markdown files). This allows controlling exactly what posts enter the pipeline:
-
-```json
-[
-  {
-    "id": "eval-post-1",
-    "title": "New LLM benchmark shows 2x improvement",
-    "content": "Researchers at MIT published a new benchmark...",
-    "author": "researcher42",
-    "url": "https://example.com/post-1",
-    "created_at": "2025-03-10T10:00:00Z",
-    "metadata": { "score": "150", "comment_count": "45" }
-  },
-  {
-    "id": "eval-post-2",
-    "title": "Check out my cat",
-    "content": "Here is a picture of my cat sitting on a keyboard.",
-    "author": "catperson99",
-    "url": "https://example.com/post-2",
-    "created_at": "2025-03-10T11:00:00Z",
-    "metadata": { "score": "5", "comment_count": "2" }
-  }
-]
-```
-
-### Using snapshots as fixture data
-
-Alternatively, use a real pipeline run to capture source output via the existing snapshot system, then reference that snapshot in the eval curator document with `restore: true`:
-
-```yaml
-sources:
-  - reddit:
-      subreddits: ["MachineLearning"]
-      snapshot:
-        restore: true
-        path: "testdata/eval/fixtures/ml_posts_snapshot.json"
-```
-
-This is useful when you want to test with realistic data from a real source run, rather than hand-crafted fixture posts.
 
 ## 6. Workflow Examples
 
-### Workflow 1: Setting up a new e2e test
+### Workflow 1: Recording a tape for a new e2e test
 
 ```bash
-# 1. Create fixture data and curator document
-vim testdata/eval/fixtures/my_flow.yml
-vim testdata/eval/fixtures/my_posts.json
+# 1. Create a fixture curator document with testfile source
+vim testdata/fixtures/test_flow.yml
 
-# 2. Create eval spec with assertions
-vim testdata/eval/my_test.yml
+# 2. Record LLM interactions against a real LLM
+CURATOR_LLM_RECORD=./testdata/tapes/test_flow.json \
+  go run ./cmd/curator -config testdata/fixtures/test_flow.yml -run-once
 
-# 3. Record LLM interactions against a real LLM
-EVAL_LLM_RECORD=1 OPENAI_API_KEY=... go test -tags=eval ./internal/eval/... -run TestEval/my_test -v
+# 3. Write a Go test that replays the tape and asserts on output
+vim internal/e2e/full_pipeline_test.go
 
-# 4. Inspect the report
-cat testdata/eval/results/my_test.json
+# 4. Verify the test passes in replay mode
+CURATOR_E2E=1 go test -tags=e2e ./internal/e2e -run TestFullPipelineWithLLM
 
-# 5. Commit the tape + spec (CI can now replay deterministically)
-git add testdata/eval/
+# 5. Commit the tape + test
+git add testdata/tapes/ internal/e2e/
 ```
 
 ### Workflow 2: Iterating on a prompt
 
 ```bash
 # 1. Edit the prompt template in the fixture curator document
-vim testdata/eval/fixtures/reddit_flow.yml
+vim testdata/fixtures/test_flow.yml
 
 # 2. Run against real LLM to see new results
-EVAL_LLM_LIVE=1 OPENAI_API_KEY=... go test -tags=eval ./internal/eval/... -run TestEval/reddit_quality -v
+CURATOR_LLM_RECORD=./testdata/tapes/test_flow.json \
+  go run ./cmd/curator -config testdata/fixtures/test_flow.yml -run-once
 
-# 3. If happy, record a new tape for CI
-EVAL_LLM_RECORD=1 go test -tags=eval ./internal/eval/... -run TestEval/reddit_quality
-
-# 4. Update assertions if needed, commit new tape
-git add testdata/eval/
+# 3. Inspect the output, re-record if happy
+# 4. Update test assertions if needed, commit new tape
 ```
 
-### Workflow 3: Recording LLM interactions via CLI (outside of eval tests)
+### Workflow 3: Recording from a production-like run
 
 ```bash
 # Record a full pipeline run with your real curator document
-CURATOR_LLM_RECORD=./tapes/v1.json go run ./cmd/curator -config curator.yaml -run-once
+CURATOR_LLM_RECORD=./tapes/prod_run.json \
+  go run ./cmd/curator -config curator.yaml -run-once
 
-# Later, replay deterministically (e.g., to test a code change)
-CURATOR_LLM_REPLAY=./tapes/v1.json go run ./cmd/curator -config curator.yaml -run-once
+# Later, replay deterministically (e.g., to test a code refactor)
+CURATOR_LLM_REPLAY=./tapes/prod_run.json \
+  go run ./cmd/curator -config curator.yaml -run-once
 ```
 
 ### Workflow 4: CI regression check
 
+The existing e2e test pattern works -- tests check for `CURATOR_E2E=1` and replay tapes:
+
 ```yaml
 # .github/workflows/test.yml addition
-- name: Run eval tests
-  run: go test -tags=eval ./internal/eval/...
+- name: Run e2e tests
+  env:
+    CURATOR_E2E: "1"
+  run: go test -tags=e2e ./internal/e2e/...
 ```
 
-No environment variables needed -- replay mode is the default when tape files exist.
+No `OPENAI_API_KEY` needed in CI -- replay mode requires no live LLM.
 
 ## 7. Implementation Plan
 
-### Phase 1: Recording LLM Client (foundation)
-- `internal/llm/recording/client.go` -- record/replay client
+### Phase 1: Recording LLM Client
+- `internal/llm/recording/client.go` -- record/replay client with key-based matching
 - `internal/llm/recording/tape.go` -- tape serialization (load/save)
-- Unit tests for record, replay, and strict-matching modes
+- Unit tests for record, replay, key matching, and concurrent access
 - Add `LLMRecordPath` / `LLMReplayPath` fields to `EnvConfig` in `internal/config/env.go`
 - Wire into factory, reading from `EnvConfig` (not `os.Getenv` directly)
 
-### Phase 2: Eval Runner Core
-- `internal/eval/spec.go` -- eval spec YAML parsing
-- `internal/eval/observer.go` -- stage observer wrappers
-- `internal/eval/runner.go` -- pipeline construction and execution with recording client
-- `internal/eval/assertions.go` -- assertion evaluation engine
-- `internal/eval/report.go` -- JSON report generation
-- `internal/eval/eval_test.go` -- test entrypoint (`go test -tags=eval`)
+### Phase 2: E2E Test with LLM Stages
+- Create fixture curator document with testfile source + all LLM stages
+- Record an initial tape against a real LLM
+- Write a Go e2e test (`internal/e2e/`) that replays the tape and asserts on pipeline output
+- Verify it passes in CI without `OPENAI_API_KEY`
 
-### Phase 3: Fixture Infrastructure
-- Extend `testfile` source to accept JSON `PostBlock` arrays
-- Create sample fixture data in `testdata/eval/fixtures/`
-- Create 2-3 example eval specs with recorded tapes
-
-### Phase 4: CI Integration
-- Add eval test step to `.github/workflows/test.yml`
-- Document the workflow in `docs/eval_testing.md`
+### Phase 3: CI Integration
+- Add e2e test step to `.github/workflows/test.yml`
+- Document the recording/replay workflow
 
 ## 8. Design Decisions
 
@@ -620,13 +414,9 @@ Snapshots and the recording client solve different problems at different levels:
 
 They compose naturally: use snapshot restore to inject fixture data at the source stage, then use the recording client to deterministically replay LLM interactions from that point forward. No duplication because they don't overlap.
 
-### Why YAML eval specs instead of pure Go test code?
+### Why standard Go tests instead of a custom spec format?
 
-Eval specs are primarily data (fixture references, assertions) not logic. YAML keeps them accessible to non-Go-developers who might be writing prompts, and makes it easy to add new test cases without writing Go code. The actual test logic lives in Go.
-
-### Why `go test -tags=eval` instead of a separate binary?
-
-Using `go test` keeps the eval system integrated with the existing test infrastructure, gets test parallelism and caching for free, and avoids a separate build/run step. The `eval` build tag ensures these tests don't run during normal `go test ./...`.
+For the current number of pipeline configurations, standard Go tests with the recording client provide sufficient coverage without the complexity of a custom YAML spec/assertion format. Go tests are familiar, debuggable, and integrate naturally with CI. A spec-driven framework can be added later if the number of test configurations grows.
 
 ### Temperature handling for determinism
 
@@ -636,11 +426,12 @@ When recording tapes, the recording client should force `temperature: 0` (or the
 
 The quality, summary, and image-captioning processors all support `MaxConcurrency > 1`, dispatching LLM calls from concurrent goroutines. A naive FIFO replay (returning `tape[idx++]`) would be non-deterministic because goroutine scheduling varies between runs.
 
-The recording client solves this with **key-based matching**: each interaction is keyed by a SHA-256 hash of the full request content (model + messages). Since each block produces a unique rendered prompt, keys are naturally distinct. In replay, the client looks up the matching interaction by key rather than by position, so the result is correct regardless of call order. See Section 4.1 for details.
+The recording client solves this with **key-based matching**: each interaction is keyed by a SHA-256 hash of the full request content (model + messages). Since each block produces a unique rendered prompt, keys are naturally distinct. In replay, the client looks up the matching interaction by key rather than by position, so the result is correct regardless of call order. See Section 4 for details.
 
 ## 9. Future Extensions
 
-- **Prompt comparison tool**: A CLI that diffs two eval reports to show how prompt changes affected block counts, quality scores, summary lengths, etc.
+- **YAML eval spec framework**: If the number of pipeline/prompt configurations grows, add a spec-driven test runner with YAML-defined test cases, stage observers, and structured assertion evaluation.
+- **Prompt comparison tool**: A CLI that diffs two tape files or test outputs to show how prompt changes affected quality scores, summary lengths, etc.
 - **LLM-as-judge evaluation**: Use a separate LLM call to score output quality (e.g., "rate this summary 1-5 for accuracy and conciseness").
 - **Prompt versioning**: Tag tapes with prompt template hashes for tracking quality over time.
 - **Visual diff in CI**: GitHub Actions comment with a table showing eval results on each PR.
