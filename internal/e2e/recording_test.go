@@ -187,9 +187,14 @@ func TestRecordingLLMClient(t *testing.T) {
 
 		cmd := exec.CommandContext(ctx, "go", "run", "./cmd/curator", "-config", flowFile, "-run-once")
 		cmd.Dir = repoRoot
+		// Point OPENAI_BASE_URL at the mock server so that if replay wiring
+		// regresses and falls back to the real client, any call is caught by
+		// the llmCallCount counter instead of hitting the network.
 		cmd.Env = append(os.Environ(),
 			"CURATOR_CONFIG="+flowFile,
 			"OPENAI_MODEL=gpt-4o-mini",
+			"OPENAI_API_KEY=test-key",
+			"OPENAI_BASE_URL="+mockLLM.URL+"/v1",
 			"CURATOR_LLM_REPLAY="+tapePath,
 		)
 		out, err := cmd.CombinedOutput()
