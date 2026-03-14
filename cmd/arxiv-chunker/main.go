@@ -14,7 +14,10 @@ import (
 )
 
 func main() {
-	env := config.LoadEnv()
+	env, err := config.LoadEnv()
+	if err != nil {
+		log.Fatalf("failed to load env config: %v", err)
+	}
 
 	url := flag.String("url", "", "arXiv PDF URL to fetch and chunk")
 	mode := flag.String("mode", "all", "chunking mode to preview: all, section, or size")

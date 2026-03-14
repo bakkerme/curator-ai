@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"net/url"
 	"os"
 	"strconv"
@@ -100,15 +101,19 @@ type SMTPEnvConfig struct {
 	InsecureSkipVerify bool
 }
 
-func LoadEnv() EnvConfig {
-	cfgPath := envString("CURATOR_CONFIG", "curator.yaml")
+func LoadEnv() (EnvConfig, error) {
+	cfgPath := envString("CURATOR_CONFIG", "")
+	if cfgPath == "" {
+		return EnvConfig{}, errors.New("CURATOR_CONFIG environment variable is required")
+	}
+
 	flowID := envString("FLOW_ID", "flow-1")
 
 	otlpEndpoint := strings.TrimSpace(envString("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
 
 	openAIModel := strings.TrimSpace(envString("OPENAI_MODEL", ""))
 	if openAIModel == "" {
-		openAIModel = "gpt-4o-mini"
+		return EnvConfig{}, errors.New("OPENAI_MODEL environment variable is required")
 	}
 
 	return EnvConfig{
@@ -179,7 +184,7 @@ func LoadEnv() EnvConfig {
 		},
 		LLMRecordPath: strings.TrimSpace(envString("CURATOR_LLM_RECORD", "")),
 		LLMReplayPath: strings.TrimSpace(envString("CURATOR_LLM_REPLAY", "")),
-	}
+	}, nil
 }
 
 func envString(key, fallback string) string {
