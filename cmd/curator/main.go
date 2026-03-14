@@ -52,6 +52,11 @@ func main() {
 	if err != nil {
 		log.Panicf("failed to build runtime factory from environment: %v", err)
 	}
+	defer func() {
+		if err := factory.Close(); err != nil {
+			logger.Error("failed to close factory", "error", err)
+		}
+	}()
 
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}

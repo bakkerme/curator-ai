@@ -24,6 +24,8 @@ type EnvConfig struct {
 	RSS                      RSSEnvConfig
 	Scrape                   ScrapeEnvConfig
 	SMTP                     SMTPEnvConfig
+	LLMRecordPath            string // CURATOR_LLM_RECORD -- tape file path for record mode
+	LLMReplayPath            string // CURATOR_LLM_REPLAY -- tape file path for replay mode
 }
 
 type OpenAIEnvConfig struct {
@@ -180,6 +182,8 @@ func LoadEnv() (EnvConfig, error) {
 			TLSMode:            envString("SMTP_TLS_MODE", ""),
 			InsecureSkipVerify: envBool("SMTP_INSECURE_SKIP_VERIFY", false),
 		},
+		LLMRecordPath: strings.TrimSpace(envString("CURATOR_LLM_RECORD", "")),
+		LLMReplayPath: strings.TrimSpace(envString("CURATOR_LLM_REPLAY", "")),
 	}, nil
 }
 
