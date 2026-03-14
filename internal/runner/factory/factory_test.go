@@ -3,6 +3,7 @@ package factory
 import (
 	"log/slog"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/bakkerme/curator-ai/internal/config"
@@ -78,6 +79,26 @@ func TestParseRedditProxyURL(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewFromEnvConfig_RecordReplayMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.Default()
+
+	_, err := NewFromEnvConfig(logger, config.EnvConfig{
+		OpenAI: config.OpenAIEnvConfig{
+			Model: "gpt-4o-mini",
+		},
+		LLMRecordPath: "/tmp/record.json",
+		LLMReplayPath: "/tmp/replay.json",
+	})
+	if err == nil {
+		t.Fatal("expected error when both CURATOR_LLM_RECORD and CURATOR_LLM_REPLAY are set")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive error, got: %v", err)
 	}
 }
 

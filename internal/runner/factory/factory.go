@@ -73,6 +73,9 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 	}
 	var llmClient llm.Client = llmopenai.NewClient(env.OpenAI)
 	var closers []Closer
+	if env.LLMRecordPath != "" && env.LLMReplayPath != "" {
+		return nil, fmt.Errorf("CURATOR_LLM_RECORD and CURATOR_LLM_REPLAY are mutually exclusive; set only one")
+	}
 	if env.LLMReplayPath != "" {
 		tape, err := recording.LoadTape(env.LLMReplayPath)
 		if err != nil {
