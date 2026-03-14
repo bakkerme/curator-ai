@@ -35,15 +35,22 @@ func main() {
 		log.Panicf("failed to load environment: %v", err)
 	}
 
-	configPath := flag.String("config", env.CuratorConfigPath, "path to curator document file or directory")
+	cDocPath := flag.String("config", env.CuratorDocPath, "path to curator document file or directory")
+
 	flowID := flag.String("flow-id", env.FlowID, "flow identifier")
 	runOnce := flag.Bool("run-once", env.RunOnce, "run once and exit")
 	allowPartial := flag.Bool("allow-partial", env.AllowPartialSourceErrors, "continue if a source fails")
 	flag.Parse()
 
+	resolvedConfigPath := strings.TrimSpace(*cDocPath)
+	if resolvedConfigPath == "" {
+		log.Panicf("config path cannot be empty (set -config or CURATOR_DOC_PATH)")
+	}
+	log.Printf("loading curator document(s) from: %s", resolvedConfigPath)
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-	loadedDocs, err := config.LoadCuratorDocuments(*configPath)
+	loadedDocs, err := config.LoadCuratorDocuments(resolvedConfigPath)
 	if err != nil {
 		log.Panicf("failed to load curator documents: %v", err)
 	}
@@ -52,6 +59,11 @@ func main() {
 	if err != nil {
 		log.Panicf("failed to build runtime factory from environment: %v", err)
 	}
+	defer func() {
+		if err := factory.Close(); err != nil {
+			logger.Error("failed to close factory", "error", err)
+		}
+	}()
 
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}

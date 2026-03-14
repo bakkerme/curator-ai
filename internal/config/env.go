@@ -10,7 +10,7 @@ import (
 )
 
 type EnvConfig struct {
-	CuratorConfigPath        string
+	CuratorDocPath        string
 	FlowID                   string
 	RunOnce                  bool
 	AllowPartialSourceErrors bool
@@ -24,6 +24,8 @@ type EnvConfig struct {
 	RSS                      RSSEnvConfig
 	Scrape                   ScrapeEnvConfig
 	SMTP                     SMTPEnvConfig
+	LLMRecordPath            string // CURATOR_LLM_RECORD -- tape file path for record mode
+	LLMReplayPath            string // CURATOR_LLM_REPLAY -- tape file path for replay mode
 }
 
 type OpenAIEnvConfig struct {
@@ -100,11 +102,7 @@ type SMTPEnvConfig struct {
 }
 
 func LoadEnv() (EnvConfig, error) {
-	cfgPath := envString("CURATOR_CONFIG", "")
-	if cfgPath == "" {
-		return EnvConfig{}, errors.New("CURATOR_CONFIG environment variable is required")
-	}
-
+	cdocPath := envString("CURATOR_CONFIG", "")
 	flowID := envString("FLOW_ID", "flow-1")
 
 	otlpEndpoint := strings.TrimSpace(envString("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
@@ -115,7 +113,7 @@ func LoadEnv() (EnvConfig, error) {
 	}
 
 	return EnvConfig{
-		CuratorConfigPath:        cfgPath,
+		CuratorDocPath:        cdocPath,
 		FlowID:                   flowID,
 		RunOnce:                  envBool("RUN_ONCE", false),
 		AllowPartialSourceErrors: envBool("ALLOW_PARTIAL_SOURCE_ERRORS", false),
@@ -180,6 +178,8 @@ func LoadEnv() (EnvConfig, error) {
 			TLSMode:            envString("SMTP_TLS_MODE", ""),
 			InsecureSkipVerify: envBool("SMTP_INSECURE_SKIP_VERIFY", false),
 		},
+		LLMRecordPath: strings.TrimSpace(envString("CURATOR_LLM_RECORD", "")),
+		LLMReplayPath: strings.TrimSpace(envString("CURATOR_LLM_REPLAY", "")),
 	}, nil
 }
 

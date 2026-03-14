@@ -46,6 +46,7 @@ This file is intentionally a short index. The authoritative behavior and design 
 ## Integrations
 
 - LLM abstraction + OpenAI-compatible client: [internal/llm](internal/llm)
+- LLM recording/replay (tape-based deterministic testing): [docs/llm_recording.md](docs/llm_recording.md)
 - Source fetchers + mocks:
   - Reddit: [internal/sources/reddit](internal/sources/reddit)
   - RSS: [internal/sources/rss](internal/sources/rss)

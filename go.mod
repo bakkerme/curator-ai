@@ -4,11 +4,15 @@ go 1.25.5
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
+	github.com/PuerkitoBio/goquery v1.8.0
+	github.com/enetx/g v1.0.216
+	github.com/enetx/surf v1.0.195
 	github.com/gabriel-vasile/mimetype v1.4.6
 	github.com/google/cel-go v0.23.2
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/stretchr/testify v1.11.1
 	github.com/vartanbeno/go-reddit/v2 v2.0.0
 	github.com/wneessen/go-mail v0.7.2
 	github.com/yuin/goldmark v1.7.13
@@ -18,24 +22,24 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.32.0
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.opentelemetry.io/otel/trace v1.32.0
+	golang.org/x/net v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
+	modernc.org/sqlite v1.43.0
 )
 
 require (
 	cel.dev/expr v0.19.1 // indirect
 	github.com/JohannesKaufmann/dom v0.2.0 // indirect
-	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/enetx/g v1.0.216 // indirect
 	github.com/enetx/http v1.0.28 // indirect
 	github.com/enetx/http2 v1.0.26 // indirect
 	github.com/enetx/http3 v1.0.7 // indirect
 	github.com/enetx/iter v0.0.0-20250912135656-f1583323588f // indirect
-	github.com/enetx/surf v1.0.195 // indirect
 	github.com/enetx/utls v0.0.0-20260115181616-c525a7d559c8 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -49,6 +53,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -62,7 +67,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
@@ -73,5 +77,4 @@ require (
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.43.0 // indirect
 )

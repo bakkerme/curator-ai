@@ -5,6 +5,7 @@
 .gotmp
 curator-seen.db
 snapshots/
+tapes/
 
 # Build artifacts
 /bin/
