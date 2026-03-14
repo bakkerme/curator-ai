@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -120,7 +121,7 @@ func (f *Factory) Close() error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("factory close: %v", errs)
+		return fmt.Errorf("factory close: %w", errors.Join(errs...))
 	}
 	return nil
 }
