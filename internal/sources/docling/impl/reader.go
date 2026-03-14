@@ -76,7 +76,7 @@ func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		limited := io.LimitReader(resp.Body, r.maxBodySize+1)
 		body, err := io.ReadAll(limited)

@@ -115,7 +115,7 @@ func (s *SQLiteStore) MarkSeenBatch(ctx context.Context, ids []string) error {
 		_ = tx.Rollback()
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	now := time.Now().UTC()
 	for _, id := range ids {
 		if id == "" {

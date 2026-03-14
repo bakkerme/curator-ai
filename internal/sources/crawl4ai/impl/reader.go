@@ -82,7 +82,7 @@ func (r *Reader) Read(ctx context.Context, urlStr string) (string, error) {
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		limited := io.LimitReader(resp.Body, r.maxBodySize+1)
 		body, err := io.ReadAll(limited)
@@ -146,7 +146,7 @@ func extractMarkdown(body []byte) (string, error) {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	if cr.Success == false {
+	if !cr.Success {
 		return "", fmt.Errorf("crawl4ai: crawl failed")
 	}
 
