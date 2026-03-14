@@ -72,7 +72,7 @@ func (f *Fetcher) Search(ctx context.Context, options arxiv.SearchOptions) ([]ar
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			bodySnippet := readBodySnippet(resp.Body, 2048)
 			statusErr := fmt.Errorf("arxiv api status %d: %s", resp.StatusCode, bodySnippet)

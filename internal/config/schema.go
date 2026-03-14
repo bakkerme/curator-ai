@@ -1014,7 +1014,10 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 
 	configBytes, _ := yaml.Marshal(d)
 	var rawConfig map[string]interface{}
-	yaml.Unmarshal(configBytes, &rawConfig)
+	err := yaml.Unmarshal(configBytes, &rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal raw config: %w", err)
+	}
 	flow.RawConfig = rawConfig
 
 	return flow, nil

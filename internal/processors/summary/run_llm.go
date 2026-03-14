@@ -67,7 +67,7 @@ func (p *RunLLMProcessor) Validate() error {
 		return fmt.Errorf("llm client is required")
 	}
 	if p.config.Context != "flow" {
-		return fmt.Errorf("run summary context must be flow.")
+		return fmt.Errorf("run summary context must be flow")
 	}
 	if p.config.PromptTemplate == "" {
 		return fmt.Errorf("prompt template is required for llm run summary processor")
