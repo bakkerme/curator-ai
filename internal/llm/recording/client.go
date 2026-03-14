@@ -145,14 +145,21 @@ func (c *Client) Close() error {
 // replay safe under concurrent access.
 func interactionKey(req llm.ChatRequest) string {
 	h := sha256.New()
+	sep := []byte{0}
 	h.Write([]byte(req.Model))
+	h.Write(sep)
 	for _, msg := range req.Messages {
 		h.Write([]byte(msg.Role))
+		h.Write(sep)
 		h.Write([]byte(msg.Content))
+		h.Write(sep)
 		for _, part := range msg.Parts {
 			h.Write([]byte(part.Type))
+			h.Write(sep)
 			h.Write([]byte(part.Text))
+			h.Write(sep)
 			h.Write([]byte(part.ImageURL))
+			h.Write(sep)
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))
