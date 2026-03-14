@@ -16,7 +16,7 @@ import (
 func main() {
 	env, err := config.LoadEnv()
 	if err != nil {
-		log.Fatalf("failed to load env config: %v", err)
+		log.Panicf("failed to load environment: %v", err)
 	}
 
 	url := flag.String("url", "", "arXiv PDF URL to fetch and chunk")
@@ -42,7 +42,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Fetched %d characters from %s\n", len([]rune(content)), strings.TrimSpace(*url))
+	_, _ = fmt.Fprintf(os.Stdout, "Fetched %d characters from %s\n", len([]rune(content)), strings.TrimSpace(*url))
 	for _, selectedMode := range selectedModes {
 		cfg := &config.ArxivChunkingConfig{
 			Mode:             selectedMode,
@@ -71,15 +71,15 @@ func resolveModes(raw string) ([]string, error) {
 // printPreview writes a stable, human-readable representation of each chunk so the
 // current heuristics can be compared against real papers.
 func printPreview(out *os.File, preview arxiv.ChunkingPreview) {
-	fmt.Fprintf(out, "\n=== MODE: %s ===\n", preview.Mode)
+	_, _ = fmt.Fprintf(out, "\n=== MODE: %s ===\n", preview.Mode)
 	if preview.Mode == "section" {
-		fmt.Fprintf(out, "headings_found=%t fallback_to_size=%t\n", preview.HeadingsFound, preview.UsedFallback)
+		_, _ = fmt.Fprintf(out, "headings_found=%t fallback_to_size=%t\n", preview.HeadingsFound, preview.UsedFallback)
 	}
-	fmt.Fprintf(out, "chunk_count=%d\n", len(preview.Chunks))
+	_, _ = fmt.Fprintf(out, "chunk_count=%d\n", len(preview.Chunks))
 
 	for i, chunk := range preview.Chunks {
 		length := len([]rune(chunk.Content))
-		fmt.Fprintf(out, "\n--- CHUNK %d (%d chars) ---\n", i+1, length)
-		fmt.Fprintln(out, chunk.Content)
+		_, _ = fmt.Fprintf(out, "\n--- CHUNK %d (%d chars) ---\n", i+1, length)
+		_, _ = fmt.Fprintln(out, chunk.Content)
 	}
 }

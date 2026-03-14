@@ -2,12 +2,10 @@ package config
 
 import "testing"
 
-// setRequiredEnv sets the env vars that LoadEnv requires so tests that
-// exercise other fields do not fail on the mandatory checks.
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("CURATOR_CONFIG", "test.yaml")
-	t.Setenv("OPENAI_MODEL", "gpt-4o-mini")
+	t.Setenv("CURATOR_CONFIG", "/dev/null")
+	t.Setenv("OPENAI_MODEL", "test-model")
 }
 
 func TestLoadEnv_RedditProxyDefaults(t *testing.T) {
@@ -17,7 +15,7 @@ func TestLoadEnv_RedditProxyDefaults(t *testing.T) {
 
 	env, err := LoadEnv()
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error loading env: %v", err)
 	}
 	if env.Reddit.ProxyEnabled {
 		t.Fatalf("expected REDDIT_PROXY_ENABLED default to be false")
@@ -34,7 +32,7 @@ func TestLoadEnv_RedditProxyConfigured(t *testing.T) {
 
 	env, err := LoadEnv()
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error loading env: %v", err)
 	}
 	if !env.Reddit.ProxyEnabled {
 		t.Fatalf("expected REDDIT_PROXY_ENABLED to be true")
@@ -50,7 +48,7 @@ func TestLoadEnv_OpenAIEnableThinkingDefault(t *testing.T) {
 
 	env, err := LoadEnv()
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error loading env: %v", err)
 	}
 	if !env.OpenAI.EnableThinking {
 		t.Fatalf("expected OPENAI_ENABLE_THINKING default to be true")
@@ -63,7 +61,7 @@ func TestLoadEnv_OpenAIEnableThinkingConfigured(t *testing.T) {
 
 	env, err := LoadEnv()
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error loading env: %v", err)
 	}
 	if env.OpenAI.EnableThinking {
 		t.Fatalf("expected OPENAI_ENABLE_THINKING to be false")

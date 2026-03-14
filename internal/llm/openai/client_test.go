@@ -19,7 +19,7 @@ func TestChatCompletion_SendsThinkingToggleFromEnvDefault(t *testing.T) {
 
 	requestBody := make(chan map[string]any, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		body, _ := io.ReadAll(r.Body)
 		decoded := map[string]any{}
 		_ = json.Unmarshal(body, &decoded)
@@ -60,7 +60,7 @@ func TestChatCompletion_RequestOverrideThinkingToggle(t *testing.T) {
 		body map[string]any
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		raw, _ := io.ReadAll(r.Body)
 		decoded := map[string]any{}
 		_ = json.Unmarshal(raw, &decoded)

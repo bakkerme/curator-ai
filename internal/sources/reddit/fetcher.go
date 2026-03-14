@@ -419,7 +419,7 @@ func timestampToTime(ts *goreddit.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}
 	}
-	return ts.Time.UTC()
+	return ts.UTC()
 }
 
 func extractPostURLs(post *goreddit.Post) (urls []string, images []string) {
