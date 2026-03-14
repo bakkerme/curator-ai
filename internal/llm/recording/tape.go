@@ -59,7 +59,7 @@ func (t *Tape) SaveTo(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // LoadTape reads a tape from a JSON file on disk.
