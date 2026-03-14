@@ -11,6 +11,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/dedupe"
 	"github.com/bakkerme/curator-ai/internal/llm"
 	llmopenai "github.com/bakkerme/curator-ai/internal/llm/openai"
+	"github.com/bakkerme/curator-ai/internal/llm/recording"
 	"github.com/bakkerme/curator-ai/internal/outputs/email"
 	"github.com/bakkerme/curator-ai/internal/outputs/email/smtp"
 	"github.com/bakkerme/curator-ai/internal/processors/output"
@@ -31,6 +32,12 @@ import (
 	"github.com/bakkerme/curator-ai/internal/sources/testfile"
 )
 
+// Closer is an optional interface that Factory components may implement to
+// release resources (e.g., writing a recording tape to disk).
+type Closer interface {
+	Close() error
+}
+
 type Factory struct {
 	Logger                  *slog.Logger
 	LLMClient               llm.Client
@@ -46,6 +53,7 @@ type Factory struct {
 	ScrapeFetcher           scrape.Fetcher
 	EmailSender             email.Sender
 	SeenStore               dedupe.SeenStore
+	closers                 []Closer
 }
 
 func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, error) {
@@ -63,7 +71,21 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 			slog.String("host", redditProxyURL.Host),
 		)
 	}
-	llmClient := llmopenai.NewClient(env.OpenAI)
+	var llmClient llm.Client = llmopenai.NewClient(env.OpenAI)
+	var closers []Closer
+	if env.LLMReplayPath != "" {
+		tape, err := recording.LoadTape(env.LLMReplayPath)
+		if err != nil {
+			return nil, fmt.Errorf("load LLM replay tape: %w", err)
+		}
+		llmClient = recording.NewReplayClient(tape)
+		logger.Info("LLM replay mode enabled", slog.String("tape", env.LLMReplayPath))
+	} else if env.LLMRecordPath != "" {
+		recClient := recording.NewRecordClient(llmClient, env.LLMRecordPath)
+		llmClient = recClient
+		closers = append(closers, recClient)
+		logger.Info("LLM record mode enabled", slog.String("tape", env.LLMRecordPath))
+	}
 	return &Factory{
 		Logger:                  logger,
 		LLMClient:               llmClient,
@@ -81,7 +103,23 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 		// YAML config + env defaults. This allows per-flow SMTP overrides in the Curator
 		// Document to take effect.
 		EmailSender: nil,
+		closers:     closers,
 	}, nil
+}
+
+// Close releases any resources held by the factory (e.g., writing a recording
+// tape to disk). Callers should defer Close after creating the factory.
+func (f *Factory) Close() error {
+	var errs []error
+	for _, c := range f.closers {
+		if err := c.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("factory close: %v", errs)
+	}
+	return nil
 }
 
 // parseRedditProxyURL validates env-driven Reddit proxy settings and returns
