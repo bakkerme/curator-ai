@@ -72,6 +72,10 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 			slog.String("host", redditProxyURL.Host),
 		)
 	}
+	// Build the LLM client, optionally wrapping it in a recording or replay
+	// layer. Record mode proxies to the real OpenAI client and writes every
+	// interaction to a tape file on Close. Replay mode serves pre-recorded
+	// responses from a tape without making any real LLM calls.
 	var llmClient llm.Client = llmopenai.NewClient(env.OpenAI)
 	var closers []Closer
 	if env.LLMRecordPath != "" && env.LLMReplayPath != "" {
