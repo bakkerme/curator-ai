@@ -2,7 +2,14 @@ package config
 
 import "testing"
 
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("CURATOR_CONFIG", "/dev/null")
+	t.Setenv("OPENAI_MODEL", "test-model")
+}
+
 func TestLoadEnv_RedditProxyDefaults(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("REDDIT_PROXY_ENABLED", "")
 	t.Setenv("REDDIT_PROXY_URL", "")
 
@@ -19,6 +26,7 @@ func TestLoadEnv_RedditProxyDefaults(t *testing.T) {
 }
 
 func TestLoadEnv_RedditProxyConfigured(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("REDDIT_PROXY_ENABLED", "true")
 	t.Setenv("REDDIT_PROXY_URL", "  http://user:pass@proxy.example.com:12321 \t")
 
@@ -35,6 +43,7 @@ func TestLoadEnv_RedditProxyConfigured(t *testing.T) {
 }
 
 func TestLoadEnv_OpenAIEnableThinkingDefault(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("OPENAI_ENABLE_THINKING", "")
 
 	env, err := LoadEnv()
@@ -47,6 +56,7 @@ func TestLoadEnv_OpenAIEnableThinkingDefault(t *testing.T) {
 }
 
 func TestLoadEnv_OpenAIEnableThinkingConfigured(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("OPENAI_ENABLE_THINKING", "false")
 
 	env, err := LoadEnv()
