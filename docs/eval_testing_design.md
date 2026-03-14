@@ -187,15 +187,28 @@ CURATOR_LLM_RECORD=./tapes/my_run.json go run ./cmd/curator -config curator.yaml
 CURATOR_LLM_REPLAY=./tapes/my_run.json go run ./cmd/curator -config curator.yaml -run-once
 ```
 
-The wiring happens in `factory.go` where the OpenAI client is already created. When `CURATOR_LLM_RECORD` or `CURATOR_LLM_REPLAY` is set, the factory wraps the client:
+The env vars are added to `EnvConfig` in `internal/config/env.go` (following the project convention of centralized env access) and loaded via the existing `envString` helper in `LoadEnv()`. The factory receives these values through `EnvConfig` rather than calling `os.Getenv` directly:
+
+```go
+// In internal/config/env.go, add to EnvConfig:
+type EnvConfig struct {
+    // ... existing fields ...
+    LLMRecordPath string // CURATOR_LLM_RECORD -- tape file path for record mode
+    LLMReplayPath string // CURATOR_LLM_REPLAY -- tape file path for replay mode
+}
+
+// In LoadEnv():
+LLMRecordPath: strings.TrimSpace(envString("CURATOR_LLM_RECORD", "")),
+LLMReplayPath: strings.TrimSpace(envString("CURATOR_LLM_REPLAY", "")),
+```
 
 ```go
 // In factory.go, after creating the real LLM client:
-if path := os.Getenv("CURATOR_LLM_RECORD"); path != "" {
+if path := envCfg.LLMRecordPath; path != "" {
     client = recording.NewClient(client, recording.ModeRecord, recording.NewTape())
     defer client.Close()  // saves tape to path
 }
-if path := os.Getenv("CURATOR_LLM_REPLAY"); path != "" {
+if path := envCfg.LLMReplayPath; path != "" {
     tape, _ := recording.LoadTape(path)
     client = recording.NewReplayClient(tape)
 }
@@ -576,7 +589,8 @@ No environment variables needed -- replay mode is the default when tape files ex
 - `internal/llm/recording/client.go` -- record/replay client
 - `internal/llm/recording/tape.go` -- tape serialization (load/save)
 - Unit tests for record, replay, and strict-matching modes
-- Wire into factory via `CURATOR_LLM_RECORD` / `CURATOR_LLM_REPLAY` env vars
+- Add `LLMRecordPath` / `LLMReplayPath` fields to `EnvConfig` in `internal/config/env.go`
+- Wire into factory, reading from `EnvConfig` (not `os.Getenv` directly)
 
 ### Phase 2: Eval Runner Core
 - `internal/eval/spec.go` -- eval spec YAML parsing
