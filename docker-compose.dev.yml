@@ -9,7 +9,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: curator-mailpit
+    container_name: mailpit
     ports:
       - "8025:8025" # web UI + API
       - "1025:1025" # SMTP
@@ -22,8 +22,8 @@ services:
     restart: unless-stopped
 
   docling:
-    image: unclecode/docling:latest
-    container_name: curator-docling
+    image: ghcr.io/bakkerme/docling-pdf-api:latest-cpu
+    container_name: docling
     ports:
       - 8000:8000
     restart: unless-stopped
@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile
       target: dev
     environment:
-      CURATOR_CONFIG: /app/curator.yaml
+      CURATOR_CONFIG: /app/curator-docs/minimal-rss.yaml
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_TLS_MODE: "disabled"
@@ -66,7 +66,7 @@ services:
       OTEL_CAPTURE_OPENAI_BODIES: ${OTEL_CAPTURE_OPENAI_BODIES}
 
       CRAWL4AI_BASE_URL: http://crawl4ai:11235
-      DOCLING_BASE_URL: ${DOCLING_BASE_URL|http://curator-docling:8000}
+      DOCLING_BASE_URL: http://docling:8000
       DOCLING_HTTP_TIMEOUT: ${DOCLING_HTTP_TIMEOUT}
     volumes:
       - ./:/app

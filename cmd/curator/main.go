@@ -30,7 +30,10 @@ type namedFlow struct {
 }
 
 func main() {
-	env := config.LoadEnv()
+	env, err := config.LoadEnv()
+	if err != nil {
+		log.Panicf("failed to load environment: %v", err)
+	}
 
 	configPath := flag.String("config", env.CuratorConfigPath, "path to curator document file or directory")
 	flowID := flag.String("flow-id", env.FlowID, "flow identifier")
