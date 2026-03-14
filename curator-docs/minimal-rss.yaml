@@ -1,0 +1,317 @@
+workflow:
+  name: "Bot Defence and Cybersecurity Research"
+  version: "1.0" # optional
+  max_concurrency: 20
+
+  trigger:
+    - cron:
+        schedule: "0 0 * * *" # midnight UTC
+        timezone: "UTC"       # explicit
+
+  sources:
+    - rss:
+        include_content: true
+        user_agent: "curator-ai/0.1"
+        limit: 5
+        convert_source_to_markdown: true
+        feeds:
+          # General Security
+          - https://unit42.paloaltonetworks.com/feed/
+
+        # snapshot:
+        #     # snapshot: true
+        #     restore: true
+        #     path: "snapshots/rss.json"
+
+  quality:
+    - llm:
+        name: is_relevant
+        prompt_template: isRelevantTemplate
+        evaluations:
+          - "Bot/abuse automation: scraping, credential stuffing, ATO, promo abuse, inventory hoarding, scalping, spam, fake account creation"
+          - "Attacker tooling details: Playwright/Puppeteer/Selenium, headless stealth, mobile emulation, anti-fingerprinting, scriptable browsers"
+          - "Evasion techniques: proxy rotation (residential/mobile), TLS/JA3/JA4, HTTP/2 fingerprinting, header ordering, sensor bypass, token replay"
+          - "Defense techniques with implementation detail: rate limiting, WAF rules, risk scoring, device/browser fingerprinting, behavioral signals, anomaly features"
+          - "Detection engineering: logging guidance, metrics, dashboards, rules (WAF/SIEM), false-positive considerations"
+          - "New vulnerabilities or bypasses relevant to web/app security, identity, edge/CDN/WAF, or anti-automation controls"
+          - "Threat landscape updates: active exploitation, phishing kits, malware campaigns, credential dumps, DDoS extortion, initial access techniques"
+          - "Concrete indicators: domains, ASNs, IP ranges, tooling fingerprints, payload patterns, user-agent strings, SDK/library identifiers"
+          - "Marketing posts are allowed if they are focused on new bot defence products"
+          - "Jumping off points for further investigation into cybersecurity topics"
+          - "News on agentic browsing or related technologies"
+        exclusions:
+          - "Webinars, events, hiring posts, partner press releases"
+          - "Generic 'top 10' / beginner security tips with no new information"
+          - "Unverifiable hot takes or speculation with no evidence"
+          - "Content unrelated to bot defense or the security threat landscape (e.g., general AI/company news)"
+        action_type: pass_drop
+        threshold: 0.5 # optional
+        images:
+          enabled: true
+          mode: multimodal
+          max_images: 4
+          include_comment_images: false
+        # block_error_policy: drop
+        block_error_policy: fail
+        # snapshot:
+        #   # snapshot: true
+        #   restore: true
+        #   path: "snapshots/rss-quality-llm.json"
+
+  post_summary:
+    - llm:
+        name: post_sum
+        type: llm
+        context: post
+        prompt_template: postSummaryTemplate
+        params:
+          interests:
+            - "Bot/abuse goal (scraping, ATO, carding, promo abuse, scalping, spam) and who it targets"
+            - "Attacker stack: tooling, frameworks, hosting, proxy providers, orchestration"
+            - "Evasion tactics: fingerprint spoofing, headless stealth, TLS/HTTP2 fingerprinting, session/token replay, CAPTCHA bypass"
+            - "Signals and detections: what to log, what features are useful, what breaks under NAT/proxies"
+            - "Mitigations: rate limits, challenges, device attestation/passkeys/WebAuthn, WAF/edge rules, UX tradeoffs"
+            - "Operational details: volumes, impact, timelines, affected surfaces (login/checkout/signup/API)"
+            - "Concrete indicators: domains/IPs/ASNs, UA strings, request patterns, SDK identifiers"
+        # snapshot:
+        #   # snapshot: true
+        #   restore: true
+        #   path: "snapshots/rss-post-summary.json"
+
+  run_summary:
+    - llm:
+        name: full_sum
+        type: llm
+        context: flow
+        prompt_template: fullSummaryTemplate
+        params:
+          focus:
+            - "Bot/abuse trends: what changed this week in attacker tooling, cost, and scale"
+            - "New bypasses/evasions impacting bot detection, WAFs, and edge controls"
+            - "High-impact web/app/identity vulnerabilities and real-world exploitation"
+            - "Threat landscape: phishing kits, malware campaigns, initial access and credential theft"
+            - "Actionable defense guidance: detections, mitigations, instrumentation, and measurement"
+            - "Ecosystem changes that affect bot defense: browser/platform changes, CDN/edge behavior, fingerprinting developments"
+        # snapshot:
+        #   # snapshot: true
+        #   restore: true
+        #   path: "snapshots/rss-run-summary.json"
+
+  output:
+    - email:
+        template: emailTemplate
+        to: brandon@bdmd.com.au
+        subject: "Daily Bot Defence + Security Digest"
+
+templates:
+  - id: isRelevantTemplate
+    system_template: |-
+      You are a strict relevance/quality evaluator.
+
+      Evaluate the following post and output ONLY valid JSON with this exact shape:
+      {"score": <number 0..1>, "reason": <string>}
+
+      Scoring guidance:
+      - 0.0 = completely irrelevant / low-signal
+      - 1.0 = extremely relevant / high-signal
+
+      Positive evaluation criteria (score higher when these apply):
+      {{- range .Evaluations }}
+      - {{ . }}
+      {{- end }}
+
+      Exclusion criteria (score near 0 when these apply):
+      {{- range .Exclusions }}
+      - {{ . }}
+      {{- end }}
+
+      Reason should be a single sentence of 25 words or less.
+
+      Return ONLY the JSON object. No markdown, no code fences.
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+      CreatedAt: {{ .CreatedAt }}
+
+      Content:
+      {{ .Content }}
+
+      Web Content:
+      {{- range .WebBlocks }}
+      - {{ .URL }}
+        {{ .Page }}
+      {{- end }}
+      -----USER CONTENT END-----
+
+  - id: postSummaryTemplate
+    system_template: |-
+      You are an expert technical analyst.
+
+      Write a concise summary of the following post. Focus on the reader interests.
+      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
+
+      Reader interests:
+      {{- range (index .Params "interests") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      - 3-6 bullet points
+      - then "Why it matters:" (1-2 sentences)
+      - then "Community response:" (1-2 sentences if comments are provided)
+
+    template: |-
+      -----USER CONTENT START-----
+      Post:
+      Title: {{ .Title }}
+      URL: {{ .URL }}
+      Author: {{ .Author }}
+
+      Content:
+      {{ .Content }}
+
+      Comments (optional signal; {{ len .Comments }}):
+      {{- range $i, $c := .Comments }}
+      - {{ $c.Author }}: {{ $c.Content }}
+      {{- end }}
+
+      Linked URLs:
+      {{- range .WebBlocks }}
+      - {{ .URL }}
+        {{ .Page }}
+      {{- end }}
+      -----USER CONTENT END-----
+
+  - id: postSummaryTemplateBatch
+    system_template: |-
+      You are an expert technical analyst.
+
+      You will be given a list of posts. For each post, write a concise summary focused on the reader interests.
+      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
+      When comments are present, summarise the community response.
+
+      Reader interests:
+      {{- range (index .Params "interests") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      - Return ONLY valid JSON.
+      - The top-level value MUST be a JSON array with exactly {{ len .Blocks }} items.
+      - Each item MUST be a string summary for the corresponding post (same order as provided).
+      - No markdown, no code fences.
+    template: |-
+      There are {{ len .Blocks }} posts.
+
+      {{- range $i, $p := .Blocks }}
+      --- Post {{ $i }} ---
+      Title: {{ $p.Title }}
+      URL: {{ $p.URL }}
+      Author: {{ $p.Author }}
+
+      Content:
+      {{ $p.Content }}
+
+      Comments (optional signal; {{ len $p.Comments }}):
+      {{- range $c := $p.Comments }}
+      - {{ $c.Author }}: {{ $c.Content }}
+      {{- end }}
+
+      Linked URLs:
+      {{- range $w := $p.WebBlocks }}
+      - {{ $w.URL }}
+        {{ $w.Page }}
+      {{- end }}
+      {{- end }}
+      
+  - id: fullSummaryTemplate
+    system_template: |-
+      You are writing an aggregate digest across multiple posts.
+
+      Produce an executive summary, then group notable items.
+
+      Include an:
+      - Executive summary, focused on 4-8 bullet points
+      - Notable Items, pick 5 most relevant items to the focus area, bulleted, include post title + 1 sentence
+
+      Focus areas:
+      {{- range (index .Params "focus") }}
+      - {{ . }}
+      {{- end }}
+
+      Output format:
+      # Executive summary
+      # Notable items
+
+    template: |-
+      There are {{ len .Blocks }} posts.
+
+      Posts:
+      {{- range $i, $p := .Blocks }}
+      ---
+      Title: {{ $p.Title }}
+      URL: {{ $p.URL }}
+      Author: {{ $p.Author }}
+      Post summary (if present): {{- if $p.Summary }}
+      {{ $p.Summary.Summary }}
+      {{- else }}
+      (none)
+      {{- end }}
+      {{- end }}
+
+  - id: emailTemplate
+    system_template: "--" # Email is still considered a prompt template right now
+    template: |-
+      <!doctype html>
+      <html>
+        <body style="margin:0;padding:0;background:#ffffff;">
+          <div style="max-width:720px;margin:0 auto;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
+            <h1 style="margin:0 0 12px 0;font-size:22px;">Daily Bot Defence + Security Digest</h1>
+
+            {{- if .RunSummary }}
+            {{- toHTML .RunSummary.Summary }}
+            {{- end }}
+
+            <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
+
+            {{- range .Blocks }}
+            <div style="padding:12px 0;border-top:1px solid #e5e5e5;">
+              {{- if gt (len .ImageBlocks) 0 }}
+              <img src="{{ (index .ImageBlocks 0).URL }}" style="max-width:100%;height:auto;display:block;margin:0 0 8px 0;" />
+              {{- end }}
+
+              <div style="font-size:15px;font-weight:700;margin:0 0 4px 0;">
+                <a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .Title }}</a>
+              </div>
+
+              <div style="font-size:12px;color:#666;margin:0 0 8px 0;">
+                <a href="{{ .URL }}" style="color:#666;text-decoration:none;">{{ .URL }}</a>
+              </div>
+
+              <div style="font-size:13px;margin:0;">
+                {{- if .Summary }}
+                {{ toHTML .Summary.Summary }}
+                {{- else }}
+                (no summary)
+                {{- end }}
+              </div>
+
+              {{- if .WebBlocks }}
+              <div style="margin:10px 0 0 0;font-size:13px;">
+                <div style="font-weight:700;margin:0 0 4px 0;">Links</div>
+                <ul style="margin:0;padding-left:18px;">
+                  {{- range .WebBlocks }}
+                  <li style="margin:0 0 4px 0;"><a href="{{ .URL }}" style="color:#111;text-decoration:underline;">{{ .URL }}</a></li>
+                  {{- end }}
+                </ul>
+              </div>
+              {{- end }}
+            </div>
+            {{- end }}
+          </div>
+        </body>
+      </html>
