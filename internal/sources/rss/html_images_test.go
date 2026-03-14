@@ -226,7 +226,6 @@ func TestExtractDataURIImagesFromHTML_ImageBlockShape(t *testing.T) {
 	if len(images) != 1 {
 		t.Fatalf("expected 1 image, got %d", len(images))
 	}
-	_ = images[0] // compile-time check the type is what we expect
 	if images[0].URL == "" {
 		t.Fatalf("expected image URL to be set")
 	}
