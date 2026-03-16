@@ -6,9 +6,14 @@ function sseData(payload: unknown): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * SSE endpoint that emits a short deterministic event sequence for the mock run.
- * It guards against stream cancellation to avoid enqueueing into a closed stream.
+ * It updates run status before emitting the terminal needs_review event so the
+ * client unlock state and backend status stay consistent.
  */
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   const run = await getRun(params.id);
@@ -18,44 +23,41 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 
   let isClosed = false;
-  let timer: ReturnType<typeof setInterval> | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
+    async start(controller) {
       const events = [
         { step: 'queued', message: 'Run queued.' },
         { step: 'running', message: 'Loading target URL in browser...' },
         { step: 'running', message: 'Inspecting discovery selector candidates...' },
-        { step: 'running', message: 'Inspecting extraction selector candidates...' },
-        { step: 'needs_review', message: 'Sample extraction complete.' }
+        { step: 'running', message: 'Inspecting extraction selector candidates...' }
       ];
 
-      let index = 0;
-      timer = setInterval(() => {
+      for (const event of events) {
         if (isClosed) {
-          clearInterval(timer);
           return;
         }
+        controller.enqueue(sseData(event));
+        await sleep(450);
+      }
 
-        if (index >= events.length) {
-          void progressRunToReview(params.id);
-          isClosed = true;
-          controller.close();
-          clearInterval(timer);
-          return;
-        }
+      if (isClosed) {
+        return;
+      }
 
-        controller.enqueue(sseData(events[index]));
-        index += 1;
-      }, 450);
+      // Persist status before sending final event to prevent unlock/status races.
+      await progressRunToReview(params.id);
+
+      if (isClosed) {
+        return;
+      }
+
+      controller.enqueue(sseData({ step: 'needs_review', message: 'Sample extraction complete.' }));
+      controller.close();
     },
     cancel() {
       // The controller may be cancelled by the browser during navigations.
-      // We stop the timer to prevent writes into a closed stream.
       isClosed = true;
-      if (timer) {
-        clearInterval(timer);
-      }
     }
   });
 

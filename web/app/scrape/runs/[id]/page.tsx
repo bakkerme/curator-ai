@@ -26,14 +26,17 @@ export default function RunPage({ params }: { params: { id: string } }) {
     }
     const nextRun = (await response.json()) as Run;
     setRun(nextRun);
-    setIsReadyForReview(nextRun.status === 'needs_review' || nextRun.status === 'approved');
+    const nextReady = nextRun.status === 'needs_review' || nextRun.status === 'approved';
+    // Preserve a previously unlocked state to avoid regressions from stale responses.
+    setIsReadyForReview((current) => current || nextReady);
   }, [params.id]);
 
   const handleTimelineComplete = useCallback(() => {
     // Fetch the run once timeline reaches completion so the status label and
     // review CTA reflect the latest backend state.
-    fetchRun().catch(() => undefined);
     setIsReadyForReview(true);
+    setRun((current) => (current ? { ...current, status: 'needs_review' } : current));
+    fetchRun().catch(() => undefined);
   }, [fetchRun]);
 
   useEffect(() => {
