@@ -1,8 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildMockProposal } from './mockProposal';
-import type { ScrapeRun, ScrapeRunInput } from './schemas';
+import type { ScrapeProposal, ScrapeRun, ScrapeRunInput } from './schemas';
 
 const STORE_FILE = path.join(tmpdir(), 'curator-web-runs.json');
 
@@ -58,22 +57,38 @@ export async function getRun(id: string): Promise<ScrapeRun | undefined> {
   return store[id];
 }
 
-export async function progressRunToReview(id: string): Promise<ScrapeRun | undefined> {
+export async function setRunStatus(id: string, status: ScrapeRun['status']): Promise<ScrapeRun | undefined> {
   const store = await readStore();
   const run = store[id];
   if (!run) return undefined;
 
-  run.status = 'needs_review';
-  run.proposal = buildMockProposal(run.targetUrl);
-  run.logs = [
-    ...run.logs,
-    'Loaded target page.',
-    'Generated discovery selectors.',
-    'Generated extraction selectors.',
-    'Produced sample extraction output.'
-  ];
+  run.status = status;
   run.updatedAt = nowIso();
+  store[id] = run;
+  await writeStore(store);
+  return run;
+}
 
+export async function setRunProposal(id: string, proposal: ScrapeProposal): Promise<ScrapeRun | undefined> {
+  const store = await readStore();
+  const run = store[id];
+  if (!run) return undefined;
+
+  run.proposal = proposal;
+  run.status = 'needs_review';
+  run.updatedAt = nowIso();
+  store[id] = run;
+  await writeStore(store);
+  return run;
+}
+
+export async function appendRunLog(id: string, message: string): Promise<ScrapeRun | undefined> {
+  const store = await readStore();
+  const run = store[id];
+  if (!run) return undefined;
+
+  run.logs = [...run.logs, message];
+  run.updatedAt = nowIso();
   store[id] = run;
   await writeStore(store);
   return run;

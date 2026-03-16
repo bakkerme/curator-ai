@@ -63,11 +63,15 @@ export default function RunPage({ params }: { params: { id: string } }) {
       <RunTimeline runId={run.id} onComplete={handleTimelineComplete} />
       <div className="card">
         <p>
-          {isReadyForReview
-            ? 'Run is ready. Continue to review the proposed selectors and samples.'
-            : 'Run is still generating proposal data. Review will unlock automatically.'}
+          {run.status === 'failed'
+            ? 'Run failed. Check logs and retry with another URL or runner mode.'
+            : isReadyForReview
+              ? 'Run is ready. Continue to review the proposed selectors and samples.'
+              : 'Run is still generating proposal data. Review will unlock automatically.'}
         </p>
-        {isReadyForReview ? (
+        {run.status === 'failed' ? (
+          <span>Go to review → (disabled because run failed)</span>
+        ) : isReadyForReview ? (
           <Link href={`/scrape/runs/${run.id}/review`}>Go to review →</Link>
         ) : (
           <span>Go to review → (locked until run completes)</span>

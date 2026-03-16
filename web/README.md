@@ -12,6 +12,23 @@ npm run dev
 
 Then open <http://localhost:3000>.
 
+## Agent-layer mode
+
+The run timeline/events route now uses an orchestrator abstraction.
+
+- Default (safe local testing): `SCRAPE_ORCHESTRATOR_MODE=mock`
+- CLI mode (first real adapter): `SCRAPE_ORCHESTRATOR_MODE=cli`
+
+Optional CLI command override:
+
+- `SCRAPE_CODEX_COMMAND` (default `codex`)
+
+Example:
+
+```bash
+SCRAPE_ORCHESTRATOR_MODE=cli SCRAPE_CODEX_COMMAND=codex npm run dev
+```
+
 ## Checks
 
 ```bash
