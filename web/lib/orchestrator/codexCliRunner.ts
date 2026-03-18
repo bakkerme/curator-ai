@@ -17,22 +17,27 @@ function extractFirstJsonObject(raw: string): string {
 }
 
 /**
- * Real runner adapter that invokes a configured CLI command and expects JSON
- * output that can be validated into the proposal schema.
+ * Real runner adapter that invokes the Go CLI bridge, which in turn runs Codex.
+ * The Go bridge keeps command and prompt variables easy to tune in one place.
  */
 export class CodexCliScrapeOrchestrator implements ScrapeOrchestrator {
   async *runScrapeDiscovery(input: ScrapeDiscoveryInput): AsyncGenerator<OrchestratorEvent> {
-    const command = process.env.SCRAPE_CODEX_COMMAND ?? 'codex';
-    const args = [
-      'exec',
-      '--json',
-      `Inspect ${input.targetUrl} and return scrape proposal JSON matching schema.`
-    ];
+    const bridgeCommand = process.env.SCRAPE_AGENT_BRIDGE_COMMAND ?? 'go';
+    const bridgeArgs = (process.env.SCRAPE_AGENT_BRIDGE_ARGS ?? 'run ../cmd/scrape-agent').split(' ');
+    const args = [...bridgeArgs, '-url', input.targetUrl];
+
+    // Optional overrides forwarded to the Go bridge.
+    if (process.env.SCRAPE_CODEX_COMMAND) {
+      args.push('-command', process.env.SCRAPE_CODEX_COMMAND);
+    }
+    if (process.env.SCRAPE_CODEX_PROMPT_TEMPLATE) {
+      args.push('-prompt-template', process.env.SCRAPE_CODEX_PROMPT_TEMPLATE);
+    }
 
     yield { type: 'status', step: 'queued', message: 'Run queued.' };
     yield { type: 'status', step: 'running', message: 'Launching Codex CLI run...' };
 
-    const child = spawn(command, args, {
+    const child = spawn(bridgeCommand, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         PATH: process.env.PATH,
@@ -60,7 +65,7 @@ export class CodexCliScrapeOrchestrator implements ScrapeOrchestrator {
       yield {
         type: 'failed',
         step: 'failed',
-        message: `Codex CLI exited with code ${exitCode}: ${stderr || 'no stderr output'}`
+        message: `Codex bridge exited with code ${exitCode}: ${stderr || 'no stderr output'}`
       };
       return;
     }

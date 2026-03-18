@@ -19,9 +19,20 @@ The run timeline/events route now uses an orchestrator abstraction.
 - Default (safe local testing): `SCRAPE_ORCHESTRATOR_MODE=mock`
 - CLI mode (first real adapter): `SCRAPE_ORCHESTRATOR_MODE=cli`
 
-Optional CLI command override:
+In CLI mode, the Node orchestrator calls a Go bridge command that keeps prompt and
+command configuration in one place:
 
-- `SCRAPE_CODEX_COMMAND` (default `codex`)
+- Go bridge file: `cmd/scrape-agent/main.go`
+- Top-of-file variables to edit quickly:
+  - `codexExecCommand`
+  - `promptTemplate`
+
+Optional runtime overrides:
+
+- `SCRAPE_AGENT_BRIDGE_COMMAND` (default `go`)
+- `SCRAPE_AGENT_BRIDGE_ARGS` (default `run ../cmd/scrape-agent`)
+- `SCRAPE_CODEX_COMMAND` (forwarded to bridge `-command`)
+- `SCRAPE_CODEX_PROMPT_TEMPLATE` (forwarded to bridge `-prompt-template`)
 
 Example:
 
