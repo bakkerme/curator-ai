@@ -8,6 +8,7 @@ type Run = {
   id: string;
   status: string;
   targetUrl: string;
+  logs: string[];
 };
 
 /**
@@ -60,7 +61,11 @@ export default function RunPage({ params }: { params: { id: string } }) {
       <p>
         Current status: <strong>{run.status}</strong>
       </p>
-      <RunTimeline runId={run.id} onComplete={handleTimelineComplete} />
+      <RunTimeline
+        runId={run.id}
+        initialOutput={run.logs.filter((entry) => entry.startsWith('[stdout]') || entry.startsWith('[stderr]'))}
+        onComplete={handleTimelineComplete}
+      />
       <div className="card">
         <p>
           {run.status === 'failed'

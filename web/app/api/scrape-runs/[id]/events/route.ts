@@ -33,13 +33,17 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
             return;
           }
 
-          controller.enqueue(sseData({ step: event.step, message: event.message }));
+          controller.enqueue(sseData(event));
 
           if (event.type === 'status') {
             if (event.step === 'running') {
               await setRunStatus(run.id, 'running');
             }
             await appendRunLog(run.id, event.message);
+          }
+
+          if (event.type === 'output') {
+            await appendRunLog(run.id, `[${event.stream}] ${event.message}`);
           }
 
           if (event.type === 'complete') {
@@ -63,7 +67,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
         const message = error instanceof Error ? error.message : 'Unknown orchestrator error';
         await appendRunLog(run.id, message);
         if (!isClosed) {
-          controller.enqueue(sseData({ step: 'failed', message }));
+          controller.enqueue(sseData({ type: 'failed', step: 'failed', message }));
           controller.close();
         }
       }

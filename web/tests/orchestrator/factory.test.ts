@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createScrapeOrchestrator } from '@/lib/orchestrator';
-import { CodexCliScrapeOrchestrator } from '@/lib/orchestrator/codexCliRunner';
+import { CodexSdkScrapeOrchestrator } from '@/lib/orchestrator/codexSdkRunner';
 import { MockScrapeOrchestrator } from '@/lib/orchestrator/mockRunner';
 
 describe('createScrapeOrchestrator', () => {
@@ -13,9 +13,9 @@ describe('createScrapeOrchestrator', () => {
     expect(runner).toBeInstanceOf(MockScrapeOrchestrator);
   });
 
-  it('returns cli runner when configured', () => {
-    process.env.SCRAPE_ORCHESTRATOR_MODE = 'cli';
+  it('returns sdk runner when configured', () => {
+    process.env.SCRAPE_ORCHESTRATOR_MODE = 'sdk';
     const runner = createScrapeOrchestrator();
-    expect(runner).toBeInstanceOf(CodexCliScrapeOrchestrator);
+    expect(runner).toBeInstanceOf(CodexSdkScrapeOrchestrator);
   });
 });

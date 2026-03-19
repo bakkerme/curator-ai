@@ -16,6 +16,6 @@ When generating scrape selectors for a target URL:
 3. Prefer stable selectors:
    - semantic tags and attributes
    - stable classes/ids
-   - avoid brittle positional selectors when possible
+   - avoid nth-child, nth-of-type selectors
 4. Validate selectors across multiple items/pages.
 5. Return JSON matching the UI proposal schema with confidence values.

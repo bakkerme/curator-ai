@@ -15,12 +15,30 @@ export class MockScrapeOrchestrator implements ScrapeOrchestrator {
     await sleep(350);
 
     yield { type: 'status', step: 'running', message: 'Loading target URL in browser...' };
+    yield {
+      type: 'output',
+      step: 'running',
+      stream: 'stderr',
+      message: '[mock-agent] browser boot complete\n'
+    };
     await sleep(450);
 
     yield { type: 'status', step: 'running', message: 'Inspecting discovery selector candidates...' };
+    yield {
+      type: 'output',
+      step: 'running',
+      stream: 'stdout',
+      message: '[mock-agent] found 12 article cards on listing page\n'
+    };
     await sleep(450);
 
     yield { type: 'status', step: 'running', message: 'Inspecting extraction selector candidates...' };
+    yield {
+      type: 'output',
+      step: 'running',
+      stream: 'stdout',
+      message: '[mock-agent] sampled 3 detail pages for field extraction\n'
+    };
     await sleep(450);
 
     yield {

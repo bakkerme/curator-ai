@@ -13,7 +13,8 @@ describe('MockScrapeOrchestrator', () => {
       events.push(event);
     }
 
-    expect(events.length).toBe(5);
+    expect(events.length).toBe(8);
+    expect(events.some((event) => event.type === 'output')).toBe(true);
     expect(events.at(-1)?.type).toBe('complete');
     if (events.at(-1)?.type === 'complete') {
       expect(events.at(-1)?.proposal.generatedYaml).toContain('sources:');

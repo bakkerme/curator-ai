@@ -17,28 +17,33 @@ Then open <http://localhost:3000>.
 The run timeline/events route now uses an orchestrator abstraction.
 
 - Default (safe local testing): `SCRAPE_ORCHESTRATOR_MODE=mock`
-- CLI mode (first real adapter): `SCRAPE_ORCHESTRATOR_MODE=cli`
+- SDK mode (server-side TypeScript runner): `SCRAPE_ORCHESTRATOR_MODE=sdk`
 
-In CLI mode, the Node orchestrator calls a Go bridge command that keeps prompt and
-command configuration in one place:
+In SDK mode, the web server calls Codex directly through the official
+`@openai/codex-sdk` package. The prompt lives in the TypeScript runner:
 
-- Go bridge file: `cmd/scrape-agent/main.go`
-- Top-of-file variables to edit quickly:
-  - `codexExecCommand`
+- Runner file: `web/lib/orchestrator/codexSdkRunner.ts`
+- Top-of-file variable to edit quickly:
   - `promptTemplate`
 
 Optional runtime overrides:
 
-- `SCRAPE_AGENT_BRIDGE_COMMAND` (default `go`)
-- `SCRAPE_AGENT_BRIDGE_ARGS` (default `run ../cmd/scrape-agent`)
-- `SCRAPE_CODEX_COMMAND` (forwarded to bridge `-command`)
-- `SCRAPE_CODEX_PROMPT_TEMPLATE` (forwarded to bridge `-prompt-template`)
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `SCRAPE_CODEX_MODEL`
+- `SCRAPE_CODEX_WORKING_DIRECTORY` (defaults to the repo root)
+- `SCRAPE_CODEX_WEB_SEARCH` (`live` or unset)
 
 Example:
 
 ```bash
-SCRAPE_ORCHESTRATOR_MODE=cli SCRAPE_CODEX_COMMAND=codex npm run dev
+SCRAPE_ORCHESTRATOR_MODE=sdk SCRAPE_CODEX_MODEL=gpt-5.4-mini npm run dev
 ```
+
+When you open a run page, you now get:
+
+- A live timeline for high-level stage changes
+- An agent console panel that streams Codex SDK events and command output as the run progresses
 
 ## Checks
 

@@ -7,6 +7,7 @@ export type ScrapeDiscoveryInput = {
 
 export type OrchestratorEvent =
   | { type: 'status'; step: 'queued' | 'running'; message: string }
+  | { type: 'output'; step: 'running'; stream: 'stdout' | 'stderr'; message: string }
   | { type: 'complete'; step: 'needs_review'; message: string; proposal: ScrapeProposal }
   | { type: 'failed'; step: 'failed'; message: string };
 
