@@ -19,7 +19,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/observability/otelx"
 	"github.com/bakkerme/curator-ai/internal/runner"
-	factory "github.com/bakkerme/curator-ai/internal/runner/runtime"
+	runtime "github.com/bakkerme/curator-ai/internal/runner/runtime"
 )
 
 // namedFlow ties a Flow back to the Curator Document that produced it.
@@ -27,7 +27,7 @@ import (
 type namedFlow struct {
 	SourcePath string
 	Flow       *core.Flow
-	Runtime    *factory.Runtime
+	Runtime    *runtime.Runtime
 }
 
 func main() {
@@ -56,12 +56,12 @@ func main() {
 		log.Panicf("failed to load curator documents: %v", err)
 	}
 
-	rootFactory, err := factory.NewFromEnvConfig(logger, env)
+	rootRuntime, err := runtime.NewFromEnvConfig(logger, env)
 	if err != nil {
 		log.Panicf("failed to build runtime factory from environment: %v", err)
 	}
 	defer func() {
-		if err := rootFactory.Close(); err != nil {
+		if err := rootRuntime.Close(); err != nil {
 			logger.Error("failed to close factory", "error", err)
 		}
 	}()
@@ -69,7 +69,7 @@ func main() {
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}
 	for _, loaded := range loadedDocs {
-		flowFactory := rootFactory.CloneForFlow()
+		flowFactory := rootRuntime.CloneForFlow()
 		flow, err := loaded.Document.ParseToFlowWithFactory(flowFactory)
 		if err != nil {
 			log.Panicf("failed to parse flow (%s): %v", loaded.Path, err)
