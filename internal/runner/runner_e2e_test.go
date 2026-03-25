@@ -37,7 +37,7 @@ func TestRunnerEndToEnd(t *testing.T) {
 		},
 	}
 
-	factory := &factory.Factory{
+	factory := &factory.Runtime{
 		LLMClient:    llmMock,
 		DefaultModel: "gpt-4o-mini",
 		RSSFetcher:   rssFetcher,

@@ -27,6 +27,7 @@ import (
 type namedFlow struct {
 	SourcePath string
 	Flow       *core.Flow
+	Runtime    *factory.Runtime
 }
 
 func main() {
@@ -55,12 +56,12 @@ func main() {
 		log.Panicf("failed to load curator documents: %v", err)
 	}
 
-	factory, err := factory.NewFromEnvConfig(logger, env)
+	rootFactory, err := factory.NewFromEnvConfig(logger, env)
 	if err != nil {
 		log.Panicf("failed to build runtime factory from environment: %v", err)
 	}
 	defer func() {
-		if err := factory.Close(); err != nil {
+		if err := rootFactory.Close(); err != nil {
 			logger.Error("failed to close factory", "error", err)
 		}
 	}()
@@ -68,7 +69,8 @@ func main() {
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}
 	for _, loaded := range loadedDocs {
-		flow, err := loaded.Document.ParseToFlowWithFactory(factory)
+		flowFactory := rootFactory.CloneForFlow()
+		flow, err := loaded.Document.ParseToFlowWithFactory(flowFactory)
 		if err != nil {
 			log.Panicf("failed to parse flow (%s): %v", loaded.Path, err)
 		}
@@ -82,8 +84,19 @@ func main() {
 			flow.ID = uniqueFlowID(defaultFlowID(loaded.Path, loaded.Document), seenFlowIDs)
 		}
 
-		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow})
+		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow, Runtime: flowFactory})
 	}
+
+	defer func() {
+		for _, named := range flows {
+			if named.Runtime == nil {
+				continue
+			}
+			if err := named.Runtime.Close(); err != nil {
+				logger.Error("failed to close flow factory", "flow_id", named.Flow.ID, "source_path", named.SourcePath, "error", err)
+			}
+		}
+	}()
 
 	r := runner.NewWithConfig(logger, runner.Config{AllowPartialSourceErrors: *allowPartial})
 
