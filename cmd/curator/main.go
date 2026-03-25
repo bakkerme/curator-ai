@@ -19,7 +19,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/observability/otelx"
 	"github.com/bakkerme/curator-ai/internal/runner"
-	"github.com/bakkerme/curator-ai/internal/runner/factory"
+	factory "github.com/bakkerme/curator-ai/internal/runner/runtime"
 )
 
 // namedFlow ties a Flow back to the Curator Document that produced it.

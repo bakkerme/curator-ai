@@ -9,7 +9,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/llm"
 	llmmock "github.com/bakkerme/curator-ai/internal/llm/mock"
 	emailmock "github.com/bakkerme/curator-ai/internal/outputs/email/mock"
-	"github.com/bakkerme/curator-ai/internal/runner/factory"
+	factory "github.com/bakkerme/curator-ai/internal/runner/runtime"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssmock "github.com/bakkerme/curator-ai/internal/sources/rss/mock"
 )
