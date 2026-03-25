@@ -58,19 +58,19 @@ func main() {
 
 	rootRuntime, err := runtime.NewFromEnvConfig(logger, env)
 	if err != nil {
-		log.Panicf("failed to build runtime factory from environment: %v", err)
+		log.Panicf("failed to build runtime from environment: %v", err)
 	}
 	defer func() {
 		if err := rootRuntime.Close(); err != nil {
-			logger.Error("failed to close factory", "error", err)
+			logger.Error("failed to close runtime", "error", err)
 		}
 	}()
 
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}
 	for _, loaded := range loadedDocs {
-		flowFactory := rootRuntime.CloneForFlow()
-		flow, err := loaded.Document.ParseToFlowWithFactory(flowFactory)
+		flowRuntime := rootRuntime.CloneForFlow()
+		flow, err := loaded.Document.ParseToFlowWithRuntime(flowRuntime)
 		if err != nil {
 			log.Panicf("failed to parse flow (%s): %v", loaded.Path, err)
 		}
@@ -84,7 +84,7 @@ func main() {
 			flow.ID = uniqueFlowID(defaultFlowID(loaded.Path, loaded.Document), seenFlowIDs)
 		}
 
-		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow, Runtime: flowFactory})
+		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow, Runtime: flowRuntime})
 	}
 
 	defer func() {
@@ -93,7 +93,7 @@ func main() {
 				continue
 			}
 			if err := named.Runtime.Close(); err != nil {
-				logger.Error("failed to close flow factory", "flow_id", named.Flow.ID, "source_path", named.SourcePath, "error", err)
+				logger.Error("failed to close runtime", "flow_id", named.Flow.ID, "source_path", named.SourcePath, "error", err)
 			}
 		}
 	}()
