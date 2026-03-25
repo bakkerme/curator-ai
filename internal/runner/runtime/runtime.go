@@ -1,4 +1,4 @@
-package factory
+package runtime
 
 import (
 	"errors"
@@ -33,13 +33,13 @@ import (
 	"github.com/bakkerme/curator-ai/internal/sources/testfile"
 )
 
-// Closer is an optional interface that Factory components may implement to
+// Closer is an optional interface that Runtime components may implement to
 // release resources (e.g., writing a recording tape to disk).
 type Closer interface {
 	Close() error
 }
 
-type Factory struct {
+type Runtime struct {
 	Logger                  *slog.Logger
 	LLMClient               llm.Client
 	DefaultModel            string
@@ -57,7 +57,20 @@ type Factory struct {
 	closers                 []Closer
 }
 
-func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, error) {
+// CloneForFlow creates a per-flow runtime clone so mutable runtime state
+// (notably dedupe store wiring) is isolated between documents loaded in the
+// same process. Shared stateless dependencies are shallow-copied.
+func (f *Runtime) CloneForFlow() *Runtime {
+	if f == nil {
+		return &Runtime{}
+	}
+	clone := *f
+	clone.SeenStore = nil
+	clone.closers = nil
+	return &clone
+}
+
+func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Runtime, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -94,7 +107,7 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 		closers = append(closers, recClient)
 		logger.Info("LLM record mode enabled", slog.String("tape", env.LLMRecordPath))
 	}
-	return &Factory{
+	return &Runtime{
 		Logger:                  logger,
 		LLMClient:               llmClient,
 		DefaultModel:            env.OpenAI.Model,
@@ -115,17 +128,23 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Factory, erro
 	}, nil
 }
 
-// Close releases any resources held by the factory (e.g., writing a recording
-// tape to disk). Callers should defer Close after creating the factory.
-func (f *Factory) Close() error {
+// Close releases any resources held by the runtime (e.g., writing a recording
+// tape to disk). Callers should defer Close after creating the runtime.
+func (f *Runtime) Close() error {
 	var errs []error
+	if f.SeenStore != nil {
+		if err := f.SeenStore.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		f.SeenStore = nil
+	}
 	for _, c := range f.closers {
 		if err := c.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("factory close: %w", errors.Join(errs...))
+		return fmt.Errorf("runtime close: %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -153,11 +172,11 @@ func parseRedditProxyURL(cfg config.RedditEnvConfig) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (f *Factory) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor, error) {
+func (f *Runtime) NewCronTrigger(cfg *config.CronTrigger) (core.TriggerProcessor, error) {
 	return trigger.NewCronProcessor(cfg.Schedule, cfg.Timezone), nil
 }
 
-func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewRedditSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
 	processor, err := reddit.NewRedditProcessor(cfg, f.RedditFetcher, f.WebReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
@@ -165,7 +184,7 @@ func (f *Factory) NewRedditSource(cfg *config.RedditSource) (core.SourceProcesso
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.SourceProcessor, error) {
 	processor, err := reddit.NewRedditProcessor(cfg, f.RedditPublicJSONFetcher, f.WebReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
@@ -173,7 +192,7 @@ func (f *Factory) NewRedditPublicJSONSource(cfg *config.RedditSource) (core.Sour
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, error) {
 	processor, err := rss.NewRSSProcessor(cfg, f.RSSFetcher, f.SeenStore)
 	if err != nil {
 		return nil, err
@@ -181,7 +200,7 @@ func (f *Factory) NewRSSSource(cfg *config.RSSSource) (core.SourceProcessor, err
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor, error) {
 	processor, err := arxiv.NewArxivProcessor(cfg, f.ArxivFetcher, f.ArxivReader, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
@@ -189,7 +208,7 @@ func (f *Factory) NewArxivSource(cfg *config.ArxivSource) (core.SourceProcessor,
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewScrapeSource(cfg *config.ScrapeSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewScrapeSource(cfg *config.ScrapeSource) (core.SourceProcessor, error) {
 	processor, err := scrape.NewScrapeProcessor(cfg, f.ScrapeFetcher, f.SeenStore, f.Logger)
 	if err != nil {
 		return nil, err
@@ -197,7 +216,7 @@ func (f *Factory) NewScrapeSource(cfg *config.ScrapeSource) (core.SourceProcesso
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewTestFileSource(cfg *config.TestFileSource) (core.SourceProcessor, error) {
+func (f *Runtime) NewTestFileSource(cfg *config.TestFileSource) (core.SourceProcessor, error) {
 	processor, err := testfile.NewTestFileProcessor(cfg)
 	if err != nil {
 		return nil, err
@@ -205,7 +224,7 @@ func (f *Factory) NewTestFileSource(cfg *config.TestFileSource) (core.SourceProc
 	return snapshot.WrapSource(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor, error) {
+func (f *Runtime) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor, error) {
 	processor, err := quality.NewRuleProcessor(cfg)
 	if err != nil {
 		return nil, err
@@ -213,7 +232,7 @@ func (f *Factory) NewQualityRule(cfg *config.QualityRule) (core.QualityProcessor
 	return snapshot.WrapQuality(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
+func (f *Runtime) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, error) {
 	processor, err := quality.NewLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
@@ -221,7 +240,7 @@ func (f *Factory) NewLLMQuality(cfg *config.LLMQuality) (core.QualityProcessor, 
 	return snapshot.WrapQuality(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
+func (f *Runtime) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, error) {
 	processor, err := summary.NewPostLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
@@ -229,7 +248,7 @@ func (f *Factory) NewLLMSummary(cfg *config.LLMSummary) (core.SummaryProcessor, 
 	return snapshot.WrapSummary(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
+func (f *Runtime) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProcessor, error) {
 	processor, err := summary.NewRunLLMProcessorWithLogger(cfg, f.LLMClient, f.DefaultModel, f.Logger, f.DefaultTemperature)
 	if err != nil {
 		return nil, err
@@ -237,7 +256,7 @@ func (f *Factory) NewLLMRunSummary(cfg *config.LLMSummary) (core.RunSummaryProce
 	return snapshot.WrapRunSummary(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewMarkdownSummary(cfg *config.MarkdownSummary) (core.SummaryProcessor, error) {
+func (f *Runtime) NewMarkdownSummary(cfg *config.MarkdownSummary) (core.SummaryProcessor, error) {
 	processor, err := summary.NewPostMarkdownProcessor(cfg)
 	if err != nil {
 		return nil, err
@@ -245,7 +264,7 @@ func (f *Factory) NewMarkdownSummary(cfg *config.MarkdownSummary) (core.SummaryP
 	return snapshot.WrapSummary(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSummaryProcessor, error) {
+func (f *Runtime) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSummaryProcessor, error) {
 	processor, err := summary.NewRunMarkdownProcessor(cfg)
 	if err != nil {
 		return nil, err
@@ -253,7 +272,7 @@ func (f *Factory) NewMarkdownRunSummary(cfg *config.MarkdownSummary) (core.RunSu
 	return snapshot.WrapRunSummary(processor, cfg.Snapshot), nil
 }
 
-func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor, error) {
+func (f *Runtime) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor, error) {
 	merged := f.mergeEmailConfig(cfg)
 	sender := f.EmailSender
 	if sender == nil {
@@ -273,7 +292,7 @@ func (f *Factory) NewEmailOutput(cfg *config.EmailOutput) (core.OutputProcessor,
 	return snapshot.WrapOutput(processor, merged.Snapshot), nil
 }
 
-func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput {
+func (f *Runtime) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput {
 	if cfg == nil {
 		return &config.EmailOutput{}
 	}
@@ -300,7 +319,7 @@ func (f *Factory) mergeEmailConfig(cfg *config.EmailOutput) *config.EmailOutput 
 	return &merged
 }
 
-func (f *Factory) ConfigureDedupeStore(cfg *config.DedupeStoreConfig) error {
+func (f *Runtime) ConfigureDedupeStore(cfg *config.DedupeStoreConfig) error {
 	if f.SeenStore != nil {
 		_ = f.SeenStore.Close()
 		f.SeenStore = nil

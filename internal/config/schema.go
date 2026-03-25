@@ -367,8 +367,8 @@ type ParsedProcessor struct {
 	Config interface{} // Points to the specific config struct
 }
 
-// ProcessorFactory constructs concrete processor implementations for a parsed document.
-type ProcessorFactory interface {
+// ProcessorRuntime constructs concrete processor implementations for a parsed document.
+type ProcessorRuntime interface {
 	NewCronTrigger(config *CronTrigger) (core.TriggerProcessor, error)
 	NewRedditSource(config *RedditSource) (core.SourceProcessor, error)
 	NewRSSSource(config *RSSSource) (core.SourceProcessor, error)
@@ -985,19 +985,19 @@ func (d *CuratorDocument) Parse() (*ParsedFlow, error) {
 
 // ParseToFlow converts the document into a core.Flow structure with OrderOfOperations
 func (d *CuratorDocument) ParseToFlow() (*core.Flow, error) {
-	return d.ParseToFlowWithFactory(nil)
+	return d.ParseToFlowWithRuntime(nil)
 }
 
-// ParseToFlowWithFactory converts the document into a core.Flow structure with OrderOfOperations.
+// ParseToFlowWithRuntime converts the document into a core.Flow structure with OrderOfOperations.
 // When factory is nil, the flow will be created without concrete processors.
-func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*core.Flow, error) {
+func (d *CuratorDocument) ParseToFlowWithRuntime(runtime ProcessorRuntime) (*core.Flow, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
 
-	if factory != nil {
-		if dedupeFactory, ok := factory.(DedupeStoreConfigurer); ok {
-			if err := dedupeFactory.ConfigureDedupeStore(d.Workflow.DedupeStore); err != nil {
+	if runtime != nil {
+		if dedupeRuntime, ok := runtime.(DedupeStoreConfigurer); ok {
+			if err := dedupeRuntime.ConfigureDedupeStore(d.Workflow.DedupeStore); err != nil {
 				return nil, err
 			}
 		}
@@ -1005,12 +1005,12 @@ func (d *CuratorDocument) ParseToFlowWithFactory(factory ProcessorFactory) (*cor
 
 	flow := newFlowFromDocument(d)
 
-	buildTriggers(flow, d.Workflow.Trigger, factory)
-	buildSources(flow, d.Workflow.Sources, factory)
-	buildQuality(flow, d.Workflow.Quality, d.Workflow.MaxConcurrency, factory)
-	buildSummaries(flow, d.Workflow.PostSummary, d.Workflow.MaxConcurrency, factory, false)
-	buildSummaries(flow, d.Workflow.RunSummary, d.Workflow.MaxConcurrency, factory, true)
-	buildOutputs(flow, d.Workflow.Output, factory)
+	buildTriggers(flow, d.Workflow.Trigger, runtime)
+	buildSources(flow, d.Workflow.Sources, runtime)
+	buildQuality(flow, d.Workflow.Quality, d.Workflow.MaxConcurrency, runtime)
+	buildSummaries(flow, d.Workflow.PostSummary, d.Workflow.MaxConcurrency, runtime, false)
+	buildSummaries(flow, d.Workflow.RunSummary, d.Workflow.MaxConcurrency, runtime, true)
+	buildOutputs(flow, d.Workflow.Output, runtime)
 
 	configBytes, _ := yaml.Marshal(d)
 	var rawConfig map[string]interface{}
@@ -1040,14 +1040,14 @@ func newFlowFromDocument(d *CuratorDocument) *core.Flow {
 	return flow
 }
 
-func buildTriggers(flow *core.Flow, triggers []TriggerConfig, factory ProcessorFactory) {
+func buildTriggers(flow *core.Flow, triggers []TriggerConfig, runtime ProcessorRuntime) {
 	for _, trigger := range triggers {
 		if trigger.Cron == nil {
 			continue
 		}
 		var triggerProcessor core.TriggerProcessor
-		if factory != nil {
-			triggerProcessor, _ = factory.NewCronTrigger(trigger.Cron)
+		if runtime != nil {
+			triggerProcessor, _ = runtime.NewCronTrigger(trigger.Cron)
 		}
 		flow.Triggers = append(flow.Triggers, triggerProcessor)
 		flow.OrderOfOperations = append(flow.OrderOfOperations, core.ProcessReference{
@@ -1058,42 +1058,42 @@ func buildTriggers(flow *core.Flow, triggers []TriggerConfig, factory ProcessorF
 	}
 }
 
-func buildSources(flow *core.Flow, sources []SourceConfig, factory ProcessorFactory) {
+func buildSources(flow *core.Flow, sources []SourceConfig, factory ProcessorRuntime) {
 	for _, source := range sources {
 		if source.Reddit != nil {
 			buildSourceProcessor(flow, "reddit", core.SourceProcessorType, source.Reddit,
-				func(f ProcessorFactory, c *RedditSource) (core.SourceProcessor, error) {
+				func(f ProcessorRuntime, c *RedditSource) (core.SourceProcessor, error) {
 					return f.NewRedditSource(c)
 				}, factory)
 		}
 		if source.RSS != nil {
 			buildSourceProcessor(flow, "rss", core.SourceProcessorType, source.RSS,
-				func(f ProcessorFactory, c *RSSSource) (core.SourceProcessor, error) {
+				func(f ProcessorRuntime, c *RSSSource) (core.SourceProcessor, error) {
 					return f.NewRSSSource(c)
 				}, factory)
 		}
 		if source.Arxiv != nil {
 			buildSourceProcessor(flow, "arxiv", core.SourceProcessorType, source.Arxiv,
-				func(f ProcessorFactory, c *ArxivSource) (core.SourceProcessor, error) {
+				func(f ProcessorRuntime, c *ArxivSource) (core.SourceProcessor, error) {
 					return f.NewArxivSource(c)
 				}, factory)
 		}
 		if source.Scrape != nil {
 			buildSourceProcessor(flow, "scrape", core.SourceProcessorType, source.Scrape,
-				func(f ProcessorFactory, c *ScrapeSource) (core.SourceProcessor, error) {
+				func(f ProcessorRuntime, c *ScrapeSource) (core.SourceProcessor, error) {
 					return f.NewScrapeSource(c)
 				}, factory)
 		}
 		if source.TestFile != nil {
 			buildSourceProcessor(flow, "testfile", core.SourceProcessorType, source.TestFile,
-				func(f ProcessorFactory, c *TestFileSource) (core.SourceProcessor, error) {
+				func(f ProcessorRuntime, c *TestFileSource) (core.SourceProcessor, error) {
 					return f.NewTestFileSource(c)
 				}, factory)
 		}
 	}
 }
 
-func buildSourceProcessor[T any](flow *core.Flow, name string, ptype core.ProcessorType, cfg T, factoryFn func(ProcessorFactory, T) (core.SourceProcessor, error), factory ProcessorFactory) {
+func buildSourceProcessor[T any](flow *core.Flow, name string, ptype core.ProcessorType, cfg T, factoryFn func(ProcessorRuntime, T) (core.SourceProcessor, error), factory ProcessorRuntime) {
 	var processor core.SourceProcessor
 	if factory != nil {
 		processor, _ = factoryFn(factory, cfg)
@@ -1106,24 +1106,24 @@ func buildSourceProcessor[T any](flow *core.Flow, name string, ptype core.Proces
 	})
 }
 
-func buildQuality(flow *core.Flow, quality []QualityConfig, maxConcurrency int, factory ProcessorFactory) {
+func buildQuality(flow *core.Flow, quality []QualityConfig, maxConcurrency int, factory ProcessorRuntime) {
 	for _, q := range quality {
 		if q.QualityRule != nil {
 			buildQualityProcessor(flow, q.QualityRule.Name, q.QualityRule,
-				func(f ProcessorFactory, c *QualityRule) (core.QualityProcessor, error) {
+				func(f ProcessorRuntime, c *QualityRule) (core.QualityProcessor, error) {
 					return f.NewQualityRule(c)
 				}, factory)
 		} else if q.LLM != nil {
 			q.LLM.MaxConcurrency = maxConcurrency
 			buildQualityProcessor(flow, q.LLM.Name, q.LLM,
-				func(f ProcessorFactory, c *LLMQuality) (core.QualityProcessor, error) {
+				func(f ProcessorRuntime, c *LLMQuality) (core.QualityProcessor, error) {
 					return f.NewLLMQuality(c)
 				}, factory)
 		}
 	}
 }
 
-func buildQualityProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.QualityProcessor, error), factory ProcessorFactory) {
+func buildQualityProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorRuntime, T) (core.QualityProcessor, error), factory ProcessorRuntime) {
 	var processor core.QualityProcessor
 	if factory != nil {
 		processor, _ = factoryFn(factory, cfg)
@@ -1136,30 +1136,30 @@ func buildQualityProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn
 	})
 }
 
-func buildSummaries(flow *core.Flow, summaries []SummaryConfig, maxConcurrency int, factory ProcessorFactory, isRunSummary bool) {
+func buildSummaries(flow *core.Flow, summaries []SummaryConfig, maxConcurrency int, factory ProcessorRuntime, isRunSummary bool) {
 	for _, s := range summaries {
 		if s.LLM != nil {
 			s.LLM.MaxConcurrency = maxConcurrency
 			if isRunSummary {
 				buildRunSummaryProcessor(flow, s.LLM.Name, s.LLM,
-					func(f ProcessorFactory, c *LLMSummary) (core.RunSummaryProcessor, error) {
+					func(f ProcessorRuntime, c *LLMSummary) (core.RunSummaryProcessor, error) {
 						return f.NewLLMRunSummary(c)
 					}, factory)
 			} else {
 				buildSummaryProcessor(flow, s.LLM.Name, s.LLM,
-					func(f ProcessorFactory, c *LLMSummary) (core.SummaryProcessor, error) {
+					func(f ProcessorRuntime, c *LLMSummary) (core.SummaryProcessor, error) {
 						return f.NewLLMSummary(c)
 					}, factory)
 			}
 		} else if s.Markdown != nil {
 			if isRunSummary {
 				buildRunSummaryProcessor(flow, s.Markdown.Name, s.Markdown,
-					func(f ProcessorFactory, c *MarkdownSummary) (core.RunSummaryProcessor, error) {
+					func(f ProcessorRuntime, c *MarkdownSummary) (core.RunSummaryProcessor, error) {
 						return f.NewMarkdownRunSummary(c)
 					}, factory)
 			} else {
 				buildSummaryProcessor(flow, s.Markdown.Name, s.Markdown,
-					func(f ProcessorFactory, c *MarkdownSummary) (core.SummaryProcessor, error) {
+					func(f ProcessorRuntime, c *MarkdownSummary) (core.SummaryProcessor, error) {
 						return f.NewMarkdownSummary(c)
 					}, factory)
 			}
@@ -1167,7 +1167,7 @@ func buildSummaries(flow *core.Flow, summaries []SummaryConfig, maxConcurrency i
 	}
 }
 
-func buildSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.SummaryProcessor, error), factory ProcessorFactory) {
+func buildSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorRuntime, T) (core.SummaryProcessor, error), factory ProcessorRuntime) {
 	var processor core.SummaryProcessor
 	if factory != nil {
 		processor, _ = factoryFn(factory, cfg)
@@ -1180,7 +1180,7 @@ func buildSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn
 	})
 }
 
-func buildRunSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorFactory, T) (core.RunSummaryProcessor, error), factory ProcessorFactory) {
+func buildRunSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factoryFn func(ProcessorRuntime, T) (core.RunSummaryProcessor, error), factory ProcessorRuntime) {
 	var processor core.RunSummaryProcessor
 	if factory != nil {
 		processor, _ = factoryFn(factory, cfg)
@@ -1193,7 +1193,7 @@ func buildRunSummaryProcessor[T any](flow *core.Flow, name string, cfg T, factor
 	})
 }
 
-func buildOutputs(flow *core.Flow, outputs []OutputConfig, factory ProcessorFactory) {
+func buildOutputs(flow *core.Flow, outputs []OutputConfig, factory ProcessorRuntime) {
 	for _, output := range outputs {
 		if output.Email == nil {
 			continue

@@ -6,6 +6,7 @@
 curator-seen.db
 snapshots/
 tapes/
+.next
 
 # Build artifacts
 /bin/

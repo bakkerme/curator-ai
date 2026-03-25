@@ -19,7 +19,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/observability/otelx"
 	"github.com/bakkerme/curator-ai/internal/runner"
-	"github.com/bakkerme/curator-ai/internal/runner/factory"
+	runtime "github.com/bakkerme/curator-ai/internal/runner/runtime"
 )
 
 // namedFlow ties a Flow back to the Curator Document that produced it.
@@ -27,6 +27,7 @@ import (
 type namedFlow struct {
 	SourcePath string
 	Flow       *core.Flow
+	Runtime    *runtime.Runtime
 }
 
 func main() {
@@ -55,20 +56,21 @@ func main() {
 		log.Panicf("failed to load curator documents: %v", err)
 	}
 
-	factory, err := factory.NewFromEnvConfig(logger, env)
+	rootRuntime, err := runtime.NewFromEnvConfig(logger, env)
 	if err != nil {
-		log.Panicf("failed to build runtime factory from environment: %v", err)
+		log.Panicf("failed to build runtime from environment: %v", err)
 	}
 	defer func() {
-		if err := factory.Close(); err != nil {
-			logger.Error("failed to close factory", "error", err)
+		if err := rootRuntime.Close(); err != nil {
+			logger.Error("failed to close runtime", "error", err)
 		}
 	}()
 
 	flows := make([]namedFlow, 0, len(loadedDocs))
 	seenFlowIDs := map[string]int{}
 	for _, loaded := range loadedDocs {
-		flow, err := loaded.Document.ParseToFlowWithFactory(factory)
+		flowRuntime := rootRuntime.CloneForFlow()
+		flow, err := loaded.Document.ParseToFlowWithRuntime(flowRuntime)
 		if err != nil {
 			log.Panicf("failed to parse flow (%s): %v", loaded.Path, err)
 		}
@@ -82,8 +84,19 @@ func main() {
 			flow.ID = uniqueFlowID(defaultFlowID(loaded.Path, loaded.Document), seenFlowIDs)
 		}
 
-		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow})
+		flows = append(flows, namedFlow{SourcePath: loaded.Path, Flow: flow, Runtime: flowRuntime})
 	}
+
+	defer func() {
+		for _, named := range flows {
+			if named.Runtime == nil {
+				continue
+			}
+			if err := named.Runtime.Close(); err != nil {
+				logger.Error("failed to close runtime", "flow_id", named.Flow.ID, "source_path", named.SourcePath, "error", err)
+			}
+		}
+	}()
 
 	r := runner.NewWithConfig(logger, runner.Config{AllowPartialSourceErrors: *allowPartial})
 
