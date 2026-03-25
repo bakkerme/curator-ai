@@ -168,7 +168,7 @@ real LLM client normally.
   - `tape.go` — `Tape`, `Interaction`, and JSON (de)serialisation helpers.
   - `client.go` — `Client` implementing `llm.Client`; `NewRecordClient` and
     `NewReplayClient` constructors.
-- **Wiring:** `internal/runner/factory/factory.go` — `NewFromEnvConfig`
+- **Wiring:** `internal/runner/runtime/runtime.go` — `NewFromEnvConfig`
   conditionally wraps the OpenAI client based on env vars; the `Close` method
   flushes the tape to disk on exit.
 - **Concurrency:** replay is safe under concurrent access (`MaxConcurrency > 1`)

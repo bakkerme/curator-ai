@@ -854,7 +854,7 @@ func TestParseToFlow(t *testing.T) {
 	}
 
 	// Parse to Flow
-	flow, err := doc.ParseToFlowWithFactory(&mockFactory{})
+	flow, err := doc.ParseToFlowWithRuntime(&mockFactory{})
 	if err != nil {
 		t.Fatalf("Failed to parse to flow: %v", err)
 	}

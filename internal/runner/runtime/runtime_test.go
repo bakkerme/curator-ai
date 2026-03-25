@@ -1,4 +1,4 @@
-package factory
+package runtime
 
 import (
 	"context"
@@ -118,7 +118,7 @@ func TestNewFromEnvConfig_RedditProxyValidation(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatalf("expected factory creation to fail for missing REDDIT_PROXY_URL")
+		t.Fatalf("expected runtime creation to fail for missing REDDIT_PROXY_URL")
 	}
 
 	proxyURL := "http://user:pass@proxy.example.com:12321"
@@ -132,7 +132,7 @@ func TestNewFromEnvConfig_RedditProxyValidation(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating factory with valid reddit proxy: %v", err)
+		t.Fatalf("unexpected error creating runtime with valid reddit proxy: %v", err)
 	}
 	if f == nil {
 		t.Fatalf("expected non-nil factory")
@@ -170,7 +170,7 @@ func (s *seenStoreStub) Close() error {
 	return s.err
 }
 
-func TestFactoryCloneForFlow_IsolatesDedupeStore(t *testing.T) {
+func TestRuntimeCloneForFlow_IsolatesDedupeStore(t *testing.T) {
 	t.Parallel()
 
 	root := &Runtime{
@@ -213,7 +213,7 @@ func TestFactoryCloneForFlow_IsolatesDedupeStore(t *testing.T) {
 	_ = b.Close()
 }
 
-func TestFactoryClose_ClosesSeenStoreAndClosers(t *testing.T) {
+func TestRuntimeClose_ClosesSeenStoreAndClosers(t *testing.T) {
 	t.Parallel()
 
 	store := &seenStoreStub{}
@@ -234,7 +234,7 @@ func TestFactoryClose_ClosesSeenStoreAndClosers(t *testing.T) {
 	}
 }
 
-func TestFactoryClose_CollectsCloseErrors(t *testing.T) {
+func TestRuntimeClose_CollectsCloseErrors(t *testing.T) {
 	t.Parallel()
 
 	storeErr := errors.New("store close failed")
@@ -249,12 +249,12 @@ func TestFactoryClose_CollectsCloseErrors(t *testing.T) {
 		t.Fatalf("expected close error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "factory close") || !strings.Contains(msg, storeErr.Error()) || !strings.Contains(msg, closerErr.Error()) {
+	if !strings.Contains(msg, "runtime close") || !strings.Contains(msg, storeErr.Error()) || !strings.Contains(msg, closerErr.Error()) {
 		t.Fatalf("expected combined close errors, got: %v", err)
 	}
 }
 
-func TestFactoryCloneForFlow_DoesNotCopyClosersOrSeenStore(t *testing.T) {
+func TestRuntimeCloneForFlow_DoesNotCopyClosersOrSeenStore(t *testing.T) {
 	t.Parallel()
 
 	root := &Runtime{
@@ -274,7 +274,7 @@ func TestFactoryCloneForFlow_DoesNotCopyClosersOrSeenStore(t *testing.T) {
 	}
 }
 
-func TestFactoryCloneForFlow_NilReceiver(t *testing.T) {
+func TestRuntimeCloneForFlow_NilReceiver(t *testing.T) {
 	t.Parallel()
 
 	var f *Runtime
@@ -287,7 +287,7 @@ func TestFactoryCloneForFlow_NilReceiver(t *testing.T) {
 	}
 }
 
-func TestFactoryCloneForFlow_LeavesRootUntouched(t *testing.T) {
+func TestRuntimeCloneForFlow_LeavesRootUntouched(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "root.db")

@@ -1,4 +1,4 @@
-package factory
+package runtime
 
 import (
 	"errors"
@@ -57,7 +57,7 @@ type Runtime struct {
 	closers                 []Closer
 }
 
-// CloneForFlow creates a per-flow factory clone so mutable runtime state
+// CloneForFlow creates a per-flow runtime clone so mutable runtime state
 // (notably dedupe store wiring) is isolated between documents loaded in the
 // same process. Shared stateless dependencies are shallow-copied.
 func (f *Runtime) CloneForFlow() *Runtime {
@@ -128,8 +128,8 @@ func NewFromEnvConfig(logger *slog.Logger, env config.EnvConfig) (*Runtime, erro
 	}, nil
 }
 
-// Close releases any resources held by the factory (e.g., writing a recording
-// tape to disk). Callers should defer Close after creating the factory.
+// Close releases any resources held by the runtime (e.g., writing a recording
+// tape to disk). Callers should defer Close after creating the runtime.
 func (f *Runtime) Close() error {
 	var errs []error
 	if f.SeenStore != nil {
@@ -144,7 +144,7 @@ func (f *Runtime) Close() error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("factory close: %w", errors.Join(errs...))
+		return fmt.Errorf("runtime close: %w", errors.Join(errs...))
 	}
 	return nil
 }

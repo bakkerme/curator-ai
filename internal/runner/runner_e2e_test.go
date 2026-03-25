@@ -9,7 +9,7 @@ import (
 	"github.com/bakkerme/curator-ai/internal/llm"
 	llmmock "github.com/bakkerme/curator-ai/internal/llm/mock"
 	emailmock "github.com/bakkerme/curator-ai/internal/outputs/email/mock"
-	factory "github.com/bakkerme/curator-ai/internal/runner/runtime"
+	runtime "github.com/bakkerme/curator-ai/internal/runner/runtime"
 	"github.com/bakkerme/curator-ai/internal/sources/rss"
 	rssmock "github.com/bakkerme/curator-ai/internal/sources/rss/mock"
 )
@@ -37,7 +37,7 @@ func TestRunnerEndToEnd(t *testing.T) {
 		},
 	}
 
-	factory := &factory.Runtime{
+	runtime := &runtime.Runtime{
 		LLMClient:    llmMock,
 		DefaultModel: "gpt-4o-mini",
 		RSSFetcher:   rssFetcher,
@@ -83,7 +83,7 @@ func TestRunnerEndToEnd(t *testing.T) {
 		},
 	}
 
-	flow, err := doc.ParseToFlowWithFactory(factory)
+	flow, err := doc.ParseToFlowWithRuntime(runtime)
 	if err != nil {
 		t.Fatalf("failed to build flow: %v", err)
 	}
