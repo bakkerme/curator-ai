@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{baseUrl}}/api/runs/{{run_id}}/logs"
+method: GET
+scripts:
+  - type: beforeRequest
+    code: >-
+      if (!pm.collectionVariables.get('flow_id')) {
+          console.log('No flow_id set. Run "Trigger a run" first, or set the flow_id variable manually.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: >-
+      pm.test('stream contains SSE-formatted log lines', function() {
+          var body = pm.response.text();
+          var lines = body.split('\n');
+          var dataLines = lines.filter(function(l) { return l.startsWith('data:'); });
+          pm.expect(dataLines.length).to.be.above(0);
+      });
+    language: text/javascript
+order: 4000

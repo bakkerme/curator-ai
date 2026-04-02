@@ -9,6 +9,7 @@ require (
 	github.com/enetx/surf v1.0.195
 	github.com/gabriel-vasile/mimetype v1.4.6
 	github.com/google/cel-go v0.23.2
+	github.com/gorilla/websocket v1.5.3
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go v1.12.0
 	github.com/robfig/cron/v3 v3.0.1

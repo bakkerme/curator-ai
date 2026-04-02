@@ -1,0 +1,8 @@
+$kind: collection
+name: Curator AI Web API
+description: "API for the Curator AI dashboard web server. Start the server
+  with: `go run ./cmd/web -config ./curator-docs -web-addr localhost:8080`"
+variables:
+  baseUrl: http://localhost:8080
+  run_id: ""
+  flow_id: ""

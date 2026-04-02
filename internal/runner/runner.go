@@ -161,7 +161,10 @@ func (r *Runner) RunOnce(ctx context.Context, flow *core.Flow) (*core.Run, error
 		Status:    core.RunStatusRunning,
 	}
 
-	logger := r.logger.With("flow_id", flow.ID, "run_id", run.ID)
+	logger := core.LoggerFromContext(ctx)
+	if logger == slog.Default() {
+		logger = r.logger.With("flow_id", flow.ID, "run_id", run.ID)
+	}
 	ctx = core.WithLogger(ctx, logger)
 	ctx = core.WithFlowID(ctx, flow.ID)
 	ctx = core.WithRunID(ctx, run.ID)

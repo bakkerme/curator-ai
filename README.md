@@ -71,6 +71,29 @@ export SMTP_PASSWORD="pass"
 go run ./cmd/curator -config curator.yaml -run-once
 ```
 
+## Web API
+
+Start the web server against a single doc or a directory of docs:
+
+```bash
+go run ./cmd/web -config ./curator-docs -web-addr localhost:8080
+```
+
+Use the simple terminal client to exercise the API end to end:
+
+```bash
+# List available docs
+go run ./cmd/web-client list
+
+# List docs, trigger one run, and stream websocket logs until it finishes
+go run ./cmd/web-client run -doc minimal-rss
+```
+
+Notes:
+- `-base-url` defaults to `http://localhost:8080`
+- `-ws-base-url` is optional and is derived automatically from `-base-url`
+- when only one doc is registered, `go run ./cmd/web-client run` can infer `-doc`
+
 ## Local Email Dev (Mailpit)
 
 Run Mailpit (SMTP sink + web UI/API):

@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "Curator AI Web API",
+    "description": "API for the Curator AI dashboard web server. Start the server with: `go run ./cmd/web -config ./curator-docs -web-addr localhost:8080`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "wsBaseUrl",
+      "value": "ws://localhost:8080"
+    },
+    {
+      "key": "flow_id",
+      "value": ""
+    },
+    {
+      "key": "run_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "List all docs",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('returns 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('body is JSON with docs array', function() {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json).to.have.property('docs');",
+              "    pm.expect(json.docs).to.be.an('array');",
+              "});",
+              "pm.test('each doc has required fields', function() {",
+              "    var json = pm.response.json();",
+              "    if (json.docs.length > 0) {",
+              "        var doc = json.docs[0];",
+              "        pm.expect(doc).to.have.property('id');",
+              "        pm.expect(doc).to.have.property('name');",
+              "        pm.expect(doc).to.have.property('source_path');",
+              "        pm.expect(doc).to.have.property('is_running');",
+              "        pm.collectionVariables.set('flow_id', doc.id);",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/docs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "docs"]
+        }
+      }
+    },
+    {
+      "name": "Trigger a run",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('returns 202 Accepted', function() {",
+              "    pm.response.to.have.status(202);",
+              "});",
+              "pm.test('body contains run_id and flow_id', function() {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json).to.have.property('run_id');",
+              "    pm.expect(json).to.have.property('flow_id');",
+              "    pm.expect(json).to.have.property('started_at');",
+              "    pm.collectionVariables.set('run_id', json.run_id);",
+              "    pm.collectionVariables.set('flow_id', json.flow_id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/docs/:docId/run",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "docs", ":docId", "run"],
+          "variable": [
+            {
+              "key": "docId",
+              "value": "{{flow_id}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Stream run logs (WebSocket)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('connection opened successfully', function() {",
+              "    pm.expect(socket.readyState).to.eq(1);",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "receive",
+          "script": {
+            "exec": [
+              "pm.test('receives JSON log entry', function() {",
+              "    var logEntry = JSON.parse(pm.ws.data);",
+              "    pm.expect(logEntry).to.have.property('time');",
+              "    pm.expect(logEntry).to.have.property('level');",
+              "    pm.expect(logEntry).to.have.property('message');",
+              "    pm.expect(logEntry).to.have.property('run_id');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{wsBaseUrl}}/api/runs/:runId/logs",
+          "host": ["{{wsBaseUrl}}"],
+          "path": ["api", "runs", ":runId", "logs"],
+          "variable": [
+            {
+              "key": "runId",
+              "value": "{{run_id}}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
