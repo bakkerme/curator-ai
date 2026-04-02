@@ -2,6 +2,11 @@ workflow:
   name: "Bot Defence and Cybersecurity Research"
   version: "1.0" # optional
   max_concurrency: 20
+  dedupe_store:
+      driver: "sqlite"
+      dsn: "./curator-seen.db"
+      table: "seen_posts"
+      ttl: "365d"
 
   trigger:
     - cron:
@@ -17,11 +22,46 @@ workflow:
         feeds:
           # General Security
           - https://unit42.paloaltonetworks.com/feed/
+          - https://googleprojectzero.blogspot.com/feeds/posts/default?alt=rss
+          - https://developers.cloudflare.com/changelog/rss/application-security.xml
+          - https://portswigger.net/research/rss
+          - https://www.cisa.gov/news.xml
+          - https://www.cisa.gov/cybersecurity-advisories/all.xml
+          - https://www.silobreaker.com/feed/
+          
+          # CDN
+          - https://feeds.feedburner.com/akamai/blog
+          - https://www.fastly.com/blog_rss.xml
+          - https://docs-cybersec-be.thalesgroup.com/bundle/cloud-application-security/page/release-notes.rss
 
-        snapshot:
-            # snapshot: true
-            restore: true
-            path: "snapshots/rss.json"
+          # AI
+          - https://deepmind.google/blog/rss.xml
+          - https://openai.com/news/rss.xml
+
+          # Bot Defence
+          - https://datadome.co/feed/
+          - https://blog.castle.io/rss/
+          - https://fingerprint.com/rss.xml
+
+          # Scraping
+          - https://www.scrapingbee.com/index.xml
+          - https://scrapfly.io/blog/feed.xml
+          - https://www.imperva.com/blog/feed/
+
+          # Defence
+          - https://blog.palantir.com/feed
+
+          # -- For scraping later --
+          # - https://kameleo.io/blog
+          # - https://www.humansecurity.com/learn/blog/
+          # - https://www.arkoselabs.com/blog/
+          # - https://oxylabs.io/blog
+        # snapshot:
+        #     # snapshot: true
+        #     restore: true
+        #     path: "snapshots/rss.json"
+
+
 
   quality:
     - llm:
@@ -51,8 +91,8 @@ workflow:
           mode: multimodal
           max_images: 4
           include_comment_images: false
-        # block_error_policy: drop
-        block_error_policy: fail
+        block_error_policy: drop
+        # block_error_policy: fail
         snapshot:
           # snapshot: true
           restore: true

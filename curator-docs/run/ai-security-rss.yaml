@@ -1,11 +1,16 @@
 workflow:
-  name: "Bot Defence and Cybersecurity Research"
+  name: "AI Security Research"
   version: "1.0" # optional
   max_concurrency: 20
+  dedupe_store:
+      driver: "sqlite"
+      dsn: "./curator-seen.db"
+      table: "seen_posts"
+      ttl: "365d"
 
   trigger:
     - cron:
-        schedule: "0 0 * * *" # midnight UTC
+        schedule: "0 0 * * 2" # Tuesday midnight UTC
         timezone: "UTC"       # explicit
 
   sources:
@@ -17,46 +22,62 @@ workflow:
         feeds:
           # General Security
           - https://unit42.paloaltonetworks.com/feed/
+          - https://googleprojectzero.blogspot.com/feeds/posts/default?alt=rss
+          - https://developers.cloudflare.com/changelog/rss/application-security.xml
+          - https://portswigger.net/research/rss
+          - https://feeds.feedburner.com/TheHackersNews
+          - https://blog.palantir.com/feed
 
-        snapshot:
-            # snapshot: true
-            restore: true
-            path: "snapshots/rss.json"
+          # AI Security
+          - https://community.checkpoint.com/fyrhh23835/rss/Category?category.id=AI&interaction.style=forum
+          
+          # CDN
+          - https://feeds.feedburner.com/akamai/blog
+          - https://www.fastly.com/blog_rss.xml
+          - https://docs-cybersec-be.thalesgroup.com/bundle/cloud-application-security/page/release-notes.rss
+
+          # AI
+          - https://deepmind.google/blog/rss.xml
+          - https://openai.com/news/rss.xml
+
+          # Bot Defence
+          - https://datadome.co/feed/
+          - https://blog.castle.io/rss/
+          - https://fingerprint.com/rss.xml
+
+          # Scraping
+          - https://www.scrapingbee.com/index.xml
+          - https://scrapfly.io/blog/feed.xml
+          - https://www.imperva.com/blog/feed/
+
+          # -- For scraping later --
+          # - https://kameleo.io/blog
+          # - https://www.humansecurity.com/learn/blog/
+          # - https://www.arkoselabs.com/blog/
+          # - https://oxylabs.io/blog
+          # - https://www.darkreading.com/
 
   quality:
     - llm:
         name: is_relevant
         prompt_template: isRelevantTemplate
         evaluations:
-          - "Bot/abuse automation: scraping, credential stuffing, ATO, promo abuse, inventory hoarding, scalping, spam, fake account creation"
-          - "Attacker tooling details: Playwright/Puppeteer/Selenium, headless stealth, mobile emulation, anti-fingerprinting, scriptable browsers"
-          - "Evasion techniques: proxy rotation (residential/mobile), TLS/JA3/JA4, HTTP/2 fingerprinting, header ordering, sensor bypass, token replay"
-          - "Defense techniques with implementation detail: rate limiting, WAF rules, risk scoring, device/browser fingerprinting, behavioral signals, anomaly features"
-          - "Detection engineering: logging guidance, metrics, dashboards, rules (WAF/SIEM), false-positive considerations"
-          - "New vulnerabilities or bypasses relevant to web/app security, identity, edge/CDN/WAF, or anti-automation controls"
-          - "Threat landscape updates: active exploitation, phishing kits, malware campaigns, credential dumps, DDoS extortion, initial access techniques"
-          - "Concrete indicators: domains, ASNs, IP ranges, tooling fingerprints, payload patterns, user-agent strings, SDK/library identifiers"
-          - "Marketing posts are allowed if they are focused on new bot defence products"
-          - "Jumping off points for further investigation into cybersecurity topics"
-          - "News on agentic browsing or related technologies"
+          - "News on practical AI security"
+          - "Vulnerabilities affecting AI agents or other AI tools"
+          - "AI news that may have a security angle"
         exclusions:
-          - "Webinars, events, hiring posts, partner press releases"
-          - "Generic 'top 10' / beginner security tips with no new information"
+          - "General AI news"
+          - "General security news unrelated to AI"
           - "Unverifiable hot takes or speculation with no evidence"
-          - "Content unrelated to bot defense or the security threat landscape (e.g., general AI/company news)"
+          - "Content unrelated to the security threat landscape (e.g., general AI/company news)"
         action_type: pass_drop
-        threshold: 0.5 # optional
+        threshold: 0.75 # optional
         images:
           enabled: true
           mode: multimodal
-          max_images: 4
+          max_images: 1
           include_comment_images: false
-        # block_error_policy: drop
-        block_error_policy: fail
-        snapshot:
-          # snapshot: true
-          restore: true
-          path: "snapshots/rss-quality-llm.json"
+        block_error_policy: drop
 
   post_summary:
     - llm:
@@ -66,17 +87,19 @@ workflow:
         prompt_template: postSummaryTemplate
         params:
           interests:
-            - "Bot/abuse goal (scraping, ATO, carding, promo abuse, scalping, spam) and who it targets"
-            - "Attacker stack: tooling, frameworks, hosting, proxy providers, orchestration"
-            - "Evasion tactics: fingerprint spoofing, headless stealth, TLS/HTTP2 fingerprinting, session/token replay, CAPTCHA bypass"
-            - "Signals and detections: what to log, what features are useful, what breaks under NAT/proxies"
-            - "Mitigations: rate limits, challenges, device attestation/passkeys/WebAuthn, WAF/edge rules, UX tradeoffs"
-            - "Operational details: volumes, impact, timelines, affected surfaces (login/checkout/signup/API)"
-            - "Concrete indicators: domains/IPs/ASNs, UA strings, request patterns, SDK identifiers"
-        snapshot:
-          # snapshot: true
-          restore: true
-          path: "snapshots/rss-post-summary.json"
+            - "AI/LLM app vulns and exploit paths: prompt injection, tool/function-calling abuse, data exfiltration, authz bypass, indirect prompt injection"
+            - "Agent security: agentic browsing risks, plugin/tool supply chain, sandboxing/permissions, secrets handling, SSRF/file access, multi-agent trust boundaries"
+            - "RAG & data layer issues: retrieval poisoning, vector DB leakage, prompt/data injection via docs, tenant isolation failures, PII exposure"
+            - "Model-level security: jailbreak techniques, prompt/weight leakage, adversarial examples, training-data poisoning, watermarking/fingerprinting claims with evidence"
+            - "Framework/integration vulnerabilities: LangChain/LlamaIndex/OpenAI SDKs, model gateways, eval/guardrail stacks, CI/CD or dependency issues impacting AI systems"
+            - "Detection & mitigation with implementation detail: monitoring/telemetry, red-teaming methodology, evals, guardrails, policy-as-code, rate limits, provenance checks"
+            - "Edge/CDN/WAF changes that affect AI apps or agents (API security, caching, token handling, bot/automation controls)"
+        block_error_policy: drop
+
+    - markdown:
+        name: markdown_to_html_post_sum
+        type: markdown
+        context: post
 
   run_summary:
     - llm:
@@ -86,22 +109,25 @@ workflow:
         prompt_template: fullSummaryTemplate
         params:
           focus:
-            - "Bot/abuse trends: what changed this week in attacker tooling, cost, and scale"
-            - "New bypasses/evasions impacting bot detection, WAFs, and edge controls"
-            - "High-impact web/app/identity vulnerabilities and real-world exploitation"
-            - "Threat landscape: phishing kits, malware campaigns, initial access and credential theft"
-            - "Actionable defense guidance: detections, mitigations, instrumentation, and measurement"
-            - "Ecosystem changes that affect bot defense: browser/platform changes, CDN/edge behavior, fingerprinting developments"
-        snapshot:
-          # snapshot: true
-          restore: true
-          path: "snapshots/rss-run-summary.json"
+            - "High-impact AI security vulnerabilities and real-world exploitation (agents, LLM apps, model gateways, eval/guardrail stacks)"
+            - "New prompt-injection/jailbreak techniques, tool-abuse patterns, and practical bypasses of safety/guardrails"
+            - "RAG and data-security incidents: leakage, poisoning, multi-tenant isolation failures, provenance/trust breakdowns"
+            - "Defensive engineering guidance: concrete mitigations, detection ideas, instrumentation, and validation/eval approaches"
+            - "Supply-chain and platform risks affecting AI systems: SDK/library CVEs, dependency compromises, hosted model platform changes"
+            - "Edge/API security developments relevant to AI products (CDN/WAF behavior, auth/token patterns, bot/automation changes)"
+        block_error_policy: drop
+        
+    - markdown:
+        name: markdown_to_html_sum
+        type: markdown
+        context: "flow"
+
 
   output:
     - email:
         template: emailTemplate
         to: brandon@bdmd.com.au
-        subject: "Daily Bot Defence + Security Digest"
+        subject: "AI Security Digest"
 
 templates:
   - id: isRelevantTemplate
@@ -151,8 +177,7 @@ templates:
       You are an expert technical analyst.
 
       Write a concise summary of the following post. Focus on the reader interests.
-      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
-      When comments are present, summarise the community response.
+      Keep it factual, and include concrete details when present.
 
       Reader interests:
       {{- range (index .Params "interests") }}
@@ -162,7 +187,6 @@ templates:
       Output format:
       - 3-6 bullet points
       - then "Why it matters:" (1-2 sentences)
-      - then "Community response:" (1-2 sentences if comments are provided)
 
     template: |-
       -----USER CONTENT START-----
@@ -173,11 +197,6 @@ templates:
 
       Content:
       {{ .Content }}
-
-      Comments (optional signal; {{ len .Comments }}):
-      {{- range $i, $c := .Comments }}
-      - {{ $c.Author }}: {{ $c.Content }}
-      {{- end }}
 
       Linked URLs:
       {{- range .WebBlocks }}
@@ -191,8 +210,7 @@ templates:
       You are an expert technical analyst.
 
       You will be given a list of posts. For each post, write a concise summary focused on the reader interests.
-      Keep it factual, and include concrete details (numbers, model names, benchmarks) when present.
-      When comments are present, summarise the community response.
+      Keep it factual, and include concrete details when present.
 
       Reader interests:
       {{- range (index .Params "interests") }}
@@ -216,11 +234,6 @@ templates:
       Content:
       {{ $p.Content }}
 
-      Comments (optional signal; {{ len $p.Comments }}):
-      {{- range $c := $p.Comments }}
-      - {{ $c.Author }}: {{ $c.Content }}
-      {{- end }}
-
       Linked URLs:
       {{- range $w := $p.WebBlocks }}
       - {{ $w.URL }}
@@ -236,6 +249,7 @@ templates:
 
       Include an:
       - Executive summary, focused on 4-8 bullet points
+      - 3 short LinkedIn posts that the recipient could make based on the news. The recipient is a Security Researcher.
       - Notable Items, pick 5 most relevant items to the focus area, bulleted, include post title + 1 sentence
 
       Focus areas:
@@ -245,6 +259,7 @@ templates:
 
       Output format:
       # Executive summary
+      # LinkedIn Post ideas
       # Notable items
 
     template: |-
@@ -273,7 +288,7 @@ templates:
             <h1 style="margin:0 0 12px 0;font-size:22px;">Daily Bot Defence + Security Digest</h1>
 
             {{- if .RunSummary }}
-            {{- toHTML .RunSummary.Summary }}
+            {{- .RunSummary.HTML }}
             {{- end }}
 
             <h2 style="margin:16px 0 8px 0;font-size:16px;">Posts ({{ len .Blocks }})</h2>
@@ -294,7 +309,7 @@ templates:
 
               <div style="font-size:13px;margin:0;">
                 {{- if .Summary }}
-                {{ toHTML .Summary.Summary }}
+                {{ .Summary.HTML }}
                 {{- else }}
                 (no summary)
                 {{- end }}
