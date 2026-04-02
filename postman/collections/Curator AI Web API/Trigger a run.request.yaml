@@ -1,0 +1,21 @@
+$kind: http-request
+url: "{{baseUrl}}/api/docs/{{flow_id}}/run"
+method: POST
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 202 Accepted', function() {
+          pm.response.to.have.status(202);
+      });
+      pm.test('body contains run_id and flow_id', function() {
+          var json = pm.response.json();
+          pm.expect(json).to.have.property('run_id');
+          pm.expect(json).to.have.property('flow_id');
+          pm.expect(json).to.have.property('started_at');
+      });
+
+      var json = pm.response.json();
+      pm.collectionVariables.set('run_id', json.run_id);
+      pm.collectionVariables.set('flow_id', json.flow_id);
+    language: text/javascript
+order: 2000

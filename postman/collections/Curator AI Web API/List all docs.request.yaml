@@ -1,0 +1,26 @@
+$kind: http-request
+url: "{{baseUrl}}/api/docs"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 200', function() {
+          pm.response.to.have.status(200);
+      });
+      pm.test('body is JSON with docs array', function() {
+          var json = pm.response.json();
+          pm.expect(json).to.have.property('docs');
+          pm.expect(json.docs).to.be.an('array');
+      });
+      pm.test('each doc has required fields', function() {
+          var json = pm.response.json();
+          if (json.docs.length > 0) {
+              var doc = json.docs[0];
+              pm.expect(doc).to.have.property('id');
+              pm.expect(doc).to.have.property('name');
+              pm.expect(doc).to.have.property('source_path');
+              pm.expect(doc).to.have.property('is_running');
+          }
+      });
+    language: text/javascript
+order: 1000
