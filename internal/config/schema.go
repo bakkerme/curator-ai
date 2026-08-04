@@ -98,8 +98,9 @@ type ScrapeMarkdownConfig struct {
 
 // ScrapeRequestConfig controls HTTP behavior for scrape source requests.
 type ScrapeRequestConfig struct {
-	UserAgent string `yaml:"user_agent,omitempty"`
-	Timeout   string `yaml:"timeout,omitempty"`
+	UserAgent  string `yaml:"user_agent,omitempty"`
+	Timeout    string `yaml:"timeout,omitempty"`
+	FetchDelay string `yaml:"fetch_delay,omitempty"`
 }
 
 // RedditSource defines Reddit data source configuration

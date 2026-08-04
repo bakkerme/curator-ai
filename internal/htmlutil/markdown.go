@@ -1,4 +1,4 @@
-package htmlconv
+package htmlutil
 
 import (
 	"strings"
@@ -8,7 +8,7 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 )
 
-// ConvertHTMLToMarkdown converts HTML snippets into markdown for downstream processing.
+// ConvertHTMLToMarkdown converts an HTML string to GitHub Flavored Markdown.
 func ConvertHTMLToMarkdown(html string) (string, error) {
 	if html == "" {
 		return "", nil
@@ -19,17 +19,20 @@ func ConvertHTMLToMarkdown(html string) (string, error) {
 		return html, nil
 	}
 
-	conv := converter.NewConverter(
+	conv := newHTMLToMarkdownConverter()
+	md, err := conv.ConvertString(html)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(md), nil
+}
+
+var newHTMLToMarkdownConverter = func() *converter.Converter {
+	return converter.NewConverter(
 		converter.WithEscapeMode("smart"),
 		converter.WithPlugins(
 			base.NewBasePlugin(),
 			commonmark.NewCommonmarkPlugin(),
 		),
 	)
-
-	md, err := conv.ConvertString(html)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(md), nil
 }

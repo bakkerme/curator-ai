@@ -11,17 +11,18 @@ import (
 	"github.com/bakkerme/curator-ai/internal/config"
 	"github.com/bakkerme/curator-ai/internal/core"
 	"github.com/bakkerme/curator-ai/internal/dedupe"
+	"github.com/bakkerme/curator-ai/internal/htmlutil"
 	"github.com/bakkerme/curator-ai/internal/sources"
-	"github.com/bakkerme/curator-ai/internal/sources/htmlconv"
 )
 
 // ScrapeProcessor discovers post URLs from index pages and extracts content from post pages.
 type ScrapeProcessor struct {
-	name    string
-	config  config.ScrapeSource
-	fetcher Fetcher
-	store   dedupe.SeenStore
-	logger  *slog.Logger
+	name       string
+	config     config.ScrapeSource
+	fetcher    Fetcher
+	store      dedupe.SeenStore
+	logger     *slog.Logger
+	fetchDelay time.Duration
 }
 
 func NewScrapeProcessor(cfg *config.ScrapeSource, fetcher Fetcher, store dedupe.SeenStore, logger *slog.Logger) (*ScrapeProcessor, error) {
@@ -31,7 +32,15 @@ func NewScrapeProcessor(cfg *config.ScrapeSource, fetcher Fetcher, store dedupe.
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &ScrapeProcessor{name: "scrape", config: *cfg, fetcher: fetcher, store: store, logger: logger}, nil
+	var fetchDelay time.Duration
+	if d := strings.TrimSpace(cfg.Request.FetchDelay); d != "" {
+		var err error
+		fetchDelay, err = config.ParseDurationExtended(d)
+		if err != nil {
+			return nil, fmt.Errorf("invalid fetch_delay %q: %w", d, err)
+		}
+	}
+	return &ScrapeProcessor{name: "scrape", config: *cfg, fetcher: fetcher, store: store, logger: logger, fetchDelay: fetchDelay}, nil
 }
 
 func (p *ScrapeProcessor) Name() string                                  { return p.name }
@@ -54,38 +63,36 @@ func (p *ScrapeProcessor) Validate() error {
 }
 
 func (p *ScrapeProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) {
-	// Validate the processor contract before any network work begins.
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
 	logger := core.LoggerFromContext(ctx).With("stage", "source", "processor", p.name)
 
-	// Compute optional lookback cutoff once for the full run.
 	cutoff, hasLookback, err := parseLookbackWindow(p.config.Lookback)
 	if err != nil {
 		return nil, err
 	}
-	// Build request options for the scrape fetcher.
 	options := FetchOptions{UserAgent: p.config.Request.UserAgent}
-	// Max pages is a hard stop for index traversal; default to 1 when omitted.
 	maxPages := p.config.Discovery.MaxPages
 	if maxPages <= 0 {
 		maxPages = 1
 	}
-	// Post limit is the maximum number of emitted blocks from this source run.
 	postLimit := p.config.PostLimit
 
-	// Keep collected blocks and a discovered URL set to avoid duplicate processing.
 	blocks := make([]*core.PostBlock, 0)
 	discovered := map[string]struct{}{}
 	stopReason := ""
+	fetchCount := 0
 
-	// Crawl the configured index URL until we hit pagination exhaustion or a stop condition.
 	nextPageURL := strings.TrimSpace(p.config.URL)
 	for page := 1; page <= maxPages && nextPageURL != ""; page++ {
 		if postLimit > 0 && len(blocks) >= postLimit {
 			stopReason = "post_limit"
 			break
+		}
+
+		if err := p.delayIfNeeded(ctx, &fetchCount); err != nil {
+			return nil, err
 		}
 		indexHTML, err := p.fetcher.Fetch(ctx, nextPageURL, options)
 		if err != nil {
@@ -112,6 +119,9 @@ func (p *ScrapeProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 				}
 			}
 
+			if err := p.delayIfNeeded(ctx, &fetchCount); err != nil {
+				return nil, err
+			}
 			block, skip, err := p.extractPost(ctx, postURL, page, cutoff, hasLookback, options)
 			if err != nil {
 				logger.Warn("failed to extract scraped post", "post_url", postURL, "error", err)
@@ -166,6 +176,20 @@ func (p *ScrapeProcessor) Fetch(ctx context.Context) ([]*core.PostBlock, error) 
 	return blocks, nil
 }
 
+// delayIfNeeded sleeps for the configured fetch_delay between HTTP requests.
+// The first request (fetchCount == 0) is never delayed.
+func (p *ScrapeProcessor) delayIfNeeded(ctx context.Context, fetchCount *int) error {
+	if p.fetchDelay > 0 && *fetchCount > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(p.fetchDelay):
+		}
+	}
+	*fetchCount++
+	return nil
+}
+
 func (p *ScrapeProcessor) discoverLinks(doc *goquery.Document, baseURL string) []string {
 	attr := strings.TrimSpace(p.config.Discovery.LinkAttr)
 	if attr == "" {
@@ -205,8 +229,15 @@ func (p *ScrapeProcessor) extractPost(ctx context.Context, postURL string, page 
 		return nil, false, fmt.Errorf("extract content html: %w", err)
 	}
 	content := strings.TrimSpace(contentHTML)
+
+	var webBlocks []core.WebBlock
 	if p.config.Markdown.Enabled {
-		md, err := htmlconv.ConvertHTMLToMarkdown(content)
+		webBlocks = []core.WebBlock{{
+			URL:        postURL,
+			WasFetched: true,
+			Page:       content,
+		}}
+		md, err := htmlutil.ConvertHTMLToMarkdown(content)
 		if err != nil {
 			return nil, false, err
 		}
@@ -233,6 +264,7 @@ func (p *ScrapeProcessor) extractPost(ctx context.Context, postURL string, page 
 		Title:       title,
 		Author:      author,
 		Content:     content,
+		WebBlocks:   webBlocks,
 		CreatedAt:   createdAt,
 		ProcessedAt: time.Now().UTC(),
 		SummaryPlan: sources.SummaryPlanFromConfig(p.config.SummaryPlan),
